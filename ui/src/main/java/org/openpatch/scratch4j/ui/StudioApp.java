@@ -87,6 +87,16 @@ public class StudioApp extends javafx.application.Application {
   private final BooleanProperty running = new SimpleBooleanProperty(false);
   private final ToggleButton debugToggle = new ToggleButton(null, Icons.of("fth-target"));
   private final ToggleButton recordToggle = new ToggleButton(null, Icons.of("fth-video"));
+  // the game loop: pause, one frame at a time, slow motion
+  private final ToggleButton pauseToggle = new ToggleButton(null, Icons.of("fth-pause", 16));
+  private final Button stepButton = new Button(null, Icons.of("fth-skip-forward", 16));
+  private final javafx.scene.control.MenuButton speedButton =
+      new javafx.scene.control.MenuButton("1\u00d7");
+  private final javafx.scene.control.ToggleGroup speeds = new javafx.scene.control.ToggleGroup();
+  /** The program's game loop is paused (by the pause button, not a breakpoint). */
+  private volatile boolean programPaused;
+  private VariablesView variablesView;
+  private Tab variablesTab;
   /** Frozen-program watchdog: the last heartbeat's frame count and when it last changed. */
   private long watchFrames = -2;
   private long watchChanged;
@@ -277,7 +287,12 @@ public class StudioApp extends javafx.application.Application {
         match -> editor.openRange(match.file(), match.start(), match.end()));
     searchTab = new Tab(I18n.t("search.tab"), searchResults);
     searchTab.setGraphic(Icons.of("fth-search"));
-    bottomTabs = new TabPane(problemsTab, consoleTab, searchTab, debuggerTab);
+    variablesView = new VariablesView((owner, field, label, on) ->
+        sendToProgram(on ? "pin " + owner + " " + field + " " + label
+            : "unpin " + owner + " " + field));
+    variablesTab = new Tab(I18n.t("variables.title"), variablesView);
+    variablesTab.setGraphic(Icons.of("fth-eye"));
+    bottomTabs = new TabPane(problemsTab, consoleTab, variablesTab, searchTab, debuggerTab);
     bottomTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
     bottomTabs.getStyleClass().add("bottom-tabs");
     bottomTabs.setMinHeight(90);
@@ -329,6 +344,31 @@ public class StudioApp extends javafx.application.Application {
     stop.setTooltip(new Tooltip(I18n.t("stop.tooltip")));
     stop.setOnAction(e -> stopProgram());
     stop.disableProperty().bind(running.not());
+    pauseToggle.getStyleClass().addAll("button-icon", "flat", "header-icon");
+    pauseToggle.setTooltip(new Tooltip(I18n.t("run.pause.tooltip")));
+    pauseToggle.setOnAction(e -> setProgramPaused(pauseToggle.isSelected()));
+    pauseToggle.disableProperty().bind(running.not());
+    pauseToggle.selectedProperty().addListener((o, was, paused) -> {
+      pauseToggle.setGraphic(Icons.of(paused ? "fth-play" : "fth-pause", 16));
+      pauseToggle.setTooltip(new Tooltip(I18n.t(paused ? "run.resume.tooltip"
+          : "run.pause.tooltip")));
+    });
+    stepButton.getStyleClass().addAll("button-icon", "flat", "header-icon");
+    stepButton.setTooltip(new Tooltip(I18n.t("run.step.tooltip")));
+    stepButton.setOnAction(e -> stepFrame());
+    stepButton.disableProperty().bind(running.not().or(pauseToggle.selectedProperty().not()));
+    speedButton.getStyleClass().addAll("flat", "header-icon", "speed-button");
+    speedButton.setTooltip(new Tooltip(I18n.t("run.speed.tooltip")));
+    // frames per second; the library's normal speed is 60
+    for (int divisor : new int[] {1, 2, 4, 10}) {
+      javafx.scene.control.RadioMenuItem speed =
+          new javafx.scene.control.RadioMenuItem(I18n.t("run.speed." + divisor));
+      speed.setToggleGroup(speeds);
+      speed.setUserData(divisor);
+      speed.setSelected(divisor == 1);
+      speed.setOnAction(e -> setSpeed(divisor));
+      speedButton.getItems().add(speed);
+    }
     run.disableProperty().bind(hasProject.not());
     // the running program: debug overlay (like F12), screenshot, GIF recording
     debugToggle.getStyleClass().addAll("button-icon", "flat", "header-icon");
@@ -372,6 +412,8 @@ public class StudioApp extends javafx.application.Application {
     menus.setMinWidth(Region.USE_PREF_SIZE);
     projectTitle.setMinWidth(0);
     HBox bar = new HBox(6, logo, menus, compactMenu, left, projectTitle, right, run, stop,
+        pauseToggle, stepButton, speedButton,
+        new javafx.scene.control.Separator(Orientation.VERTICAL),
         debugToggle, screenshot, recordToggle,
         new javafx.scene.control.Separator(Orientation.VERTICAL), paletteToggle, theme);
     bar.setAlignment(Pos.CENTER_LEFT);
@@ -534,6 +576,11 @@ public class StudioApp extends javafx.application.Application {
         item("hotswap.enhanced.menu", "fth-zap", null, this::enhancedHotReload),
         item("menu.run.stop", "fth-octagon",
             new KeyCodeCombination(KeyCode.F5, KeyCombination.SHIFT_DOWN), this::stopProgram),
+        item("menu.run.pause", "fth-pause", new KeyCodeCombination(KeyCode.F7), () -> {
+          if (running.get()) setProgramPaused(!pauseToggle.isSelected());
+        }),
+        item("menu.run.step", "fth-skip-forward", new KeyCodeCombination(KeyCode.F8),
+            this::stepFrame),
         item("menu.run.check", "fth-check-circle", null, this::checkProject));
 
     Menu exportMenu = new Menu(I18n.t("menu.export"));
@@ -1200,6 +1247,43 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
+  /**
+   * Pauses or continues the game loop. The buttons follow the program's
+   * answer ({@code onPaused}, {@code onResumed}), not the click.
+   */
+  private void setProgramPaused(boolean pause) {
+    if (!running.get()) {
+      pauseToggle.setSelected(false);
+      return;
+    }
+    pauseToggle.setSelected(pause);
+    sendToProgram(pause ? "pause" : "resume");
+  }
+
+  /** One frame: every run() once, then paused again. Pauses first if needed. */
+  private void stepFrame() {
+    if (!running.get()) return;
+    if (!programPaused) {
+      setProgramPaused(true);
+    } else {
+      sendToProgram("step");
+    }
+  }
+
+  private void setSpeed(int divisor) {
+    speedButton.setText(divisor == 1 ? "1×" : "1/" + divisor + "×");
+    sendToProgram("speed " + 60f / divisor);
+  }
+
+  /** A new or ended run: running, normal speed. */
+  private void resetGameLoop() {
+    programPaused = false;
+    pauseToggle.setSelected(false);
+    speedButton.setText("1×");
+    speeds.getToggles().stream().filter(t -> Integer.valueOf(1).equals(t.getUserData()))
+        .findFirst().ifPresent(t -> t.setSelected(true));
+  }
+
   /** Saves the running program's current frame to screenshots/. */
   private void captureScreenshot() {
     Path file = mediaFile("png");
@@ -1262,7 +1346,7 @@ public class StudioApp extends javafx.application.Application {
       }
       return;
     }
-    if (debugPaused) {
+    if (debugPaused || programPaused) {
       watchChanged = now;
       return;
     }
@@ -2484,6 +2568,8 @@ public class StudioApp extends javafx.application.Application {
           watchChanged = watchStarted;
           watchWarned = false;
           recordToggle.setSelected(false);
+          resetGameLoop();
+          variablesView.reset();
         });
         // a JetBrains Runtime (bundled or downloaded) also hot-reloads new attributes/methods
         RunConfig config = RunConfig.of(startStage).withControl()
@@ -2522,6 +2608,32 @@ public class StudioApp extends javafx.application.Application {
             Platform.runLater(() -> watchdog(frames));
           }
 
+          @Override public void onPaused(long frame) {
+            Platform.runLater(() -> {
+              programPaused = true;
+              pauseToggle.setSelected(true);
+              setStatus(I18n.t("run.paused", String.valueOf(frame)));
+              // a pause is for looking: show the variables (unless debugging)
+              if (bottomTabs.getSelectionModel().getSelectedItem() != debuggerTab) {
+                bottomTabs.getSelectionModel().select(variablesTab);
+              }
+            });
+          }
+
+          @Override public void onResumed() {
+            Platform.runLater(() -> {
+              programPaused = false;
+              pauseToggle.setSelected(false);
+              setStatus(I18n.t("status.running", startStage));
+            });
+          }
+
+          @Override public void onState(org.openpatch.scratch4j.runner.ProgramState state) {
+            Platform.runLater(() -> {
+              if (running.get()) variablesView.show(state);
+            });
+          }
+
           @Override public void onSaved(String path) {
             Platform.runLater(() -> {
               console.info("\u2714 " + I18n.t("run.saved", path));
@@ -2553,6 +2665,8 @@ public class StudioApp extends javafx.application.Application {
             crashes.flush();
             Platform.runLater(() -> {
               closeLiveSession(session);
+              resetGameLoop();
+              variablesView.ended();
               running.set(false);
               setStatus(I18n.t("status.stopped", code));
               console.info("■ " + I18n.t("status.stopped", code));

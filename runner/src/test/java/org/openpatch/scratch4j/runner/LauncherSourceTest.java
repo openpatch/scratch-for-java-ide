@@ -44,6 +44,7 @@ class LauncherSourceTest {
           public static void useTextureSampling(TextureSampling value) {}
           public static void useSplashLogo(String path) {}
           public void setDebug(boolean value) {}
+          public Stage getStage() { return null; }
           public void exit() {}
         }
         """);

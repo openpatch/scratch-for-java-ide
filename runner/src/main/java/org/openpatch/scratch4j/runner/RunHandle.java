@@ -41,7 +41,9 @@ public final class RunHandle {
 
   /**
    * Sends a control command ({@code debug on}, {@code screenshot <path>},
-   * {@code gif start <path>}, {@code gif stop}); needs a run with
+   * {@code gif start <path>}, {@code gif stop}, {@code pause}, {@code resume},
+   * {@code step}, {@code speed <fps>}, {@code monitor on|off},
+   * {@code pin <id> <field> <label>}, {@code unpin <id> <field>}); needs a run with
    * {@link RunConfig#withControl()}. Returns false when the program is gone.
    */
   public synchronized boolean send(String command) {
@@ -90,6 +92,20 @@ public final class RunHandle {
       } catch (NumberFormatException ignored) {
         // a garbled heartbeat is skipped
       }
+    } else if (message.startsWith("monitor ")) {
+      try {
+        listener.onState(ProgramState.parse(message.substring("monitor ".length())));
+      } catch (RuntimeException ignored) {
+        // a garbled report is skipped; the next one comes soon
+      }
+    } else if (message.startsWith("paused ")) {
+      try {
+        listener.onPaused(Long.parseLong(message.substring("paused ".length()).trim()));
+      } catch (NumberFormatException ignored) {
+        // garbled
+      }
+    } else if (message.equals("resumed")) {
+      listener.onResumed();
     } else if (message.startsWith("saved ")) {
       listener.onSaved(message.substring("saved ".length()));
     } else if (message.startsWith("error ")) {

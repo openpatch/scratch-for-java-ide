@@ -19,6 +19,12 @@
       <artifactId>core</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!-- Reads the running program's variable reports (ProgramState). -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>3.2.1</version>
+    </dependency>
     <!-- Only for the integration-test launcher; the runner itself generates a
          launcher that references the student project's +libs jar. -->
     <dependency>

@@ -18,6 +18,15 @@ public interface RunListener {
    */
   default void onFrames(long frames) {}
 
+  /** The game loop stopped ({@code pause}, or after a {@code step}) at this frame. */
+  default void onPaused(long frame) {}
+
+  /** The game loop runs again after {@code resume}. */
+  default void onResumed() {}
+
+  /** The program's variables, a few times a second and whenever it pauses. */
+  default void onState(ProgramState state) {}
+
   /** The program saved a file the IDE asked for (screenshot, GIF). */
   default void onSaved(String path) {}
 
