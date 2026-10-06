@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: build + test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: Build and test
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: OpenGL run smoke (Linux, Xvfb)
+        # A real stage opens a window in a separate JVM and exits via the smoke switch.
+        if: runner.os == 'Linux'
+        env:
+          SCRATCH4J_ALL_JAR_CACHE: target/bundled
+        run: |
+          sudo apt-get install -y xvfb mesa-utils libgl1-mesa-dri >/dev/null 2>&1 || true
+          xvfb-run -a mvn --batch-mode --no-transfer-progress -pl runner -am test \
+            -Dtest=ScratchStageRunIT -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dscratch4j.gltest=true
+
+      - name: UI smoke (Linux, Xvfb)
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a mvn --batch-mode --no-transfer-progress -pl ui -am test \
+            -Dtest=UiSmokeIT -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dscratch4j.uismoke=true
+
+      - name: Export smoke (Linux, Xvfb)
+        # The exported app runs the student program in its own JVM.
+        # Temurin 25 ships no jmods (JEP 493), so this exercises the
+        # bundled-runtime fallback on the runners.
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a mvn --batch-mode --no-transfer-progress -pl export -am test \
+            -Dtest=StudentExportIT -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dscratch4j.exporttest=true

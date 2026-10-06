@@ -1,0 +1,472 @@
+[
+  {
+    "id": "getting-started-100",
+    "kind": "tutorial",
+    "title": "Your first program",
+    "startClass": "MyStage",
+    "files": [
+      ".vscode/settings.json",
+      "Bunny.java",
+      "MyStage.java",
+      "README.md",
+      "package.bluej"
+    ]
+  },
+  {
+    "id": "make-it-walk-100",
+    "kind": "tutorial",
+    "title": "Make it Walk",
+    "startClass": "WalkStage",
+    "files": [
+      ".vscode/settings.json",
+      "README.md",
+      "WalkStage.java",
+      "Walker.java",
+      "package.bluej"
+    ]
+  },
+  {
+    "id": "catch-the-coins-100",
+    "kind": "tutorial",
+    "title": "Catch the Coins",
+    "startClass": "CatchStage",
+    "files": [
+      ".vscode/settings.json",
+      "Basket.java",
+      "CatchStage.java",
+      "Coin.java",
+      "README.md",
+      "package.bluej"
+    ]
+  },
+  {
+    "id": "red-light-green-light-100",
+    "kind": "tutorial",
+    "title": "Red Light, Green Light",
+    "startClass": "RaceStage",
+    "files": [
+      ".vscode/settings.json",
+      "README.md",
+      "RaceStage.java",
+      "Racer.java",
+      "Referee.java",
+      "package.bluej"
+    ]
+  },
+  {
+    "id": "guess-the-number-100",
+    "kind": "tutorial",
+    "title": "Guess the Number",
+    "startClass": "GuessStage",
+    "files": [
+      ".vscode/settings.json",
+      "GuessStage.java",
+      "README.md",
+      "package.bluej"
+    ]
+  },
+  {
+    "id": "bouncy-hedgehog-100",
+    "kind": "tutorial",
+    "title": "Bouncy Hedgehog",
+    "startClass": "BouncyHedgehogStage",
+    "files": [
+      ".vscode/extensions.json",
+      ".vscode/settings.json",
+      "BouncyHedgehogStage.java",
+      "HedgehogSprite.java",
+      "README.md",
+      "TrampolineSprite.java",
+      "hedgehog.png",
+      "package.bluej",
+      "playground.jpg",
+      "trampoline.png"
+    ]
+  },
+  {
+    "id": "dodge-the-rocks-100",
+    "kind": "tutorial",
+    "title": "Dodge the Rocks",
+    "startClass": "DodgeWindow",
+    "files": [
+      ".vscode/settings.json",
+      "Alien.java",
+      "DodgeWindow.java",
+      "GameStage.java",
+      "README.md",
+      "Rock.java",
+      "TitleStage.java",
+      "package.bluej"
+    ]
+  },
+  {
+    "id": "demo-cat",
+    "kind": "demo",
+    "title": "Cat",
+    "startClass": "CatSketch",
+    "files": [
+      "CatSketch.java",
+      "sprites/cat.png"
+    ]
+  },
+  {
+    "id": "demo-clock",
+    "kind": "demo",
+    "title": "Clock",
+    "startClass": "ClockStage",
+    "files": [
+      "ClockSprite.java",
+      "ClockStage.java",
+      "HourHandSprite.java",
+      "MinuteHandSprite.java",
+      "SecondHandSprite.java",
+      "sprites/clock.png",
+      "sprites/clock.svg",
+      "sprites/hour.png",
+      "sprites/minute.png",
+      "sprites/second.png"
+    ]
+  },
+  {
+    "id": "demo-coinCollector",
+    "kind": "demo",
+    "title": "Coin Collector",
+    "startClass": "CoinCollector",
+    "files": [
+      "Coin.java",
+      "CoinCollector.java",
+      "Ground.java",
+      "Player.java"
+    ]
+  },
+  {
+    "id": "demo-donutIO",
+    "kind": "demo",
+    "title": "Donut.io",
+    "startClass": "Game",
+    "files": [
+      "Background.java",
+      "Donut.java",
+      "FollowDonut.java",
+      "Game.java",
+      "GameOverStage.java",
+      "PlayerDonut.java",
+      "StartStage.java",
+      "WinStage.java",
+      "WorldStage.java",
+      "assets/donut.png",
+      "assets/donut.svg",
+      "assets/grid.png"
+    ]
+  },
+  {
+    "id": "demo-glide",
+    "kind": "demo",
+    "title": "Glide",
+    "startClass": "Glide",
+    "files": [
+      "Glide.java"
+    ]
+  },
+  {
+    "id": "demo-pipes",
+    "kind": "demo",
+    "title": "Pipes",
+    "startClass": "Pipes",
+    "files": [
+      "PenSprite.java",
+      "Pipes.java",
+      "backdrops/chalk_board.jpg",
+      "sounds/bensound-enigmatic.ogg",
+      "sprites/pen.png"
+    ]
+  },
+  {
+    "id": "demo-quiz",
+    "kind": "demo",
+    "title": "Quiz",
+    "startClass": "Quiz",
+    "files": [
+      "Quiz.java"
+    ]
+  },
+  {
+    "id": "demo-rainbowVine",
+    "kind": "demo",
+    "title": "Rainbow Vine",
+    "startClass": "RainbowVine",
+    "files": [
+      "RainbowVine.java"
+    ]
+  },
+  {
+    "id": "demo-randomDot",
+    "kind": "demo",
+    "title": "Random Dot",
+    "startClass": "RandomDot",
+    "files": [
+      "RandomDot.java"
+    ]
+  },
+  {
+    "id": "demo-robot",
+    "kind": "demo",
+    "title": "Robot",
+    "startClass": "RobotStage",
+    "files": [
+      "RobotSprite.java",
+      "RobotStage.java",
+      "sprites/robot.png"
+    ]
+  },
+  {
+    "id": "demo-saving",
+    "kind": "demo",
+    "title": "Saving",
+    "startClass": "Saving",
+    "files": [
+      "ExampleSettings.java",
+      "Saving.java"
+    ]
+  },
+  {
+    "id": "demo-sensing",
+    "kind": "demo",
+    "title": "Sensing",
+    "startClass": "Sensing",
+    "files": [
+      "Sensing.java",
+      "sprites/hero.png",
+      "sprites/hero2.png"
+    ]
+  },
+  {
+    "id": "demo-shader",
+    "kind": "demo",
+    "title": "Shader",
+    "startClass": "ShaderExample",
+    "files": [
+      "LightSprite.java",
+      "MySprite.java",
+      "MyStage.java",
+      "NormalSprite.java",
+      "ShaderExample.java",
+      "blobby.frag",
+      "cat.png",
+      "default.vert",
+      "glitch.frag",
+      "halftone.frag",
+      "light.frag",
+      "light.png",
+      "neon.frag",
+      "pixel.frag",
+      "pixelate.frag"
+    ]
+  },
+  {
+    "id": "demo-shakespeare",
+    "kind": "demo",
+    "title": "Shakespeare",
+    "startClass": "Shakespeare",
+    "files": [
+      "DNA.java",
+      "Population.java",
+      "Shakespeare.java",
+      "assets/Singkong.ttf"
+    ]
+  },
+  {
+    "id": "demo-smartRocket",
+    "kind": "demo",
+    "title": "Smart Rocket",
+    "startClass": "SmartRocket",
+    "files": [
+      "DNA.java",
+      "Level.java",
+      "Population.java",
+      "Rocket.java",
+      "SmartRocket.java",
+      "Ziel.java",
+      "assets/rocket.png",
+      "assets/target.png"
+    ]
+  },
+  {
+    "id": "demo-stressTest",
+    "kind": "demo",
+    "title": "Stress Test",
+    "startClass": "StressTest",
+    "files": [
+      "Dino.java",
+      "Figure.java",
+      "FigureState.java",
+      "Knight.java",
+      "Ninja.java",
+      "StressTest.java",
+      "assets/dino/Idle (1).png",
+      "assets/dino/Idle (10).png",
+      "assets/dino/Idle (2).png",
+      "assets/dino/Idle (3).png",
+      "assets/dino/Idle (4).png",
+      "assets/dino/Idle (5).png",
+      "assets/dino/Idle (6).png",
+      "assets/dino/Idle (7).png",
+      "assets/dino/Idle (8).png",
+      "assets/dino/Idle (9).png",
+      "assets/dino/LICENSE",
+      "assets/dino/Run (1).png",
+      "assets/dino/Run (2).png",
+      "assets/dino/Run (3).png",
+      "assets/dino/Run (4).png",
+      "assets/dino/Run (5).png",
+      "assets/dino/Run (6).png",
+      "assets/dino/Run (7).png",
+      "assets/dino/Run (8).png",
+      "assets/dino/Walk (1).png",
+      "assets/dino/Walk (10).png",
+      "assets/dino/Walk (2).png",
+      "assets/dino/Walk (3).png",
+      "assets/dino/Walk (4).png",
+      "assets/dino/Walk (5).png",
+      "assets/dino/Walk (6).png",
+      "assets/dino/Walk (7).png",
+      "assets/dino/Walk (8).png",
+      "assets/dino/Walk (9).png",
+      "assets/knight/Idle (1).png",
+      "assets/knight/Idle (10).png",
+      "assets/knight/Idle (2).png",
+      "assets/knight/Idle (3).png",
+      "assets/knight/Idle (4).png",
+      "assets/knight/Idle (5).png",
+      "assets/knight/Idle (6).png",
+      "assets/knight/Idle (7).png",
+      "assets/knight/Idle (8).png",
+      "assets/knight/Idle (9).png",
+      "assets/knight/LICENSE",
+      "assets/knight/Run (1).png",
+      "assets/knight/Run (10).png",
+      "assets/knight/Run (2).png",
+      "assets/knight/Run (3).png",
+      "assets/knight/Run (4).png",
+      "assets/knight/Run (5).png",
+      "assets/knight/Run (6).png",
+      "assets/knight/Run (7).png",
+      "assets/knight/Run (8).png",
+      "assets/knight/Run (9).png",
+      "assets/knight/Walk (1).png",
+      "assets/knight/Walk (10).png",
+      "assets/knight/Walk (2).png",
+      "assets/knight/Walk (3).png",
+      "assets/knight/Walk (4).png",
+      "assets/knight/Walk (5).png",
+      "assets/knight/Walk (6).png",
+      "assets/knight/Walk (7).png",
+      "assets/knight/Walk (8).png",
+      "assets/knight/Walk (9).png",
+      "assets/ninja/Idle (1).png",
+      "assets/ninja/Idle (10).png",
+      "assets/ninja/Idle (2).png",
+      "assets/ninja/Idle (3).png",
+      "assets/ninja/Idle (4).png",
+      "assets/ninja/Idle (5).png",
+      "assets/ninja/Idle (6).png",
+      "assets/ninja/Idle (7).png",
+      "assets/ninja/Idle (8).png",
+      "assets/ninja/Idle (9).png",
+      "assets/ninja/Run (1).png",
+      "assets/ninja/Run (10).png",
+      "assets/ninja/Run (2).png",
+      "assets/ninja/Run (3).png",
+      "assets/ninja/Run (4).png",
+      "assets/ninja/Run (5).png",
+      "assets/ninja/Run (6).png",
+      "assets/ninja/Run (7).png",
+      "assets/ninja/Run (8).png",
+      "assets/ninja/Run (9).png",
+      "assets/ninja/Walk (1).png",
+      "assets/ninja/Walk (10).png",
+      "assets/ninja/Walk (2).png",
+      "assets/ninja/Walk (3).png",
+      "assets/ninja/Walk (4).png",
+      "assets/ninja/Walk (5).png",
+      "assets/ninja/Walk (6).png",
+      "assets/ninja/Walk (7).png",
+      "assets/ninja/Walk (8).png",
+      "assets/ninja/Walk (9).png",
+      "assets/outback.png"
+    ]
+  },
+  {
+    "id": "demo-tiled",
+    "kind": "demo",
+    "title": "Tiled",
+    "startClass": "Tiled",
+    "files": [
+      "Bamboo.java",
+      "Enemy.java",
+      "Fireball.java",
+      "GameState.java",
+      "I18n.java",
+      "Item.java",
+      "Level1.tmx",
+      "Level2.tmx",
+      "Player.java",
+      "Tiled.java",
+      "UIItem.java",
+      "Wall.java",
+      "Warp.java",
+      "Water.java",
+      "World.java",
+      "assets/Bamboo.png",
+      "assets/Fireball.png",
+      "assets/Retro Gaming.ttf",
+      "assets/ScrollFire.png",
+      "assets/ScrollWater.png",
+      "assets/Skeleton.png",
+      "assets/TilesetField.png",
+      "assets/TilesetFloor.png",
+      "assets/TilesetWater.png",
+      "save.json"
+    ]
+  },
+  {
+    "id": "demo-timedDot",
+    "kind": "demo",
+    "title": "Timed Dot",
+    "startClass": "TimedDot",
+    "files": [
+      "TimedDot.java"
+    ]
+  },
+  {
+    "id": "demo-timer",
+    "kind": "demo",
+    "title": "Timer",
+    "startClass": "TimerStage",
+    "files": [
+      "TimerStage.java"
+    ]
+  },
+  {
+    "id": "demo-ui",
+    "kind": "demo",
+    "title": "UI",
+    "startClass": "UI",
+    "files": [
+      "UI.java",
+      "bar_round_gloss_large.png",
+      "bar_round_gloss_large_gray.png",
+      "crosshair_color_c.png",
+      "metalPanel_greenCorner.png"
+    ]
+  },
+  {
+    "id": "demo-volume",
+    "kind": "demo",
+    "title": "Volume",
+    "startClass": "Volume",
+    "files": [
+      "Volume.java"
+    ]
+  }
+]

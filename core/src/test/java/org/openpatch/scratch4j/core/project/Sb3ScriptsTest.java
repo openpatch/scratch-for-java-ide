@@ -1,0 +1,173 @@
+package org.openpatch.scratch4j.core.project;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.openpatch.scratch4j.core.compile.CompilerService;
+
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class Sb3ScriptsTest {
+
+  @TempDir
+  Path tmp;
+
+  /** A cat that moves every half second, scores with space, jumps, and a coin. */
+  private static final String PROJECT = """
+      {"targets": [
+        {"isStage": true, "name": "Stage", "currentCostume": 0,
+         "variables": {"vScore": ["score", 0], "vName": ["player name", "Ada"]},
+         "lists": {"lItems": ["items", ["apple", 3]]},
+         "costumes": [{"name": "bg", "md5ext": "bg.png", "dataFormat": "png",
+           "bitmapResolution": 1, "rotationCenterX": 0, "rotationCenterY": 0}],
+         "sounds": [],
+         "blocks": {
+           "s1": {"opcode": "event_whenflagclicked", "next": "s2", "topLevel": true,
+                  "inputs": {}, "fields": {}},
+           "s2": {"opcode": "data_addtolist", "next": "s3", "inputs": {"ITEM": [1, [10, "pear"]]},
+                  "fields": {"LIST": ["items", "lItems"]}},
+           "s3": {"opcode": "data_setvariableto", "next": null,
+                  "inputs": {"VALUE": [1, [10, "Grace"]]},
+                  "fields": {"VARIABLE": ["player name", "vName"]}}
+         }},
+        {"isStage": false, "name": "Cat", "layerOrder": 1, "x": 0, "y": 0, "direction": 90,
+         "size": 100, "visible": true, "rotationStyle": "all around", "currentCostume": 0,
+         "variables": {"vSpeed": ["speed", 10]}, "lists": {},
+         "costumes": [{"name": "cat", "md5ext": "cat.png", "dataFormat": "png",
+           "bitmapResolution": 1, "rotationCenterX": 5, "rotationCenterY": 5}],
+         "sounds": [],
+         "blocks": {
+           "f1": {"opcode": "event_whenflagclicked", "next": "f2", "topLevel": true,
+                  "inputs": {}, "fields": {}},
+           "f2": {"opcode": "motion_gotoxy", "next": "f3",
+                  "inputs": {"X": [1, [4, "-100"]], "Y": [1, [4, "20"]]}, "fields": {}},
+           "f3": {"opcode": "looks_sayforsecs", "next": "f4",
+                  "inputs": {"MESSAGE": [1, [10, "Hello!"]], "SECS": [1, [4, "2"]]},
+                  "fields": {}},
+           "f4": {"opcode": "control_forever", "next": null,
+                  "inputs": {"SUBSTACK": [2, "f5"]}, "fields": {}},
+           "f5": {"opcode": "motion_movesteps", "next": "f6",
+                  "inputs": {"STEPS": [3, "f9", [4, "10"]]}, "fields": {}},
+           "f9": {"opcode": "data_variable", "next": null, "inputs": {},
+                  "fields": {"VARIABLE": ["speed", "vSpeed"]}},
+           "f6": {"opcode": "control_if", "next": "f8",
+                  "inputs": {"CONDITION": [2, "f7"], "SUBSTACK": [2, "f10"]}, "fields": {}},
+           "f7": {"opcode": "sensing_touchingobject", "next": null,
+                  "inputs": {"TOUCHINGOBJECTMENU": [1, "f7m"]}, "fields": {}},
+           "f7m": {"opcode": "sensing_touchingobjectmenu", "shadow": true, "next": null,
+                   "inputs": {}, "fields": {"TOUCHINGOBJECTMENU": ["Coin", null]}},
+           "f10": {"opcode": "data_changevariableby", "next": "f11",
+                   "inputs": {"VALUE": [1, [4, "1"]]}, "fields": {"VARIABLE": ["score", "vScore"]}},
+           "f11": {"opcode": "motion_turnright", "next": null,
+                   "inputs": {"DEGREES": [1, [4, "15"]]}, "fields": {}},
+           "f8": {"opcode": "control_wait", "next": null,
+                  "inputs": {"DURATION": [1, [5, "0.5"]]}, "fields": {}},
+
+           "g1": {"opcode": "event_whenflagclicked", "next": "g2", "topLevel": true,
+                  "inputs": {}, "fields": {}},
+           "g2": {"opcode": "control_stop", "next": null, "inputs": {},
+                  "fields": {"STOP_OPTION": ["this script", null]}},
+
+           "k1": {"opcode": "event_whenkeypressed", "next": "k2", "topLevel": true,
+                  "inputs": {}, "fields": {"KEY_OPTION": ["space", null]}},
+           "k2": {"opcode": "looks_say", "next": "k4",
+                  "inputs": {"MESSAGE": [3, "k3", [10, ""]]}, "fields": {}},
+           "k3": {"opcode": "operator_join", "next": null,
+                  "inputs": {"STRING1": [1, [10, "Score: "]], "STRING2": [3, "k5", [10, ""]]},
+                  "fields": {}},
+           "k5": {"opcode": "data_variable", "next": null, "inputs": {},
+                  "fields": {"VARIABLE": ["score", "vScore"]}},
+           "k4": {"opcode": "procedures_call", "next": null,
+                  "inputs": {"argH": [1, [4, "30"]]}, "fields": {},
+                  "mutation": {"proccode": "jump %n", "argumentids": "[\\"argH\\"]"}},
+
+           "r1": {"opcode": "event_whenbroadcastreceived", "next": "r2", "topLevel": true,
+                  "inputs": {}, "fields": {"BROADCAST_OPTION": ["game over", "b1"]}},
+           "r2": {"opcode": "looks_hide", "next": "r3", "inputs": {}, "fields": {}},
+           "r3": {"opcode": "control_create_clone_of", "next": null, "inputs": {}, "fields": {}},
+
+           "p1": {"opcode": "procedures_definition", "next": "p3", "topLevel": true,
+                  "inputs": {"custom_block": [1, "p2"]}, "fields": {}},
+           "p2": {"opcode": "procedures_prototype", "shadow": true, "next": null, "inputs": {},
+                  "fields": {}, "mutation": {"proccode": "jump %n",
+                  "argumentnames": "[\\"height\\"]", "argumentids": "[\\"argH\\"]"}},
+           "p3": {"opcode": "motion_changeyby", "next": null,
+                  "inputs": {"DY": [3, "p4", [4, "10"]]}, "fields": {}},
+           "p4": {"opcode": "argument_reporter_string_number", "next": null, "inputs": {},
+                  "fields": {"VALUE": ["height", null]}}
+         }},
+        {"isStage": false, "name": "Coin", "layerOrder": 2, "x": 50, "y": 0, "direction": 90,
+         "size": 100, "visible": true, "rotationStyle": "all around", "currentCostume": 0,
+         "variables": {}, "lists": {}, "blocks": {}, "sounds": [],
+         "costumes": [{"name": "coin", "md5ext": "cat.png", "dataFormat": "png",
+           "bitmapResolution": 1, "rotationCenterX": 5, "rotationCenterY": 5}]}
+      ]}
+      """;
+
+  private Path sb3() throws Exception {
+    Path file = tmp.resolve("game.sb3");
+    var image = new java.awt.image.BufferedImage(10, 10, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    ByteArrayOutputStream png = new ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(image, "png", png);
+    try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
+      for (String name : List.of("project.json", "bg.png", "cat.png")) {
+        zip.putNextEntry(new ZipEntry(name));
+        zip.write(name.equals("project.json") ? PROJECT.getBytes(StandardCharsets.UTF_8)
+            : png.toByteArray());
+        zip.closeEntry();
+      }
+    }
+    return file;
+  }
+
+  @Test
+  void scriptsBecomeEventMethodsRunAndTimersAndCompile() throws Exception {
+    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    var result = Sb3Importer.importProject(sb3(), tmp, "game", jar, null);
+    Path root = result.root();
+    String cat = Files.readString(root.resolve("Cat.java"));
+    String stage = Files.readString(root.resolve("MyStage.java"));
+
+    assertThat(cat)
+        .contains("double speed = 10;")
+        // two green-flag scripts: one method each, "stop this script" ends only its own
+        .contains("this.whenGreenFlag1();").contains("this.whenGreenFlag2();")
+        .contains("private void whenGreenFlag2() {\n    return;\n  }")
+        .contains("this.setPosition(-100, 20);")
+        .contains("this.say(\"Hello!\", (int) (2 * 1000)); // TODO Scratch: this block waited")
+        .contains("if (this.getTimer(\"scratch1\").everyMillis((int) (0.5 * 1000))) {")
+        .contains("this.move(speed);")
+        .contains("if (this.isTouchingSprite(Coin.class)) {")
+        .contains("MyStage.score += 1;")
+        .contains("public void whenKeyPressed(KeyCode keyCode) {")
+        .contains("if (keyCode == KeyCode.SPACE) {")
+        .contains("this.say(\"Score: \" + ScratchValues.str(MyStage.score));")
+        .contains("this.jump(30);")
+        .contains("void jump(double height) {")
+        .contains("this.changeY(height);").doesNotContain("ScratchValues.num(height)")
+        .contains("public void whenIReceive(String message) {")
+        .contains("if (message.equals(\"game over\")) {")
+        .contains("// TODO Scratch: create clone of");
+    assertThat(stage)
+        .contains("static double score = 0;")
+        .contains("static String playerName = \"Ada\";")
+        .contains("static ArrayList<Object> items = new ArrayList<>(List.of(\"apple\", 3));")
+        .contains("items.add(\"pear\");")
+        .contains("playerName = \"Grace\";");
+    assertThat(root.resolve("ScratchValues.java")).isRegularFile();
+    assertThat(result.notes()).anyMatch(n -> n.startsWith("Cat: 5 script(s) converted"));
+
+    // the designer still reads the stage, and the whole project compiles
+    org.openpatch.scratch4j.core.region.StageDocument.read(stage);
+    var compiled = new CompilerService().compile(ScratchProject.open(root).javaSources(),
+        List.of(jar), tmp.resolve("out"));
+    assertThat(compiled.errors()).isEmpty();
+  }
+}

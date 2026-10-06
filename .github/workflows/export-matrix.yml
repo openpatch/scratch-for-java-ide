@@ -1,0 +1,96 @@
+name: Cross-OS export
+
+# Exports for every target are made on Linux, then each export runs on its
+# target OS with the smoke switch (exit after 4 seconds).
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['export/**', 'runner/**', '.github/workflows/export-matrix.yml']
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Windows launcher (mingw-w64)
+        run: |
+          sudo apt-get install --no-install-recommends -y gcc-mingw-w64-x86-64
+          scripts/build-win-launcher.sh
+      - name: Export the cat demo for every target
+        run: |
+          mvn --batch-mode --no-transfer-progress -DskipTests install
+          CP="$(cd export && mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout):export/target/classes"
+          java -cp "$CP" org.openpatch.scratch4j.export.ExportCli template:demo-cat out cache \
+            linux-x64 windows-x64 mac-aarch64 mac-x64
+          ls -la out
+          test -f out/cat-linux-x64.tar.gz
+          test -f out/cat-windows-x64.zip
+          test -f out/cat-mac-aarch64.tar.gz
+          test -f out/cat-mac-x64.tar.gz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: exports
+          if-no-files-found: error
+          path: |
+            out/*.zip
+            out/*.tar.gz
+
+  run:
+    needs: export
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            archive: cat-linux-x64.tar.gz
+            folder: cat-linux-x64
+            start: ./run.sh
+          - os: windows-latest
+            archive: cat-windows-x64.zip
+            folder: cat-windows-x64
+            start: run.bat
+          - os: macos-15
+            archive: cat-mac-aarch64.tar.gz
+            folder: cat-mac-aarch64
+            start: ./run.command
+          - os: macos-15-intel
+            archive: cat-mac-x64.tar.gz
+            folder: cat-mac-x64
+            start: ./run.command
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: exports
+      - name: Unpack
+        shell: bash
+        run: |
+          case "${{ matrix.archive }}" in
+            *.zip) 7z x "${{ matrix.archive }}" >/dev/null || unzip -q "${{ matrix.archive }}" ;;
+            *) tar -xzf "${{ matrix.archive }}" ;;
+          esac
+          ls "${{ matrix.folder }}"
+      - name: The Windows export carries its .exe launcher
+        if: runner.os == 'Windows'
+        shell: bash
+        run: test -f "${{ matrix.folder }}/cat.exe"
+      - name: Run with the smoke switch
+        shell: bash
+        env:
+          JDK_JAVA_OPTIONS: -Dscratch4j.ide.exitAfter=4
+        run: |
+          cd "${{ matrix.folder }}"
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get install -y xvfb >/dev/null 2>&1 || true
+            timeout 120 xvfb-run -a ${{ matrix.start }}
+          elif [ "$RUNNER_OS" = Windows ]; then
+            timeout 120 cmd //c ${{ matrix.start }}
+          else
+            perl -e 'alarm 120; exec @ARGV' ${{ matrix.start }}
+          fi

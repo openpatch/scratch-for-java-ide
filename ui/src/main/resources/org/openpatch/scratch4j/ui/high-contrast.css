@@ -1,0 +1,71 @@
+/*
+ * High contrast (accessibility): strong text and borders, no faint greys, and a
+ * thick focus ring so keyboard users always see where they are. Loaded after
+ * studio.css; works with the light and the dark theme.
+ */
+.root.high-contrast, .dialog-pane.high-contrast {
+  -color-fg-default: black;
+  -color-fg-muted: black;
+  -color-fg-subtle: #1a1a1a;
+  -color-border-default: black;
+  -color-border-muted: #1a1a1a;
+  -color-accent-fg: #0000c8;
+  -color-accent-emphasis: #0000c8;
+  -s-card-border: black;
+}
+
+.root.high-contrast.dark, .dialog-pane.high-contrast.dark {
+  -color-fg-default: white;
+  -color-fg-muted: white;
+  -color-fg-subtle: #f0f0f0;
+  -color-border-default: white;
+  -color-border-muted: #f0f0f0;
+  -color-accent-fg: #ffd400;
+  -color-accent-emphasis: #ffd400;
+  -s-card-border: white;
+}
+
+.high-contrast .text-muted,
+.high-contrast .card-button-hint,
+.high-contrast .field-label,
+.high-contrast .completion-detail {
+  -fx-text-fill: -color-fg-default;
+  -fx-opacity: 1;
+}
+
+.high-contrast .button,
+.high-contrast .toggle-button,
+.high-contrast .text-field,
+.high-contrast .combo-box,
+.high-contrast .side-card,
+.high-contrast .template-card {
+  -fx-border-color: -color-border-default;
+  -fx-border-width: 1.5px;
+}
+
+/* keyboard focus is always visible */
+.high-contrast *:focused {
+  -fx-border-color: -color-accent-emphasis;
+  -fx-border-width: 3px;
+}
+
+.high-contrast .code-area .text {
+  -fx-font-weight: bold;
+}
+
+/* text on filled accent surfaces stays white (light) / black (dark) */
+.high-contrast .primary-card .label,
+.high-contrast .primary-card .ikonli-font-icon,
+.high-contrast .button.accent .label,
+.high-contrast .button.success .label {
+  -fx-text-fill: white;
+  -fx-icon-color: white;
+}
+
+.high-contrast.dark .primary-card .label,
+.high-contrast.dark .primary-card .ikonli-font-icon,
+.high-contrast.dark .button.accent .label,
+.high-contrast.dark .button.success .label {
+  -fx-text-fill: black;
+  -fx-icon-color: black;
+}

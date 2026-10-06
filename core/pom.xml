@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.openpatch.scratch4j</groupId>
+    <artifactId>scratch4j-ide</artifactId>
+    <version>0.1.0-alpha.1</version>
+  </parent>
+
+  <artifactId>core</artifactId>
+  <name>Scratch for Java Studio :: core</name>
+
+  <dependencies>
+    <!-- Pinned library: asset registries (internal package, guarded by a
+         contract test) and the runtime model of student projects. -->
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch</artifactId>
+    </dependency>
+    <!-- The library's sources jar drives the API index generation
+         (ApiIndexGenerator + parity test). -->
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch</artifactId>
+      <version>${scratch.version}</version>
+      <classifier>sources</classifier>
+      <scope>test</scope>
+    </dependency>
+    <!-- SVG costumes (Scratch 3 vector costumes, SVG import in the paint
+         editor) are rasterized with Batik - pure Java, no JavaFX. -->
+    <dependency>
+      <groupId>org.apache.xmlgraphics</groupId>
+      <artifactId>batik-transcoder</artifactId>
+      <version>1.17</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.xmlgraphics</groupId>
+      <artifactId>batik-codec</artifactId>
+      <version>1.17</version>
+    </dependency>
+  </dependencies>
+</project>

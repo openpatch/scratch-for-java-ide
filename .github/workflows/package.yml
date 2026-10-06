@@ -1,0 +1,162 @@
+name: Package IDE
+
+# Installers for Scratch for Java Studio: one JetBrains Runtime with enhanced
+# hot reload and JavaFX jars, packed by jpackage on each OS.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  launcher:
+    # the Windows .exe of exported student apps, cross-compiled once
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          sudo apt-get install --no-install-recommends -y gcc-mingw-w64-x86-64
+          scripts/build-win-launcher.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: win-launcher
+          path: export/src/main/resources/org/openpatch/scratch4j/export/launcher/
+
+  package:
+    name: ${{ matrix.name }}
+    needs: launcher
+    runs-on: ${{ matrix.os }}
+    env:
+      # signing runs only when the credentials are configured as secrets
+      HAS_MAC_CERT: ${{ secrets.MACOS_CERTIFICATE != '' }}
+      HAS_WIN_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            types: deb app-image appimage
+          - name: windows-x64
+            os: windows-latest
+            types: msi app-image
+          - name: macos-arm64
+            os: macos-15
+            types: dmg
+          - name: macos-x64
+            os: macos-15-intel
+            types: dmg
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: win-launcher
+          path: export/src/main/resources/org/openpatch/scratch4j/export/launcher/
+
+      - name: WiX (for the MSI)
+        if: runner.os == 'Windows'
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.Util.wixext/5.0.2
+          wix extension list --global
+
+      - name: Build and package
+        shell: bash
+        run: |
+          for type in ${{ matrix.types }}; do
+            mkdir -p dist
+            if [ "$type" = appimage ]; then
+              scripts/package-appimage.sh
+              cp target/package/*.AppImage dist/
+              continue
+            fi
+            scripts/package-ide.sh "$type"
+            if [ "$type" = app-image ]; then
+              # the portable build: unzip and run, no admin rights (USB sticks)
+              (cd target/package && 7z a -tzip "../../dist/scratch4j-studio-${{ matrix.name }}-portable.zip" "Scratch for Java Studio" >/dev/null \
+                || zip -qr "../../dist/scratch4j-studio-${{ matrix.name }}-portable.zip" "Scratch for Java Studio")
+            else
+              cp target/package/*.${type} dist/ 2>/dev/null || true
+            fi
+          done
+
+      - name: Give installers stable platform names
+        shell: bash
+        run: |
+          for extension in AppImage deb dmg msi; do
+            for file in dist/*."$extension"; do
+              [ -f "$file" ] || continue
+              mv "$file" "dist/scratch4j-studio-${{ matrix.name }}.$extension"
+            done
+          done
+
+      - name: Sign and notarize (macOS, when the secrets exist)
+        if: runner.os == 'macOS' && env.HAS_MAC_CERT == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: scripts/sign-macos.sh dist/*.dmg
+
+      - name: Sign (Windows, when the secrets exist)
+        if: runner.os == 'Windows' && env.HAS_WIN_CERT == 'true'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP cert.pfx
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" | Select-Object -Last 1
+          Get-ChildItem dist\*.msi | ForEach-Object {
+            & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
+          }
+
+      - name: Smoke test the packaged runtime (Linux, Xvfb)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb >/dev/null 2>&1 || true
+          scripts/package-ide.sh app-image
+          APP="target/package/Scratch for Java Studio"
+          compgen -G "$APP/lib/app/library/scratch-*-all.jar" >/dev/null
+          "$APP/lib/runtime/bin/java" --list-modules | grep -q jdk.compiler
+          test -f "$APP/lib/app/javafx-controls-25-linux.jar"
+          "$APP/lib/runtime/bin/java" -XX:+AllowEnhancedClassRedefinition -version
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scratch4j-studio-${{ matrix.name }}
+          path: dist/
+
+  release:
+    name: Publish individual downloads
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: scratch4j-studio-*
+          path: dist
+          merge-multiple: true
+      - name: Attach installers to the release
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes ''
+          fi
+          gh release upload "$GITHUB_REF_NAME" dist/* --clobber

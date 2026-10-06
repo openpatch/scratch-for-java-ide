@@ -1,0 +1,196 @@
+package org.openpatch.scratch4j.core.lint;
+
+import org.openpatch.scratch4j.core.api.ApiIndex;
+import org.openpatch.scratch4j.core.compile.CompileResult;
+import org.openpatch.scratch4j.core.compile.CompilerService;
+import org.openpatch.scratch4j.core.project.ScratchProject;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * One full check of a project: compile it (errors with beginner explanations)
+ * plus the asset lints and the Scratch-transition lints, as one sorted problem
+ * list for the UI.
+ */
+public final class ProjectCheck {
+
+  /**
+   * A problem with everything the problems pane needs. {@code column} is
+   * 1-based, 0 when only the line is known; {@code error} separates compile
+   * errors (the program cannot run) from asset lints (it runs, but fails).
+   */
+  public record Problem(Path file, long line, long column, String message,
+      String explanation, List<String> suggestions, boolean error, String fix) {
+
+    public Problem(Path file, long line, long column, String message, String explanation,
+        List<String> suggestions, boolean error) {
+      this(file, line, column, message, explanation, suggestions, error, null);
+    }
+  }
+
+  /** A hint: a hand-written sprite the stage designer can take over. */
+  public static final String FIX_PROMOTE = "region.promote";
+
+  /** The fix for a statement the stage designer does not manage: move it below the region. */
+  public static final String FIX_MOVE_OUT_OF_REGION = "region.moveOut";
+
+  private ProjectCheck() {}
+
+  public static List<Problem> check(ScratchProject project,
+      DiagnosticsExplanations.Language language) {
+    List<Problem> problems = new ArrayList<>();
+    try {
+      List<Path> sources = project.javaSources();
+      List<Path> classpath = new ArrayList<>(project.libs());
+      classpath.add(project.root());
+      Path outDir = project.root().resolve(".scratch4j/build/check");
+      java.util.Locale messages = language == DiagnosticsExplanations.Language.DE
+          ? java.util.Locale.GERMAN : java.util.Locale.ROOT;
+      CompileResult result = new CompilerService().compile(sources, classpath, outDir, messages);
+
+      Set<String> knownNames = null;
+      for (var d : result.errors()) {
+        Path file = sources.stream()
+            .filter(s -> s.getFileName().toString().equals(fileNameOf(d.path())))
+            .findFirst().orElse(null);
+        List<String> suggestions = List.of();
+        if (file != null && d.code() != null && d.code().startsWith("compiler.err.cant.resolve")) {
+          if (knownNames == null) {
+            knownNames = knownNames(sources);
+          }
+          String name = identifierAt(file, d.line(), d.column());
+          suggestions = DidYouMean.suggest(name, knownNames, 3);
+        }
+        problems.add(new Problem(file, d.line(), d.column(), d.message(),
+            DiagnosticsExplanations.explain(d.code(), language).orElse(null),
+            suggestions, true));
+      }
+
+      AssetLinter linter = new AssetLinter();
+      java.util.Map<Path, String> texts = new java.util.LinkedHashMap<>();
+      for (Path source : sources) {
+        texts.put(source, Files.readString(source, StandardCharsets.UTF_8));
+      }
+      for (Path source : sources) {
+        for (AssetLinter.Finding f : linter.lint(project.root(), source, texts.get(source))) {
+          problems.add(new Problem(f.file(), f.line(), 0, f.message(), null,
+              f.suggestions(), false));
+        }
+      }
+      // Tiled maps: missing files, formats, layer names
+      var maps = new org.openpatch.scratch4j.core.tiled.MapLinter(language)
+          .withLibraryVersion(org.openpatch.scratch4j.core.project.LibraryCheck
+              .projectVersion(project));
+      for (Path source : sources) {
+        for (var f : maps.lint(project.root(), source, texts.get(source))) {
+          problems.add(new Problem(f.file(), f.line(), 0, f.message(), f.explanation(),
+              f.suggestions(), false));
+        }
+      }
+      // stage designer regions it cannot read: the line, and the fix
+      boolean de = language == DiagnosticsExplanations.Language.DE;
+      for (Path source : sources) {
+        String text = texts.get(source);
+        if (!text.contains("scratch4j:begin") || !"Stage".equals(
+            org.openpatch.scratch4j.core.region.DesignerRegions.kindOf(source.getParent(),
+                source.getFileName().toString().replaceFirst("\\.java$", "")))) {
+          continue;
+        }
+        var issue = org.openpatch.scratch4j.core.region.StageDocument.regionIssue(text);
+        if (issue == null) {
+          for (var promotion : org.openpatch.scratch4j.core.region.DesignerPromotion.find(text)) {
+            problems.add(new Problem(source, promotion.firstLine(), 0, de
+                ? "Die Figur " + promotion.name() + " kann der B\u00fchnen-Designer \u00fcbernehmen."
+                : "The stage designer can take over the sprite " + promotion.name() + ".",
+                de ? "Dann kannst du sie im Designer sehen, verschieben und einstellen."
+                    : "You can then see, move and set it up in the designer.",
+                List.of(), false, FIX_PROMOTE));
+          }
+        }
+        if (issue != null && issue.line() > 0) {
+          problems.add(new Problem(source, issue.line(), 0, de
+              ? "Der B\u00fchnen-Designer kann diese Zeile nicht lesen und ist darum "
+                  + "schreibgesch\u00fctzt."
+              : "The stage designer cannot read this line, so it is read-only.",
+              de ? "Im Bereich zwischen scratch4j:begin und scratch4j:end stehen nur "
+                  + "Hintergr\u00fcnde, Kl\u00e4nge und Figuren mit Position, Gr\u00f6\u00dfe "
+                  + "und Kost\u00fcm. Eigener Code geh\u00f6rt darunter (" + issue.message() + ")."
+                  : "Between scratch4j:begin and scratch4j:end the designer keeps only "
+                  + "backdrops, sounds and sprites with their position, size and costume. Your "
+                  + "own code belongs below the region (" + issue.message() + ").",
+              List.of(), false, FIX_MOVE_OUT_OF_REGION));
+        }
+      }
+      // Scratch-to-Java pitfalls: forever loops, sleep, a second window, shared counters
+      TransitionLinter transitions = new TransitionLinter(language);
+      TransitionLinter.Facts facts = TransitionLinter.facts(texts);
+      for (Path source : sources) {
+        for (TransitionLinter.Finding f : transitions.lint(source, texts.get(source), facts)) {
+          problems.add(new Problem(f.file(), f.line(), 0, f.message(), f.explanation(),
+              List.of(), false));
+        }
+      }
+    } catch (IOException e) {
+      problems.add(new Problem(null, 0, 0, "Could not check the project: " + e.getMessage(),
+          null, List.of(), true));
+    }
+    problems.sort(Comparator
+        .comparing((Problem p) -> p.file() == null ? "" : p.file().toString())
+        .thenComparingLong(Problem::line));
+    return problems;
+  }
+
+  private static final Pattern IDENTIFIER = Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]*\\b");
+
+  /** Library method names plus every identifier in the project: did-you-mean candidates. */
+  private static Set<String> knownNames(List<Path> sources) throws IOException {
+    Set<String> names = new HashSet<>(ApiIndex.load().methodNames());
+    for (Path source : sources) {
+      Matcher m = IDENTIFIER.matcher(Files.readString(source, StandardCharsets.UTF_8));
+      while (m.find()) {
+        names.add(m.group());
+      }
+    }
+    return names;
+  }
+
+  /**
+   * The identifier javac points at (1-based line/column). For a member
+   * select ({@code this.mvoe}) javac points at the dot, so skip it.
+   */
+  static String identifierAt(Path file, long line, long column) throws IOException {
+    List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+    if (line < 1 || line > lines.size()) {
+      return "";
+    }
+    String text = lines.get((int) line - 1);
+    int start = (int) column - 1;
+    if (start >= 0 && start < text.length() && text.charAt(start) == '.') {
+      start++;
+    }
+    if (start < 0 || start >= text.length()) {
+      return "";
+    }
+    int end = start;
+    while (end < text.length() && Character.isJavaIdentifierPart(text.charAt(end))) {
+      end++;
+    }
+    return text.substring(start, end);
+  }
+
+  /** javac reports the path as given; we pass absolute paths, so use the file name. */
+  private static String fileNameOf(String path) {
+    int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+    return slash < 0 ? path : path.substring(slash + 1);
+  }
+}

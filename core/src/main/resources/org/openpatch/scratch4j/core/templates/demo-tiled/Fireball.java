@@ -1,0 +1,38 @@
+import org.openpatch.scratch.*;
+
+public class Fireball extends AnimatedSprite {
+  private String dir;
+  private double speed = 3;
+
+  public Fireball(double x, double y, String dir) {
+    this.setX(x);
+    this.setY(y);
+    this.dir = dir;
+
+    // scratch4j:begin setup (managed by the stage designer)
+    this.addAnimation("default", "assets/Fireball.png", 4, 32, 32);
+    // scratch4j:end setup
+  }
+
+  public void run() {
+    if (this.getTimer().afterMillis(1000)) {
+      this.remove();
+    }
+
+    if (dir == "left") {
+      this.changeX(-speed);
+      this.setDirection(0);
+    } else if (dir == "right") {
+      this.changeX(speed);
+      this.setDirection(180);
+    } else if (dir == "up") {
+      this.setDirection(90);
+      this.changeY(speed);
+    } else if (dir == "down") {
+      this.setDirection(270);
+      this.changeY(-speed);
+    }
+
+    this.playAnimation("default");
+  }
+}

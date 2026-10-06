@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.openpatch.scratch4j</groupId>
+    <artifactId>scratch4j-ide</artifactId>
+    <version>0.1.0-alpha.1</version>
+  </parent>
+
+  <artifactId>runner</artifactId>
+  <name>Scratch for Java Studio :: runner</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.openpatch.scratch4j</groupId>
+      <artifactId>core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!-- Only for the integration-test launcher; the runner itself generates a
+         launcher that references the student project's +libs jar. -->
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

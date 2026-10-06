@@ -1,0 +1,15 @@
+target/
+build/
+out/
+*.class
+.idea/
+*.iml
+.vscode/
+!core/src/main/resources/org/openpatch/scratch4j/core/templates/*/.vscode/
+.project
+.classpath
+.settings/
+.metals/
+.DS_Store
+*.log
+.scratch4j/build/

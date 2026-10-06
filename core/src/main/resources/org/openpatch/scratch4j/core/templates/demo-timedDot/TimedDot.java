@@ -1,0 +1,50 @@
+import org.openpatch.scratch.*;
+
+public class TimedDot extends Stage {
+
+  // scratch4j:begin fields (managed by the stage designer)
+  private DotSprite dotSprite;
+  // scratch4j:end fields
+
+  public TimedDot() {
+    super(400, 200);
+    // scratch4j:begin setup (managed by the stage designer)
+    dotSprite = new DotSprite();
+    this.add(dotSprite);
+    // scratch4j:end setup
+  }
+
+  public void run() {
+    if (this.getTimer().everyMillis(2400)) {
+      this.eraseAll();
+    }
+  }
+
+  public static void main(String[] args) {
+    new TimedDot();
+  }
+}
+
+class DotSprite extends Sprite {
+  public DotSprite() {
+    super();
+    this.getPen().setSize(40);
+    this.setDirection(65);
+  }
+
+  public void run() {
+    this.ifOnEdgeBounce();
+    if (this.getTimer("timer2").everyMillis(600)) {
+      this.getPen().setColor(200);
+      this.move(20);
+      this.getPen().down();
+      this.getPen().up();
+    }
+    if (this.getTimer("timer1").everyMillis(1200)) {
+      this.getPen().setColor(100);
+      this.move(20);
+      this.getPen().down();
+      this.getPen().up();
+    }
+  }
+}
