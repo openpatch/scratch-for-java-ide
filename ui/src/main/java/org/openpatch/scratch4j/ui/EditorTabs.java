@@ -41,6 +41,9 @@ final class EditorTabs extends TabPane {
   private Consumer<Path> onVisualMode = file -> { };
   private Consumer<String> browse = url -> { };
   private java.util.function.BiConsumer<CodeEditor, Integer> onGoToDefinition = (e, o) -> { };
+  private java.util.function.BiConsumer<CodeEditor, Integer> onRename = (e, o) -> { };
+  private java.util.function.BiConsumer<CodeEditor, Integer> onFindUsages = (e, o) -> { };
+  private Consumer<String> onFindInProject = query -> { };
 
   EditorTabs(ApiIndex apiIndex, Supplier<Path> projectRoot) {
     this.apiIndex = apiIndex;
@@ -57,6 +60,18 @@ final class EditorTabs extends TabPane {
 
   void setOnGoToDefinition(java.util.function.BiConsumer<CodeEditor, Integer> action) {
     this.onGoToDefinition = action;
+  }
+
+  void setOnRename(java.util.function.BiConsumer<CodeEditor, Integer> action) {
+    this.onRename = action;
+  }
+
+  void setOnFindUsages(java.util.function.BiConsumer<CodeEditor, Integer> action) {
+    this.onFindUsages = action;
+  }
+
+  void setOnFindInProject(Consumer<String> action) {
+    this.onFindInProject = action;
   }
 
   /** Told about every gutter click (a running debug session updates its breakpoints). */
@@ -135,6 +150,9 @@ final class EditorTabs extends TabPane {
     });
     CodeEditor codeEditor = editor;
     editor.setOnGoToDefinition(offset -> onGoToDefinition.accept(codeEditor, offset));
+    editor.setOnRename(offset -> onRename.accept(codeEditor, offset));
+    editor.setOnFindUsages(offset -> onFindUsages.accept(codeEditor, offset));
+    editor.setOnFindInProject(query -> onFindInProject.accept(query));
     editor.setDiagnostics(diagnostics.getOrDefault(file, List.of()));
     editor.setFixes(fixes.getOrDefault(file, Map.of()));
     editor.setOnFix(line -> onFix.accept(file, line));
@@ -281,6 +299,15 @@ final class EditorTabs extends TabPane {
       } catch (IOException e) {
         // the file is gone: the tab stays open with the last text
       }
+    }
+  }
+
+  /** Opens the file (or focuses its tab) with the text from {@code start} to {@code end} selected. */
+  void openRange(Path file, int start, int end) {
+    open(file);
+    CodeEditor editor = editorFor(file);
+    if (editor != null) {
+      editor.selectRange(start, end);
     }
   }
 

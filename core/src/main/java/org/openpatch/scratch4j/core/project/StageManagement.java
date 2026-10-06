@@ -56,6 +56,19 @@ public final class StageManagement {
     return target;
   }
 
+  /**
+   * Duplicate any top-level project class: {@code NewName.java} with the
+   * class, its constructors and its references to itself renamed. Other files
+   * keep using the original.
+   */
+  public static Path duplicateClass(ScratchProject project, String oldName, String newName)
+      throws IOException {
+    Plan plan = plan(project, oldName, newName);
+    Path target = plan.source().resolveSibling(newName + ".java");
+    AtomicFiles.writeString(target, plan.updated().get(plan.source()));
+    return target;
+  }
+
   /** Rename a stage and every resolved Java type reference to it. */
   public static Path rename(ScratchProject project, String oldName, String newName)
       throws IOException {
@@ -134,14 +147,32 @@ public final class StageManagement {
 
   /** Move an unreferenced stage into IDE trash so it remains recoverable. */
   public static Path delete(ScratchProject project, String name) throws IOException {
+    return delete(project, name, false);
+  }
+
+  /**
+   * Move a stage into IDE trash. Without {@code force} a stage other classes
+   * still use stays; with it they are left as they are (the problems list
+   * shows what broke).
+   */
+  public static Path delete(ScratchProject project, String name, boolean force)
+      throws IOException {
     if (!project.stageClasses().contains(name)) {
       throw new IOException("Not a stage: " + name);
     }
-    Plan plan = plan(project, name, unusedName(project, name));
-    if (plan.updated().keySet().stream().anyMatch(path -> !path.equals(plan.source()))) {
-      throw new IOException("Other Java files still refer to stage " + name);
+    Path source;
+    if (force) {
+      source = project.javaSources().stream()
+          .filter(path -> path.getFileName().toString().equals(name + ".java"))
+          .findFirst().orElseThrow(() -> new IOException("No source file " + name + ".java"));
+    } else {
+      Plan plan = plan(project, name, unusedName(project, name));
+      if (plan.updated().keySet().stream().anyMatch(path -> !path.equals(plan.source()))) {
+        throw new IOException("Other Java files still refer to stage " + name);
+      }
+      source = plan.source();
     }
-    Path trashed = trash(project, plan.source());
+    Path trashed = trash(project, source);
     if (name.equals(project.settings().startStage)) {
       project.settings().startStage = "";
       try {
@@ -154,7 +185,7 @@ public final class StageManagement {
           failure.addSuppressed(rollback);
         }
         try {
-          Files.move(trashed, plan.source());
+          Files.move(trashed, source);
         } catch (IOException rollback) {
           failure.addSuppressed(rollback);
         }

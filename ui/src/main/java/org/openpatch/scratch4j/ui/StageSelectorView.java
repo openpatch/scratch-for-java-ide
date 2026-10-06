@@ -276,7 +276,18 @@ final class StageSelectorView extends BorderPane {
     });
   }
 
+  /** When set, the host asks (and deletes) instead of the plain confirmation here. */
+  private java.util.function.Consumer<String> onDeleteRequest;
+
+  void setOnDeleteRequest(java.util.function.Consumer<String> action) {
+    onDeleteRequest = action;
+  }
+
   private void confirmDelete(String name) {
+    if (onDeleteRequest != null) {
+      onDeleteRequest.accept(name);
+      return;
+    }
     javafx.scene.control.Alert dialog = new javafx.scene.control.Alert(
         javafx.scene.control.Alert.AlertType.CONFIRMATION,
         I18n.t("stages.delete.confirm", name), I18n.ok(), I18n.cancel());

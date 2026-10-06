@@ -13,7 +13,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-/** Create, rename and recoverably delete ordinary project folders. */
+/**
+ * Create, rename, move and recoverably delete ordinary project folders. Renames
+ * and moves rewrite the Java string literals that name the files inside.
+ */
 public final class ProjectFolderManagement {
 
   private static final Set<String> PROTECTED = Set.of(
@@ -39,20 +42,86 @@ public final class ProjectFolderManagement {
 
   public static Path rename(ScratchProject project, Path folder, String newName)
       throws IOException {
+    return rename(project, folder, newName, FileUsages.Mode.STRICT);
+  }
+
+  /** {@link #rename(ScratchProject, Path, String)}, choosing what happens to the usages. */
+  public static Path rename(ScratchProject project, Path folder, String newName,
+      FileUsages.Mode mode) throws IOException {
     Path source = validate(project, folder);
     checkName(newName);
     Path target = source.resolveSibling(newName);
     if (source.equals(target) || Files.exists(target)) {
       throw new IOException("Choose an unused folder name");
     }
-    checkReferences(project, source);
-    return Files.move(source, target);
+    checkMovable(source);
+    return ProjectAssetManagement.relocate(project, source, target, mode);
+  }
+
+  /** Moves a folder (with everything in it) into another project folder. */
+  public static Path move(ScratchProject project, Path folder, Path newParent)
+      throws IOException {
+    return move(project, folder, newParent, FileUsages.Mode.STRICT);
+  }
+
+  /** {@link #move(ScratchProject, Path, Path)}, choosing what happens to the usages. */
+  public static Path move(ScratchProject project, Path folder, Path newParent,
+      FileUsages.Mode mode) throws IOException {
+    Path source = validate(project, folder);
+    Path root = project.root().toRealPath();
+    Path parent = newParent.toRealPath();
+    if (!Files.isDirectory(parent) || !parent.startsWith(root)
+        || inaccessiblePath(root, parent)) {
+      throw new IOException("Choose a folder of this project");
+    }
+    if (parent.startsWith(source)) {
+      throw new IOException("A folder cannot move into itself");
+    }
+    if (parent.equals(source.getParent())) {
+      throw new IOException(source.getFileName() + " is already in this folder");
+    }
+    Path target = parent.resolve(source.getFileName());
+    if (Files.exists(target)) {
+      throw new IOException("The folder already contains " + source.getFileName());
+    }
+    checkMovable(source);
+    return ProjectAssetManagement.relocate(project, source, target, mode);
+  }
+
+  /** Java classes stay in the project folder (no packages), so their folders stay too. */
+  private static void checkMovable(Path folder) throws IOException {
+    try (Stream<Path> walk = Files.walk(folder)) {
+      if (walk.anyMatch(p -> p.getFileName().toString().endsWith(".java"))) {
+        throw new IOException("Move or delete Java source files individually before "
+            + "changing this folder");
+      }
+    }
   }
 
   /** Moves the entire folder to IDE trash, preserving all of its contents. */
   public static Path delete(ScratchProject project, Path folder) throws IOException {
+    return delete(project, folder, false);
+  }
+
+  /**
+   * Moves the entire folder to IDE trash. Without {@code force} a folder whose
+   * files are still used stays; Java sources always have to go one by one.
+   */
+  public static Path delete(ScratchProject project, Path folder, boolean force)
+      throws IOException {
     Path source = validate(project, folder);
-    checkReferences(project, source);
+    checkMovable(source);
+    if (force) {
+      String prefix = project.root().toRealPath().relativize(source).toString()
+          .replace('\\', '/');
+      if (project.settings().splashLogo != null
+          && project.settings().splashLogo.startsWith(prefix + "/")) {
+        project.settings().splashLogo = null;
+        project.settings().save(project.root());
+      }
+    } else {
+      checkReferences(project, source);
+    }
     Path trash = project.root().toRealPath().resolve(".scratch4j/trash");
     Files.createDirectories(trash);
     Path target = trash.resolve(Instant.now().toEpochMilli() + "-" + UUID.randomUUID()

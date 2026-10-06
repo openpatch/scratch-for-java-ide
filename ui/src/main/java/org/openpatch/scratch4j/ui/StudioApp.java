@@ -49,6 +49,7 @@ import org.openpatch.scratch4j.core.project.LibraryCheck;
 import org.openpatch.scratch4j.core.project.LibraryFlavour;
 import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ProjectAssetManagement;
+import org.openpatch.scratch4j.core.project.FileUsages;
 import org.openpatch.scratch4j.core.project.ProjectFileManagement;
 import org.openpatch.scratch4j.core.project.ProjectFolderManagement;
 import org.openpatch.scratch4j.core.project.ScratchProject;
@@ -113,6 +114,8 @@ public class StudioApp extends javafx.application.Application {
   private Tab problemsTab;
   private Tab consoleTab;
   private Tab debuggerTab;
+  private Tab searchTab;
+  private SearchResultsView searchResults;
   private DebuggerView debuggerView;
   private volatile org.openpatch.scratch4j.runner.Debugger debugger;
   /** The running program's connection (every run): hot reload goes through it. */
@@ -168,7 +171,10 @@ public class StudioApp extends javafx.application.Application {
     fileTree.setOnOpen(this::openByType);
     fileTree.setOnNewClass(() -> createClass(null));
     fileTree.setOnReveal(folder -> browse(folder.toUri().toString()));
-    fileTree.setOnRenameAsset(this::renameAsset);
+    fileTree.setOnRenameAsset(this::renameFile);
+    fileTree.setOnMoveTo(this::moveTo);
+    fileTree.setOnMove(this::movePath);
+    fileTree.setOnDuplicate(this::duplicateFile);
     fileTree.setOnRenameClass(this::renameClass);
     fileTree.setOnDeleteFile(this::deleteFile);
     fileTree.setOnEditSprite(this::openSpriteAssets);
@@ -191,6 +197,9 @@ public class StudioApp extends javafx.application.Application {
       }
     });
     editor.setOnGoToDefinition(this::goToDefinition);
+    editor.setOnRename(this::renameSymbol);
+    editor.setOnFindUsages(this::findUsages);
+    editor.setOnFindInProject(this::findInProject);
     editor.setOnBrowse(this::browse);
     editor.setOnSaved(this::onCodeSaved);
     editor.getSelectionModel().selectedItemProperty().addListener((o, old, tab) -> {
@@ -264,7 +273,11 @@ public class StudioApp extends javafx.application.Application {
     debuggerTab = new Tab(I18n.t("debug.title"), debuggerView);
     debuggerTab.setClosable(false);
     consoleTab.setGraphic(Icons.of("fth-terminal"));
-    bottomTabs = new TabPane(problemsTab, consoleTab, debuggerTab);
+    searchResults = new SearchResultsView(
+        match -> editor.openRange(match.file(), match.start(), match.end()));
+    searchTab = new Tab(I18n.t("search.tab"), searchResults);
+    searchTab.setGraphic(Icons.of("fth-search"));
+    bottomTabs = new TabPane(problemsTab, consoleTab, searchTab, debuggerTab);
     bottomTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
     bottomTabs.getStyleClass().add("bottom-tabs");
     bottomTabs.setMinHeight(90);
@@ -461,8 +474,7 @@ public class StudioApp extends javafx.application.Application {
         item("menu.file.close", "fth-x", shortcut(KeyCode.W), () -> editor.closeSelected()),
         item("file.delete", "fth-trash-2", null,
             () -> deleteFile(fileTree.selectedFile())),
-        item("folder.rename", "fth-edit-2", null,
-            () -> renameFolder(fileTree.selectedDirectory())),
+        item("tree.rename", "fth-edit-2", null, () -> fileTree.renameSelected()),
         item("folder.delete", "fth-trash-2", null,
             () -> deleteFolder(fileTree.selectedDirectory())),
         new SeparatorMenuItem(),
@@ -472,15 +484,47 @@ public class StudioApp extends javafx.application.Application {
     edit.getItems().addAll(
         item("menu.edit.find", "fth-search", null, () -> withEditor(e -> e.showFind(false))),
         item("menu.edit.replace", "fth-repeat", null, () -> withEditor(e -> e.showFind(true))),
+        item("menu.edit.findproject", "fth-search", new KeyCodeCombination(KeyCode.H,
+            KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN),
+            () -> findInProject(editor.activeEditor() == null ? ""
+                : editor.activeEditor().searchStart())),
+        item("menu.edit.gotoline", "fth-hash", shortcut(KeyCode.G),
+            () -> withEditor(CodeEditor::askGotoLine)),
+        new SeparatorMenuItem(),
+        item("menu.edit.duplicateline", "fth-copy", shortcut(KeyCode.D),
+            () -> withEditor(CodeEditor::duplicateLines)),
+        item("menu.edit.deleteline", "fth-delete", new KeyCodeCombination(KeyCode.K,
+            KeyCombination.SHORTCUT_DOWN, KeyCombination.SHIFT_DOWN),
+            () -> withEditor(CodeEditor::deleteLines)),
+        item("menu.edit.lineup", "fth-arrow-up", new KeyCodeCombination(KeyCode.UP,
+            KeyCombination.ALT_DOWN), () -> withEditor(e -> e.moveLines(-1))),
+        item("menu.edit.linedown", "fth-arrow-down", new KeyCodeCombination(KeyCode.DOWN,
+            KeyCombination.ALT_DOWN), () -> withEditor(e -> e.moveLines(1))),
+        new SeparatorMenuItem(),
         item("menu.edit.format", "fth-align-left", null,
             () -> withEditor(CodeEditor::formatIndentation)),
+        new SeparatorMenuItem(),
+        item("menu.edit.history", "fth-clock", null, this::showHistory));
+
+    Menu refactor = new Menu(I18n.t("menu.refactor"));
+    refactor.getItems().addAll(
         item("menu.edit.definition", "fth-corner-down-right",
             new KeyCodeCombination(KeyCode.F12),
             () -> withEditor(e -> goToDefinition(e, e.area().getCaretPosition()))),
+        item("menu.refactor.usages", "fth-list", new KeyCodeCombination(KeyCode.F12,
+            KeyCombination.SHIFT_DOWN),
+            () -> withEditor(e -> findUsages(e, e.area().getCaretPosition()))),
+        new SeparatorMenuItem(),
+        item("menu.refactor.rename", "fth-edit-3", new KeyCodeCombination(KeyCode.F2),
+            () -> withEditor(e -> renameSymbol(e, e.area().getCaretPosition()))),
         item("class.rename", "fth-edit-3", new KeyCodeCombination(KeyCode.F2,
             KeyCombination.SHIFT_DOWN), () -> withEditor(e -> renameClass(e.file()))),
-        new SeparatorMenuItem(),
-        item("menu.edit.history", "fth-clock", null, this::showHistory));
+        item("menu.refactor.move", "fth-corner-up-right", null,
+            () -> moveTo(fileTree.selectedPath() != null ? fileTree.selectedPath()
+                : editor.activeEditor() == null ? null : editor.activeEditor().file())),
+        item("tree.duplicate", "fth-copy", null,
+            () -> duplicateFile(fileTree.selectedFile() != null ? fileTree.selectedFile()
+                : editor.activeEditor() == null ? null : editor.activeEditor().file())));
 
     Menu runMenu = new Menu(I18n.t("menu.run"));
     runMenu.getItems().addAll(
@@ -538,7 +582,7 @@ public class StudioApp extends javafx.application.Application {
         new SeparatorMenuItem(),
         item("menu.help.about", "fth-info", null, this::showAbout));
 
-    return new MenuBar(file, edit, projectMenu(), runMenu, exportMenu, view, help);
+    return new MenuBar(file, edit, refactor, projectMenu(), runMenu, exportMenu, view, help);
   }
 
   private static KeyCombination shortcut(KeyCode code) {
@@ -837,6 +881,8 @@ public class StudioApp extends javafx.application.Application {
       fileTree.reload();
       checkProject();
     });
+    // the same questions as the Files tree: is the stage still used?
+    selector.setOnDeleteRequest(name -> deleteFile(p.root().resolve(name + ".java")));
     sidebar.getTabs().get(0).setContent(selector);
     sidebar.getSelectionModel().select(0);
     root.setCenter(workArea);
@@ -1505,18 +1551,22 @@ public class StudioApp extends javafx.application.Application {
     String base = dot < 0 ? oldName : oldName.substring(0, dot);
     javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(base);
     dialog.setTitle(I18n.t("asset.rename"));
-    dialog.setHeaderText(I18n.t("asset.rename.warning"));
+    dialog.setHeaderText(null);
     dialog.setContentText(I18n.t("asset.new.name"));
     Theme.style(dialog);
-    dialog.showAndWait().ifPresent(name -> {
+    dialog.showAndWait().map(String::trim).filter(name -> !name.equals(base)).ifPresent(name -> {
+      List<FileUsages.Usage> usages = usagesOf(p, file);
+      FileUsages.Mode mode = usages == null ? null : askMoveMode(p, file, usages, true);
+      if (mode == null) return;
       try {
-        Path renamed = ProjectAssetManagement.rename(p, file, name.trim());
+        Path renamed = ProjectAssetManagement.rename(p, file, name, mode);
         editor.closeForFile(file);
         for (Path source : editor.openFiles()) editor.reloadIfOpen(source);
         fileTree.reload();
         reloadDesigners();
         scheduleCheck();
         setStatus(I18n.t("asset.renamed", renamed.getFileName()));
+        showLeftUsages(p, file, usages, mode);
       } catch (IOException e) {
         alert(e.getMessage());
       }
@@ -1595,6 +1645,515 @@ public class StudioApp extends javafx.application.Application {
     worker.start();
   }
 
+  /** Rename for a file that is not a class: an asset keeps its extension. */
+  private void renameFile(Path file) {
+    ScratchProject p = project.get();
+    if (p == null || file == null) return;
+    if (file.toAbsolutePath().normalize().startsWith(
+        p.root().resolve("assets").toAbsolutePath().normalize())) {
+      renameAsset(file);
+      return;
+    }
+    if (!saveBeforeAssetChange()) return;
+    javafx.scene.control.TextInputDialog dialog =
+        new javafx.scene.control.TextInputDialog(file.getFileName().toString());
+    dialog.setTitle(I18n.t("tree.rename"));
+    dialog.setHeaderText(null);
+    dialog.setContentText(I18n.t("file.new.name"));
+    Theme.style(dialog);
+    dialog.showAndWait().map(String::trim)
+        .filter(name -> !name.equals(file.getFileName().toString()))
+        .ifPresent(name -> {
+          List<FileUsages.Usage> usages = usagesOf(p, file);
+          FileUsages.Mode mode = usages == null ? null : askMoveMode(p, file, usages, true);
+          if (mode == null) return;
+          try {
+            Path renamed = ProjectFileManagement.rename(p, file, name, mode);
+            afterMove(file, renamed);
+            setStatus(I18n.t("file.renamed", renamed.getFileName()));
+            showLeftUsages(p, file, usages, mode);
+          } catch (IOException e) {
+            alert(e.getMessage());
+          }
+        });
+  }
+
+  /** "Move to...": pick one of the project's folders. */
+  private void moveTo(Path path) {
+    ScratchProject p = project.get();
+    if (p == null) return;
+    if (path == null) {
+      alert(I18n.t("file.delete.select"));
+      return;
+    }
+    List<Path> folders = new ArrayList<>();
+    try (var walk = Files.walk(p.root())) {
+      Path normalized = path.toAbsolutePath().normalize();
+      walk.filter(Files::isDirectory)
+          .filter(dir -> !dir.toAbsolutePath().normalize().startsWith(normalized))
+          .filter(dir -> !dir.equals(path.getParent()))
+          .filter(dir -> {
+            Path relative = p.root().relativize(dir);
+            return relative.toString().isEmpty() || !java.util.Set.of(".scratch4j", ".git",
+                "target", "build", "+libs", "export", ".vscode")
+                .contains(relative.getName(0).toString());
+          })
+          .sorted()
+          .forEach(folders::add);
+    } catch (IOException e) {
+      alert(e.getMessage());
+      return;
+    }
+    if (folders.isEmpty()) {
+      alert(I18n.t("move.nofolder"));
+      return;
+    }
+    java.util.Map<String, Path> byName = new java.util.LinkedHashMap<>();
+    for (Path folder : folders) {
+      String relative = p.root().relativize(folder).toString().replace('\\', '/');
+      byName.put(relative.isEmpty() ? I18n.t("move.projectfolder") : relative + "/", folder);
+    }
+    javafx.scene.control.ChoiceDialog<String> dialog = new javafx.scene.control.ChoiceDialog<>(
+        byName.keySet().iterator().next(), byName.keySet());
+    dialog.setTitle(I18n.t("tree.moveto"));
+    dialog.setHeaderText(I18n.t("move.header", path.getFileName()));
+    dialog.setContentText(I18n.t("move.folder"));
+    Theme.style(dialog);
+    dialog.showAndWait().map(byName::get).ifPresent(folder -> movePath(path, folder));
+  }
+
+  /** Moves a file or folder (drag and drop or "Move to...") and updates what names it. */
+  private void movePath(Path path, Path folder) {
+    ScratchProject p = project.get();
+    if (p == null || path == null || folder == null || !saveBeforeAssetChange()) return;
+    // a Java class moves back into the project folder unchanged (nothing names its path)
+    boolean java = path.getFileName().toString().endsWith(".java");
+    List<FileUsages.Usage> usages = java ? List.of() : usagesOf(p, path);
+    FileUsages.Mode mode = usages == null ? null : askMoveMode(p, path, usages, false);
+    if (mode == null) return;
+    try {
+      Path moved = Files.isDirectory(path)
+          ? ProjectFolderManagement.move(p, path, folder, mode)
+          : ProjectFileManagement.move(p, path, folder, mode);
+      afterMove(path, moved);
+      showLeftUsages(p, path, usages, mode);
+      String where = p.root().toRealPath().relativize(moved.getParent()).toString();
+      setStatus(I18n.t("file.moved", moved.getFileName(),
+          where.isEmpty() ? I18n.t("move.projectfolder") : where.replace('\\', '/')));
+    } catch (IOException e) {
+      alert(e.getMessage());
+    }
+  }
+
+  /** After a file or folder moved: tabs on the old path reopen on the new one. */
+  private void afterMove(Path from, Path to) {
+    Path oldPath = from.toAbsolutePath().normalize();
+    List<Path> reopen = new ArrayList<>();
+    for (Path open : editor.openFiles()) {
+      Path normalized = open.toAbsolutePath().normalize();
+      if (normalized.startsWith(oldPath)) {
+        reopen.add(to.resolve(oldPath.relativize(normalized)));
+      }
+    }
+    if (Files.isDirectory(to)) {
+      editor.closeUnderFolder(from);
+    } else {
+      editor.closeForFile(from);
+    }
+    for (Path source : editor.openFiles()) editor.reloadIfOpen(source);
+    fileTree.reload();
+    fileTree.selectPath(to);
+    reloadDesigners();
+    if (selector != null) selector.refresh();
+    scheduleCheck();
+    for (Path file : reopen) {
+      if (Files.isRegularFile(file)) {
+        openByType(file);
+      }
+    }
+  }
+
+  /** Duplicate: a class gets a new name, any other file a "-2" copy next to it. */
+  private void duplicateFile(Path file) {
+    ScratchProject p = project.get();
+    if (p == null) return;
+    if (file == null || !Files.isRegularFile(file)) {
+      alert(I18n.t("file.delete.select"));
+      return;
+    }
+    saveAll();
+    boolean java = file.getFileName().toString().endsWith(".java");
+    String oldName = file.getFileName().toString().replaceFirst("\\.java$", "");
+    String suggestion = java ? oldName + "2"
+        : ProjectFileManagement.copyName(file);
+    javafx.scene.control.TextInputDialog dialog =
+        new javafx.scene.control.TextInputDialog(suggestion);
+    dialog.setTitle(I18n.t("tree.duplicate"));
+    dialog.setHeaderText(I18n.t(java ? "duplicate.class.hint" : "duplicate.file.hint",
+        file.getFileName()));
+    dialog.setContentText(I18n.t(java ? "class.new.name" : "file.new.name"));
+    Theme.style(dialog);
+    dialog.showAndWait().map(String::trim).filter(name -> !name.isEmpty()).ifPresent(name -> {
+      try {
+        Path copy = java ? StageManagement.duplicateClass(p, oldName, name)
+            : ProjectFileManagement.duplicate(p, file, name);
+        fileTree.reload();
+        fileTree.selectPath(copy);
+        if (selector != null) selector.refresh();
+        scheduleCheck();
+        openByType(copy);
+        setStatus(I18n.t("file.duplicated", copy.getFileName()));
+      } catch (IOException e) {
+        alert(e.getMessage());
+      }
+    });
+  }
+
+  /** The current text of every project Java file (open editors are saved first). */
+  private java.util.Map<Path, String> javaTexts(ScratchProject p) throws IOException {
+    java.util.Map<Path, String> texts = new java.util.HashMap<>();
+    for (Path source : p.javaSources()) {
+      texts.put(source, Files.readString(source));
+    }
+    return texts;
+  }
+
+  /** The key under which {@link #javaTexts} holds {@code file} (the same file, spelled alike). */
+  private static Path sourceKey(java.util.Map<Path, String> texts, Path file) {
+    Path normalized = file.toAbsolutePath().normalize();
+    return texts.keySet().stream()
+        .filter(key -> key.toAbsolutePath().normalize().equals(normalized))
+        .findFirst().orElse(file);
+  }
+
+  /**
+   * F2: renames the field, method, variable or class at the offset everywhere
+   * in the project. A class renames its file too ({@link #renameClass}).
+   */
+  private void renameSymbol(CodeEditor source, int offset) {
+    ScratchProject p = project.get();
+    if (p == null || source == null) return;
+    if (!source.file().getFileName().toString().endsWith(".java")) {
+      setStatus(I18n.t("rename.nojava"));
+      return;
+    }
+    saveAll();
+    if (source.hasUnsavedChanges()) {
+      alert(I18n.t("asset.save.first"));
+      return;
+    }
+    setStatus(I18n.t("rename.resolving"));
+    Thread worker = new Thread(() -> {
+      try {
+        var texts = javaTexts(p);
+        var found = org.openpatch.scratch4j.core.compile.Symbols.at(
+            sourceKey(texts, source.file()), offset, texts, p.libs());
+        Platform.runLater(() -> {
+          setStatus("");
+          if (found.isEmpty()) {
+            alert(I18n.t("rename.noname"));
+            return;
+          }
+          var symbol = found.get();
+          if (!symbol.inProject()) {
+            alert(I18n.t("rename.library", symbol.name()));
+            return;
+          }
+          if (symbol.libraryMethod() != null) {
+            alert(I18n.t("rename.override", symbol.name(), symbol.libraryMethod()));
+            return;
+          }
+          if (symbol.topLevelClass()) {
+            symbol.occurrences().stream().filter(o -> o.declaration()
+                    && o.file().getFileName().toString().equals(symbol.name() + ".java"))
+                .findFirst()
+                .ifPresentOrElse(o -> renameClass(o.file()),
+                    () -> askSymbolName(p, source, offset, symbol));
+            return;
+          }
+          askSymbolName(p, source, offset, symbol);
+        });
+      } catch (IOException | RuntimeException e) {
+        Platform.runLater(() -> alert(e.getMessage()));
+      }
+    }, "rename");
+    worker.setDaemon(true);
+    worker.start();
+  }
+
+  private void askSymbolName(ScratchProject p, CodeEditor source, int offset,
+      org.openpatch.scratch4j.core.compile.Symbols.Symbol symbol) {
+    javafx.scene.control.TextInputDialog dialog =
+        new javafx.scene.control.TextInputDialog(symbol.name());
+    dialog.setTitle(I18n.t("menu.refactor.rename"));
+    dialog.setHeaderText(I18n.t("rename.hint", symbol.name(), symbol.occurrences().size(),
+        symbol.byFile().size()));
+    dialog.setContentText(I18n.t("rename.newname"));
+    Theme.style(dialog);
+    dialog.showAndWait().map(String::trim).filter(name -> !name.equals(symbol.name()))
+        .ifPresent(name -> {
+          int caret = source.area().getCaretPosition();
+          Thread worker = new Thread(() -> {
+            try {
+              var texts = javaTexts(p);
+              var changed = org.openpatch.scratch4j.core.compile.Symbols.rename(
+                  sourceKey(texts, source.file()), offset, name, texts, p.libs());
+              Platform.runLater(() -> applyRename(p, source, caret, symbol, name, texts,
+                  changed));
+            } catch (IOException | RuntimeException e) {
+              Platform.runLater(() -> alert(e.getMessage()));
+            }
+          }, "rename");
+          worker.setDaemon(true);
+          worker.start();
+        });
+  }
+
+  private void applyRename(ScratchProject p, CodeEditor source, int caret,
+      org.openpatch.scratch4j.core.compile.Symbols.Symbol symbol, String name,
+      java.util.Map<Path, String> before, java.util.Map<Path, String> changed) {
+    // nothing may have been typed since the rename was computed
+    for (Path file : changed.keySet()) {
+      CodeEditor open = editor.editorFor(file);
+      if (open != null && !open.content().equals(before.get(file))) {
+        alert(I18n.t("rename.changed"));
+        return;
+      }
+    }
+    List<Path> written = new ArrayList<>();
+    try {
+      for (var entry : changed.entrySet()) {
+        LocalHistory.writeString(p.root(), entry.getKey(), entry.getValue());
+        written.add(entry.getKey());
+      }
+    } catch (IOException e) {
+      for (Path file : written) {
+        try {
+          org.openpatch.scratch4j.core.io.AtomicFiles.writeString(file, before.get(file));
+        } catch (IOException rollback) {
+          e.addSuppressed(rollback);
+        }
+      }
+      alert(e.getMessage());
+      return;
+    }
+    for (Path file : changed.keySet()) editor.reloadIfOpen(file);
+    // the caret stays on the renamed name: earlier occurrences in its file shifted it
+    int shift = 0;
+    Path sourceFile = source.file().toAbsolutePath().normalize();
+    for (var o : symbol.occurrences()) {
+      if (o.file().toAbsolutePath().normalize().equals(sourceFile) && o.end() <= caret) {
+        shift += name.length() - symbol.name().length();
+      }
+    }
+    source.area().moveTo(Math.max(0, Math.min(caret + shift, source.area().getLength())));
+    reloadDesigners();
+    if (selector != null) selector.refresh();
+    scheduleCheck();
+    setStatus(I18n.t("rename.done", symbol.name(), name, symbol.occurrences().size()));
+  }
+
+  /** Shift+F12: every use of the name at the offset, in the Search tab. */
+  private void findUsages(CodeEditor source, int offset) {
+    ScratchProject p = project.get();
+    if (p == null || source == null) return;
+    if (!source.file().getFileName().toString().endsWith(".java")) {
+      setStatus(I18n.t("rename.nojava"));
+      return;
+    }
+    saveAll();
+    String word = source.wordAtCaret();
+    java.util.Map<Path, String> texts;
+    try {
+      texts = javaTexts(p);
+    } catch (IOException e) {
+      alert(e.getMessage());
+      return;
+    }
+    Path key = sourceKey(texts, source.file());
+    texts.put(key, source.content()); // unsaved text counts too
+    Thread worker = new Thread(() -> {
+      try {
+        var found = org.openpatch.scratch4j.core.compile.Symbols.at(key, offset,
+            texts, p.libs());
+        Platform.runLater(() -> {
+          if (found.isEmpty()) {
+            setStatus(I18n.t("definition.none", word));
+            return;
+          }
+          var symbol = found.get();
+          List<SearchResultsView.Match> matches = new ArrayList<>();
+          for (var o : symbol.occurrences()) {
+            String text = texts.get(o.file());
+            int lineStart = text.lastIndexOf('\n', o.start() - 1) + 1;
+            int lineEnd = text.indexOf('\n', o.start());
+            String raw = text.substring(lineStart, lineEnd < 0 ? text.length() : lineEnd);
+            int from = o.start() - lineStart - (raw.length() - raw.stripLeading().length());
+            matches.add(new SearchResultsView.Match(o.file(), o.start(), o.end(), o.line(),
+                o.lineText(), from, from + symbol.name().length(), o.declaration()));
+          }
+          searchResults.show(p.root(), I18n.t("usages.title", symbol.name(), matches.size(),
+              symbol.byFile().size()), matches);
+          bottomTabs.getSelectionModel().select(searchTab);
+          setStatus(I18n.t("usages.status", symbol.name(), matches.size()));
+        });
+      } catch (IOException | RuntimeException e) {
+        Platform.runLater(() -> setStatus(I18n.t("definition.none", word)));
+      }
+    }, "find-usages");
+    worker.setDaemon(true);
+    worker.start();
+  }
+
+  /** Ctrl+Shift+H: every line of the project's text files that contains a text. */
+  private void findInProject(String start) {
+    ScratchProject p = project.get();
+    if (p == null) return;
+    javafx.scene.control.TextInputDialog dialog =
+        new javafx.scene.control.TextInputDialog(start == null ? "" : start);
+    dialog.setTitle(I18n.t("menu.edit.findproject"));
+    dialog.setHeaderText(null);
+    dialog.setContentText(I18n.t("search.prompt"));
+    javafx.scene.control.CheckBox matchCase = new javafx.scene.control.CheckBox(
+        I18n.t("search.matchcase"));
+    dialog.getDialogPane().setExpandableContent(null);
+    var content = dialog.getDialogPane().getContent();
+    dialog.getDialogPane().setContent(new VBox(8, content, matchCase));
+    Theme.style(dialog);
+    dialog.showAndWait().filter(query -> !query.isEmpty()).ifPresent(query -> {
+      saveAll();
+      boolean exact = matchCase.isSelected();
+      Thread worker = new Thread(() -> {
+        try {
+          var hits = org.openpatch.scratch4j.core.project.ProjectSearch.search(p, query, exact);
+          List<SearchResultsView.Match> matches = hits.stream()
+              .map(h -> new SearchResultsView.Match(h.file(), h.start(), h.end(), h.line(),
+                  h.lineText(), h.from(), h.to(), false))
+              .toList();
+          long files = hits.stream().map(h -> h.file()).distinct().count();
+          Platform.runLater(() -> {
+            String heading = hits.size() >= org.openpatch.scratch4j.core.project.ProjectSearch.LIMIT
+                ? I18n.t("search.title.limit", query, hits.size())
+                : I18n.t("search.title.found", query, hits.size(), files);
+            searchResults.show(p.root(), heading, matches);
+            bottomTabs.getSelectionModel().select(searchTab);
+          });
+        } catch (IOException e) {
+          Platform.runLater(() -> alert(e.getMessage()));
+        }
+      }, "find-in-project");
+      worker.setDaemon(true);
+      worker.start();
+    });
+  }
+
+  /** The usages of a file or folder, or null when they could not be found (the user was told). */
+  private List<FileUsages.Usage> usagesOf(ScratchProject p, Path path) {
+    try {
+      return FileUsages.find(p, path);
+    } catch (IOException | RuntimeException e) {
+      alert(I18n.t("usages.error", e.getMessage()));
+      return null;
+    }
+  }
+
+  /**
+   * Before a move or rename: with no usages, just go ahead (updating);
+   * otherwise ask whether the paths should follow. Null when cancelled.
+   */
+  private FileUsages.Mode askMoveMode(ScratchProject p, Path path, List<FileUsages.Usage> usages,
+      boolean rename) {
+    if (usages.isEmpty()) {
+      return FileUsages.Mode.UPDATE;
+    }
+    return switch (UsagesDialog.forMove(p.root(), path.getFileName().toString(), usages,
+        rename)) {
+      case UPDATE -> FileUsages.Mode.UPDATE;
+      case IGNORE -> FileUsages.Mode.IGNORE;
+      default -> null;
+    };
+  }
+
+  /**
+   * Before a delete: a file nothing uses gets the usual "really?" question, a
+   * used one a warning that lists where it is used. True when the user agreed.
+   */
+  private boolean confirmDelete(ScratchProject p, Path path, String warningKey) {
+    List<FileUsages.Usage> usages = usagesOf(p, path);
+    if (usages == null) {
+      return false;
+    }
+    if (usages.isEmpty()) {
+      Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
+          I18n.t(warningKey, path.getFileName()), I18n.ok(), I18n.cancel());
+      confirmation.setHeaderText(null);
+      Theme.style(confirmation);
+      return confirmation.showAndWait().orElse(null) == I18n.ok();
+    }
+    switch (UsagesDialog.forDelete(p.root(), path.getFileName().toString(), usages)) {
+      case DELETE:
+        return true;
+      case SHOW:
+        showUsages(p, I18n.t("usages.search.title", path.getFileName(), usages.size()),
+            usages, false);
+        return false;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * After a move or rename: the usages the IDE did not update (all of them
+   * when the user chose not to) go to the Search tab, to be fixed by hand.
+   */
+  private void showLeftUsages(ScratchProject p, Path path, List<FileUsages.Usage> usages,
+      FileUsages.Mode mode) {
+    List<FileUsages.Usage> left = usages.stream()
+        .filter(u -> mode == FileUsages.Mode.IGNORE || !u.updatable())
+        .toList();
+    if (!left.isEmpty()) {
+      showUsages(p, I18n.t("usages.left.title", path.getFileName(), left.size()), left, true);
+    }
+  }
+
+  /**
+   * Shows usages in the Search tab. {@code edited}: the files may have changed
+   * since the usages were found (paths were rewritten on earlier columns), so
+   * each usage is found again on its line.
+   */
+  private void showUsages(ScratchProject p, String heading, List<FileUsages.Usage> usages,
+      boolean edited) {
+    List<SearchResultsView.Match> matches = new ArrayList<>();
+    for (FileUsages.Usage u : usages) {
+      if (u.line() <= 0) continue; // a project setting, not a line of a file
+      int start = u.start();
+      int end = u.end();
+      if (edited) {
+        try {
+          String text = Files.readString(u.file());
+          int lineStart = 0;
+          for (long line = 1; line < u.line() && lineStart >= 0; line++) {
+            lineStart = text.indexOf('\n', lineStart) + 1;
+            if (lineStart == 0) lineStart = -1;
+          }
+          if (lineStart < 0) continue;
+          int lineEnd = text.indexOf('\n', lineStart);
+          String line = text.substring(lineStart, lineEnd < 0 ? text.length() : lineEnd);
+          String needle = u.lineText().substring(u.from(), u.to());
+          int at = line.indexOf(needle);
+          start = lineStart + Math.max(0, at);
+          end = start + (at < 0 ? 0 : needle.length());
+        } catch (IOException | RuntimeException gone) {
+          continue;
+        }
+      }
+      matches.add(new SearchResultsView.Match(u.file(), start, end, u.line(), u.lineText(),
+          u.from(), u.to(), false));
+    }
+    searchResults.show(p.root(), heading, matches);
+    bottomTabs.getSelectionModel().select(searchTab);
+  }
+
   private void deleteFile(Path file) {
     ScratchProject p = project.get();
     if (p == null) return;
@@ -1603,13 +2162,10 @@ public class StudioApp extends javafx.application.Application {
       return;
     }
     if (!saveBeforeAssetChange()) return;
-    Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-        I18n.t("file.delete.warning", file.getFileName()), I18n.ok(), I18n.cancel());
-    confirmation.setHeaderText(null);
-    Theme.style(confirmation);
-    if (confirmation.showAndWait().orElse(null) != I18n.ok()) return;
+    if (!confirmDelete(p, file, "file.delete.warning")) return;
     try {
-      ProjectFileManagement.delete(p, file);
+      // the usages were checked (and accepted) above
+      ProjectFileManagement.delete(p, file, true);
       editor.closeForFile(file);
       fileTree.reload();
       reloadDesigners();
@@ -1647,18 +2203,19 @@ public class StudioApp extends javafx.application.Application {
     javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog(
         folder.getFileName().toString());
     dialog.setTitle(I18n.t("folder.rename"));
-    dialog.setHeaderText(I18n.t("folder.move.warning"));
+    dialog.setHeaderText(null);
     dialog.setContentText(I18n.t("folder.name"));
     Theme.style(dialog);
-    dialog.showAndWait().ifPresent(name -> {
+    dialog.showAndWait().map(String::trim)
+        .filter(name -> !name.equals(folder.getFileName().toString())).ifPresent(name -> {
+      List<FileUsages.Usage> usages = usagesOf(p, folder);
+      FileUsages.Mode mode = usages == null ? null : askMoveMode(p, folder, usages, true);
+      if (mode == null) return;
       try {
-        Path renamed = ProjectFolderManagement.rename(p, folder, name.trim());
-        editor.closeUnderFolder(folder);
-        fileTree.reload();
-        fileTree.selectPath(renamed);
-        reloadDesigners();
-        scheduleCheck();
+        Path renamed = ProjectFolderManagement.rename(p, folder, name, mode);
+        afterMove(folder, renamed);
         setStatus(I18n.t("folder.renamed", renamed.getFileName()));
+        showLeftUsages(p, folder, usages, mode);
       } catch (IOException e) {
         alert(e.getMessage());
       }
@@ -1668,13 +2225,9 @@ public class StudioApp extends javafx.application.Application {
   private void deleteFolder(Path folder) {
     ScratchProject p = project.get();
     if (p == null || folder == null || !saveBeforeAssetChange()) return;
-    Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-        I18n.t("folder.delete.warning", folder.getFileName()), I18n.ok(), I18n.cancel());
-    confirmation.setHeaderText(null);
-    Theme.style(confirmation);
-    if (confirmation.showAndWait().orElse(null) != I18n.ok()) return;
+    if (!confirmDelete(p, folder, "folder.delete.warning")) return;
     try {
-      ProjectFolderManagement.delete(p, folder);
+      ProjectFolderManagement.delete(p, folder, true);
       editor.closeUnderFolder(folder);
       fileTree.reload();
       reloadDesigners();

@@ -136,6 +136,9 @@ final class CodeEditor extends BorderPane {
   private Runnable onEdited = () -> { };
   private Button visualModeButton;
   private java.util.function.IntConsumer onGoToDefinition = offset -> { };
+  private java.util.function.IntConsumer onRename = offset -> { };
+  private java.util.function.IntConsumer onFindUsages = offset -> { };
+  private java.util.function.Consumer<String> onFindInProject = query -> { };
 
   private final Popup completionPopup = new Popup();
   private final ListView<Completion> completionList = new ListView<>();
@@ -281,6 +284,21 @@ final class CodeEditor extends BorderPane {
     this.onGoToDefinition = action;
   }
 
+  /** F2: the host renames the name at the offset everywhere. */
+  void setOnRename(java.util.function.IntConsumer action) {
+    this.onRename = action;
+  }
+
+  /** Shift+F12: the host lists every use of the name at the offset. */
+  void setOnFindUsages(java.util.function.IntConsumer action) {
+    this.onFindUsages = action;
+  }
+
+  /** Ctrl+Shift+H: the host searches all project files (the selection or word as a start). */
+  void setOnFindInProject(java.util.function.Consumer<String> action) {
+    this.onFindInProject = action;
+  }
+
   /** The text of the caret's line (visual mode selects what it names). */
   /** The caret's line, 1-based. */
   int caretLine() {
@@ -394,7 +412,16 @@ final class CodeEditor extends BorderPane {
           I18n.t("editor.menu.definition", name), Icons.of("fth-corner-down-right"));
       go.setAccelerator(new javafx.scene.input.KeyCodeCombination(KeyCode.F12));
       go.setOnAction(e -> onGoToDefinition.accept(word[0]));
-      items.add(go);
+      javafx.scene.control.MenuItem usages = new javafx.scene.control.MenuItem(
+          I18n.t("editor.menu.usages", name), Icons.of("fth-list"));
+      usages.setAccelerator(new javafx.scene.input.KeyCodeCombination(KeyCode.F12,
+          javafx.scene.input.KeyCombination.SHIFT_DOWN));
+      usages.setOnAction(e -> onFindUsages.accept(word[0]));
+      javafx.scene.control.MenuItem rename = new javafx.scene.control.MenuItem(
+          I18n.t("editor.menu.rename", name), Icons.of("fth-edit-3"));
+      rename.setAccelerator(new javafx.scene.input.KeyCodeCombination(KeyCode.F2));
+      rename.setOnAction(e -> onRename.accept(word[0]));
+      items.addAll(List.of(go, usages, rename));
       items.add(new javafx.scene.control.SeparatorMenuItem());
     }
     javafx.scene.control.MenuItem cut = new javafx.scene.control.MenuItem(
@@ -597,6 +624,16 @@ final class CodeEditor extends BorderPane {
     area.moveTo(paragraph, 0);
     area.selectRange(paragraph, 0, paragraph, area.getParagraphLength(paragraph));
     area.showParagraphAtCenter(paragraph);
+    area.requestFocus();
+  }
+
+  /** Selects {@code start..end} (text offsets), scrolls there and focuses the editor. */
+  void selectRange(int start, int end) {
+    int length = area.getLength();
+    int from = Math.max(0, Math.min(start, length));
+    int to = Math.max(from, Math.min(end, length));
+    area.selectRange(from, to);
+    area.showParagraphAtCenter(area.getCurrentParagraph());
     area.requestFocus();
   }
 
@@ -958,8 +995,30 @@ final class CodeEditor extends BorderPane {
       } else if (shortcut && (e.getCode() == KeyCode.DIGIT0 || e.getCode() == KeyCode.NUMPAD0)) {
         FONT_SIZE.set(14);
         e.consume();
+      } else if (e.getCode() == KeyCode.F12 && e.isShiftDown()) {
+        onFindUsages.accept(area.getCaretPosition());
+        e.consume();
       } else if (e.getCode() == KeyCode.F12) {
         onGoToDefinition.accept(area.getCaretPosition());
+        e.consume();
+      } else if (e.getCode() == KeyCode.F2 && !e.isShiftDown()) {
+        onRename.accept(area.getCaretPosition());
+        e.consume();
+      } else if (shortcut && e.isShiftDown() && e.getCode() == KeyCode.H) {
+        onFindInProject.accept(searchStart());
+        e.consume();
+      } else if (shortcut && !e.isShiftDown() && e.getCode() == KeyCode.D) {
+        duplicateLines();
+        e.consume();
+      } else if (shortcut && e.isShiftDown() && e.getCode() == KeyCode.K) {
+        deleteLines();
+        e.consume();
+      } else if (e.isAltDown() && !shortcut
+          && (e.getCode() == KeyCode.UP || e.getCode() == KeyCode.DOWN)) {
+        moveLines(e.getCode() == KeyCode.UP ? -1 : 1);
+        e.consume();
+      } else if (shortcut && !e.isShiftDown() && e.getCode() == KeyCode.G) {
+        askGotoLine();
         e.consume();
       } else if (shortcut && e.isShiftDown() && e.getCode() == KeyCode.F) {
         formatIndentation();
@@ -1097,6 +1156,113 @@ final class CodeEditor extends BorderPane {
         area.insertText(start, "// ");
       }
     }
+  }
+
+  // --- line editing ---------------------------------------------------------------
+
+  /** The first and last paragraph the selection (or the caret) touches. */
+  private int[] selectedLines() {
+    int first = area.offsetToPosition(area.getSelection().getStart(),
+        org.fxmisc.richtext.model.TwoDimensional.Bias.Forward).getMajor();
+    int last = area.offsetToPosition(area.getSelection().getEnd(),
+        org.fxmisc.richtext.model.TwoDimensional.Bias.Backward).getMajor();
+    // a selection that ends at the start of a line does not include that line
+    if (last > first && area.getSelection().getLength() > 0
+        && area.getSelection().getEnd() == area.getAbsolutePosition(last, 0)) {
+      last--;
+    }
+    return new int[] {first, last};
+  }
+
+  /** Ctrl+D: copies the caret's line (or the selected lines) below itself. */
+  void duplicateLines() {
+    int[] lines = selectedLines();
+    int start = area.getAbsolutePosition(lines[0], 0);
+    int end = area.getAbsolutePosition(lines[1], area.getParagraphLength(lines[1]));
+    String block = area.getText(start, end);
+    int caret = area.getCaretPosition();
+    var selection = area.getSelection();
+    area.insertText(end, "\n" + block);
+    int shift = block.length() + 1;
+    if (selection.getLength() > 0) {
+      area.selectRange(selection.getStart() + shift, selection.getEnd() + shift);
+    } else {
+      area.moveTo(caret + shift);
+    }
+    area.requestFollowCaret();
+  }
+
+  /** Ctrl+Shift+K: removes the caret's line (or the selected lines). */
+  void deleteLines() {
+    int[] lines = selectedLines();
+    int paragraphs = area.getParagraphs().size();
+    int column = area.getCaretColumn();
+    int start = area.getAbsolutePosition(lines[0], 0);
+    int end = area.getAbsolutePosition(lines[1], area.getParagraphLength(lines[1]));
+    if (lines[1] < paragraphs - 1) {
+      end++; // with its line break
+    } else if (lines[0] > 0) {
+      start--; // the last line: take the break before it
+    }
+    area.deleteText(start, end);
+    int line = Math.min(lines[0], area.getParagraphs().size() - 1);
+    area.moveTo(line, Math.min(column, area.getParagraphLength(line)));
+    area.requestFollowCaret();
+  }
+
+  /** Alt+Up / Alt+Down: swaps the selected lines with the line above or below. */
+  void moveLines(int direction) {
+    int[] lines = selectedLines();
+    int paragraphs = area.getParagraphs().size();
+    if (direction < 0 && lines[0] == 0 || direction > 0 && lines[1] >= paragraphs - 1) {
+      return;
+    }
+    int anchor = area.getAnchor();
+    int caret = area.getCaretPosition();
+    int start = area.getAbsolutePosition(lines[0], 0);
+    int end = area.getAbsolutePosition(lines[1], area.getParagraphLength(lines[1]));
+    String block = area.getText(start, end);
+    int shift;
+    if (direction < 0) {
+      int above = area.getAbsolutePosition(lines[0] - 1, 0);
+      String line = area.getText(above, start - 1);
+      area.replaceText(above, end, block + "\n" + line);
+      shift = -(line.length() + 1);
+    } else {
+      int belowEnd = area.getAbsolutePosition(lines[1] + 1,
+          area.getParagraphLength(lines[1] + 1));
+      String line = area.getText(end + 1, belowEnd);
+      area.replaceText(start, belowEnd, line + "\n" + block);
+      shift = line.length() + 1;
+    }
+    area.selectRange(anchor + shift, caret + shift);
+    area.requestFollowCaret();
+  }
+
+  /** Ctrl+G: asks for a line number and jumps there. */
+  void askGotoLine() {
+    javafx.scene.control.TextInputDialog dialog =
+        new javafx.scene.control.TextInputDialog(String.valueOf(caretLine()));
+    dialog.setTitle(I18n.t("editor.gotoline"));
+    dialog.setHeaderText(null);
+    dialog.setContentText(I18n.t("editor.gotoline.prompt", area.getParagraphs().size()));
+    Theme.style(dialog);
+    dialog.showAndWait().map(String::trim).ifPresent(answer -> {
+      try {
+        gotoLine(Integer.parseInt(answer));
+      } catch (NumberFormatException ignored) {
+        // not a number: stay where we are
+      }
+    });
+  }
+
+  /** What a project search starts with: the selection (one line) or the word at the caret. */
+  String searchStart() {
+    String selected = area.getSelectedText();
+    if (!selected.isEmpty() && !selected.contains("\n")) {
+      return selected;
+    }
+    return wordAtCaret();
   }
 
   /** Re-indents the whole file by brace depth (Ctrl+Shift+F). */

@@ -598,6 +598,41 @@
   -fx-icon-color: -s-run;
 }
 
+/* ---------- search results (Find usages, Find in project) ---------- */
+
+.search-title {
+  -fx-padding: 6 10 6 10;
+  -fx-font-weight: bold;
+  -fx-background-color: -s-panel-bg;
+}
+
+.search-results .list-cell {
+  -fx-padding: 4 10 4 10;
+}
+
+.search-line {
+  -fx-text-fill: -color-fg-default;
+  -fx-font-family: "monospace";
+  -fx-font-size: 12px;
+  -fx-padding: 0;
+}
+
+.search-hit {
+  -fx-text-fill: -color-accent-fg;
+  -fx-font-weight: bold;
+  -fx-underline: true;
+}
+
+.search-icon { -fx-icon-color: -color-fg-subtle; }
+.usage-updatable { -fx-icon-color: -s-run; }
+.usage-manual { -fx-icon-color: -s-warning; }
+
+.file-tree .tree-cell.drop-target {
+  -fx-background-color: -color-accent-subtle;
+  -fx-border-color: -color-accent-emphasis;
+  -fx-border-width: 1;
+}
+
 /* ---------- block palette ---------- */
 
 .block-palette {

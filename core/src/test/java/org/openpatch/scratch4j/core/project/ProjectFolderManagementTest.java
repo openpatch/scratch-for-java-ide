@@ -42,9 +42,41 @@ class ProjectFolderManagementTest {
     Files.writeString(custom.resolve("sprite.png"), "pixels");
     Files.writeString(root.resolve("Player.java"),
         "class Player { String image = \"assets/custom/sprite.png\"; }");
-    assertThatThrownBy(() -> ProjectFolderManagement.rename(project, custom, "new_custom"))
-        .isInstanceOf(IOException.class).hasMessageContaining("Player.java");
     assertThatThrownBy(() -> ProjectFolderManagement.delete(project, custom))
+        .isInstanceOf(IOException.class).hasMessageContaining("Player.java");
+    assertThat(custom).exists();
+  }
+
+  @Test
+  void renameAndMoveRewriteThePathsOfTheFilesInside() throws IOException {
+    Path assets = Files.createDirectories(root.resolve("assets/images"));
+    Path custom = Files.createDirectory(root.resolve("assets/custom"));
+    Files.writeString(custom.resolve("sprite.png"), "pixels");
+    Files.writeString(root.resolve("Player.java"),
+        "class Player { String image = \"assets/custom/sprite.png\"; }");
+    ScratchProject project = ScratchProject.open(root);
+
+    Path renamed = ProjectFolderManagement.rename(project, custom, "heroes");
+    assertThat(Files.readString(root.resolve("Player.java")))
+        .contains("\"assets/heroes/sprite.png\"");
+
+    Path moved = ProjectFolderManagement.move(project, renamed, assets);
+    assertThat(moved).isEqualTo(assets.toRealPath().resolve("heroes"));
+    assertThat(Files.readString(moved.resolve("sprite.png"))).isEqualTo("pixels");
+    assertThat(Files.readString(root.resolve("Player.java")))
+        .contains("\"assets/images/heroes/sprite.png\"");
+    assertThatThrownBy(() -> ProjectFolderManagement.move(project, moved, moved))
+        .isInstanceOf(IOException.class).hasMessageContaining("itself");
+  }
+
+  @Test
+  void refusesToMoveAFolderThatCodeBuildsPathsFrom() throws IOException {
+    Path custom = Files.createDirectories(root.resolve("assets/custom"));
+    Files.writeString(custom.resolve("sprite.png"), "pixels");
+    Files.writeString(root.resolve("Player.java"),
+        "class Player { String image(int i) { return \"assets/custom/\" + i + \".png\"; } }");
+    ScratchProject project = ScratchProject.open(root);
+    assertThatThrownBy(() -> ProjectFolderManagement.rename(project, custom, "heroes"))
         .isInstanceOf(IOException.class).hasMessageContaining("Player.java");
     assertThat(custom).exists();
   }
