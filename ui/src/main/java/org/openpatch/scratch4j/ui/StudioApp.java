@@ -1754,7 +1754,8 @@ public class StudioApp extends javafx.application.Application {
       try {
         found = ProjectCheck.check(p, language).stream()
             .map(pr -> new Problem(pr.file(), pr.line(), pr.column(), pr.message(),
-                pr.explanation(), pr.suggestions(), pr.error(), pr.fix()))
+                pr.explanation(), pr.suggestions(), pr.error(), pr.fix(), pr.original(),
+                pr.followUp()))
             .toList();
       } catch (RuntimeException e) {
         found = List.of(new Problem(null, 0, 0, e.toString(), null, List.of(), true));

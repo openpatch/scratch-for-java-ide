@@ -25,6 +25,64 @@ class TransitionLinterTest {
   }
 
   @Test
+  void callbacksTheLibraryNeverCallsAreFlagged() {
+    String cat = """
+        public class Cat extends Sprite {
+          public void Run() { }
+          public void whenKeyPressed(int keyCode) { }
+          public void whenclicked() { }
+          public void whenMouseMoved(double x, double y) { }
+          public void jump() { }
+          @Override
+          public void whenKeyReleased(KeyCode key) { }
+        }
+        """;
+    String stage = """
+        public class Level extends Stage {
+          public void whenClicked() { }
+          public void whenKeyPressed(KeyCode key) { }
+        }
+        """;
+    Map<String, String> files = Map.of("Cat.java", cat, "Level.java", stage);
+    var findings = lint(files, "Cat.java");
+    assertThat(kinds(findings)).containsExactly(
+        "2:callback.name", "3:callback.params", "4:callback.name");
+    assertThat(findings.get(0).message()).isEqualTo("Run() is never called. Did you mean run()?");
+    assertThat(findings.get(1).message())
+        .isEqualTo("whenKeyPressed(int) is never called. The library calls whenKeyPressed(KeyCode).");
+    assertThat(findings.get(2).message()).contains("whenClicked()");
+    var level = lint(files, "Level.java");
+    assertThat(kinds(level)).containsExactly("2:callback.other");
+    assertThat(level.get(0).message()).isEqualTo("whenClicked() is never called in a Stage.");
+  }
+
+  @Test
+  void aMethodTheStudentCallsIsNotACallbackTypo() {
+    String cat = """
+        public class Cat extends Sprite {
+          public void Run() { }
+          public void run() { this.Run(); }
+        }
+        """;
+    assertThat(lint(Map.of("Cat.java", cat), "Cat.java")).isEmpty();
+  }
+
+  @Test
+  void callbacksComeFromTheProjectsLibraryVersion() {
+    var old = new LibraryCallbacks(
+        Map.of("run", List.of(List.of()), "whenKeyPressed", List.of(List.of("int"))),
+        Map.of("run", List.of(List.of())));
+    String cat = """
+        public class Cat extends Sprite {
+          public void whenKeyPressed(int keyCode) { }
+        }
+        """;
+    var findings = new TransitionLinter(DiagnosticsExplanations.Language.EN).withCallbacks(old)
+        .lint(Path.of("Cat.java"), cat, TransitionLinter.facts(Map.of(Path.of("Cat.java"), cat)));
+    assertThat(findings).isEmpty();
+  }
+
+  @Test
   void foreverLoopInRunOrConstructorIsFlaggedButNotWithBreak() {
     String cat = """
         public class Cat extends Sprite {

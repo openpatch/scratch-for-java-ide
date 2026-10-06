@@ -63,7 +63,10 @@ import java.util.regex.Pattern;
  *   <li>{@code new Window(...)} inside a stage or sprite (outside {@code main}),
  *       or two windows in one method — the window is a singleton;</li>
  *   <li>a counter field that is not {@code static} although every instance of
- *       the sprite keeps its own copy — shared variables need {@code static}.</li>
+ *       the sprite keeps its own copy — shared variables need {@code static};</li>
+ *   <li>a method the library never calls although it looks like one of its
+ *       callbacks: {@code Run()}, {@code whenKeyPressed(int)} in 5.x, or
+ *       {@code whenClicked()} in a stage ({@link LibraryCallbacks}).</li>
  * </ul>
  *
  * <p>Parse-only like {@link AssetLinter}; class relationships come from a light
@@ -76,7 +79,8 @@ public final class TransitionLinter {
 
   /** What the linter needs to know about the whole project. */
   public record Facts(Set<String> stageClasses, Set<String> spriteClasses,
-      Set<String> windowClasses, Map<String, Integer> instantiations) {}
+      Set<String> windowClasses, Map<String, Integer> instantiations,
+      Map<String, Integer> calls) {}
 
   /** Loop bounds from here on count as "very long" for a single frame. */
   static final long LONG_LOOP = 100_000;
@@ -85,15 +89,32 @@ public final class TransitionLinter {
       Pattern.compile("\\bclass\\s+(\\w+)(?:\\s*<[^>]*>)?\\s+extends\\s+(\\w+)");
   private static final Pattern NEW =
       Pattern.compile("\\bnew\\s+(\\w+)\\s*\\(");
+  /** A name followed by "(": a call, or a declaration when a type stands before it. */
+  private static final Pattern CALL = Pattern.compile("\\b(\\w+)\\s*\\(");
+  private static final Pattern WORD_BEFORE = Pattern.compile("(\\w+)[\\s>\\]]*$");
   private static final Set<String> SPRITE_BASES = Set.of("Sprite", "AnimatedSprite", "UISprite");
   /** Field names that sound like something every instance should share. */
   private static final Pattern SHARED_NAME = Pattern.compile(
       "(?i).*(score|points?|lives|count(er)?|total|punkte|leben|zaehler|zähler|anzahl|highscore).*");
 
   private final DiagnosticsExplanations.Language language;
+  private LibraryCallbacks callbacks;
 
   public TransitionLinter(DiagnosticsExplanations.Language language) {
     this.language = language;
+  }
+
+  /** The callbacks of the project's library version; the bundled one by default. */
+  public TransitionLinter withCallbacks(LibraryCallbacks callbacks) {
+    this.callbacks = callbacks;
+    return this;
+  }
+
+  private LibraryCallbacks callbacks() {
+    if (callbacks == null) {
+      callbacks = LibraryCallbacks.bundled();
+    }
+    return callbacks;
   }
 
   /** Scans all sources once for class relationships and instantiation counts. */
@@ -119,13 +140,24 @@ public final class TransitionLinter {
         windows.add(type);
       }
     }
+    Map<String, Integer> calls = new HashMap<>();
     for (String source : sources.values()) {
-      Matcher m = NEW.matcher(stripComments(source));
+      String code = stripComments(source);
+      Matcher m = NEW.matcher(code);
       while (m.find()) {
         instantiations.merge(m.group(1), 1, Integer::sum);
       }
+      Matcher call = CALL.matcher(code);
+      while (call.find()) {
+        // "void run(" declares, "new Cat(" creates; "return run(" and "this.run(" call
+        Matcher before = WORD_BEFORE.matcher(
+            code.substring(Math.max(0, call.start() - 40), call.start()));
+        if (!before.find() || before.group(1).equals("return")) {
+          calls.merge(call.group(1), 1, Integer::sum);
+        }
+      }
     }
-    return new Facts(stages, sprites, windows, instantiations);
+    return new Facts(stages, sprites, windows, instantiations, calls);
   }
 
   /** Follows {@code extends} up to the first type that is not a project class. */
@@ -237,6 +269,7 @@ public final class TransitionLinter {
       int outerWindows = windowsInMethod;
       currentMethod = tree.getName().toString();
       windowsInMethod = 0;
+      checkCallback(tree);
       super.visitMethod(tree, unused);
       currentMethod = outer;
       windowsInMethod = outerWindows;
@@ -320,6 +353,42 @@ public final class TransitionLinter {
         findings.add(finding(file, line(tree), "window.inside", currentClass));
       }
       return super.visitNewClass(tree, unused);
+    }
+
+    /**
+     * A method that looks like a library callback but is never called: a
+     * misspelled name, other parameter types, or a sprite event in a stage.
+     * Methods the student calls somewhere are theirs, and @Override already
+     * makes javac check the rest.
+     */
+    private void checkCallback(MethodTree method) {
+      boolean sprite = facts.spriteClasses().contains(currentClass);
+      if (!sprite && !facts.stageClasses().contains(currentClass)) return;
+      var flags = method.getModifiers().getFlags();
+      if (method.getReturnType() == null || flags.contains(Modifier.STATIC)
+          || flags.contains(Modifier.PRIVATE)) return;
+      boolean override = method.getModifiers().getAnnotations().stream()
+          .anyMatch(a -> a.getAnnotationType().toString().endsWith("Override"));
+      String name = method.getName().toString();
+      if (override || facts.calls().containsKey(name)) return;
+      List<String> params = method.getParameters().stream()
+          .map(p -> FriendlyErrors.simple(p.getType().toString())).toList();
+      Map<String, List<List<String>>> own = callbacks().of(sprite);
+      Map<String, List<List<String>>> other = callbacks().of(!sprite);
+      if (own.containsKey(name)) {
+        if (!own.get(name).contains(params)) {
+          findings.add(finding(file, line(method), "callback.params", name,
+              String.join(", ", params), String.join(", ", own.get(name).get(0))));
+        }
+      } else if (other.containsKey(name)) {
+        findings.add(finding(file, line(method), "callback.other", name,
+            sprite ? "Sprite" : "Stage", sprite ? "Stage" : "Sprite"));
+      } else {
+        List<String> close = DidYouMean.suggest(name, own.keySet(), 1);
+        if (!close.isEmpty()) {
+          findings.add(finding(file, line(method), "callback.name", name, close.get(0)));
+        }
+      }
     }
 
     private String currentMethodLabel() {

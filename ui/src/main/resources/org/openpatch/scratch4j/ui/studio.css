@@ -579,6 +579,17 @@
   -fx-text-fill: -color-accent-fg;
 }
 
+.problem-original {
+  -fx-text-fill: -color-fg-subtle;
+  -fx-font-family: "monospace";
+  -fx-font-size: 11px;
+}
+
+.problem-followup-note {
+  -fx-text-fill: -color-fg-subtle;
+  -fx-font-style: italic;
+}
+
 .problems-empty {
   -fx-text-fill: -color-fg-muted;
 }

@@ -6,6 +6,8 @@ import javax.tools.FileObject;
 /**
  * One compiler message. {@link #code()} is the javac error key (for example
  * {@code compiler.err.expected}) — the hook the M2 beginner explanations map on.
+ * {@link #englishMessage()} is javac's English text whatever {@link #message()}'s
+ * language: the friendly explanations read names and types out of it.
  */
 public record CompilerDiagnostic(
     Kind kind,
@@ -13,7 +15,8 @@ public record CompilerDiagnostic(
     long line,
     long column,
     String code,
-    String message) {
+    String message,
+    String englishMessage) {
 
   public enum Kind { ERROR, WARNING, NOTE }
 
@@ -35,7 +38,7 @@ public record CompilerDiagnostic(
     };
     String path = d.getSource() == null ? "" : d.getSource().getName();
     return new CompilerDiagnostic(kind, path, d.getLineNumber(), d.getColumnNumber(),
-        d.getCode(), d.getMessage(messageLocale));
+        d.getCode(), d.getMessage(messageLocale), d.getMessage(java.util.Locale.ROOT));
   }
 
   public boolean isError() {

@@ -28,9 +28,18 @@ public final class ProjectCheck {
    * A problem with everything the problems pane needs. {@code column} is
    * 1-based, 0 when only the line is known; {@code error} separates compile
    * errors (the program cannot run) from asset lints (it runs, but fails).
+   * {@code original} is javac's own message when {@code message} is the
+   * friendly headline (null otherwise); a {@code followUp} error comes after a
+   * syntax error in the same file and may go away with it.
    */
   public record Problem(Path file, long line, long column, String message,
-      String explanation, List<String> suggestions, boolean error, String fix) {
+      String explanation, List<String> suggestions, boolean error, String fix,
+      String original, boolean followUp) {
+
+    public Problem(Path file, long line, long column, String message, String explanation,
+        List<String> suggestions, boolean error, String fix) {
+      this(file, line, column, message, explanation, suggestions, error, fix, null, false);
+    }
 
     public Problem(Path file, long line, long column, String message, String explanation,
         List<String> suggestions, boolean error) {
@@ -59,21 +68,42 @@ public final class ProjectCheck {
       CompileResult result = new CompilerService().compile(sources, classpath, outDir, messages);
 
       Set<String> knownNames = null;
+      FriendlyErrors friendly = new FriendlyErrors(language);
+      Imports imports = new Imports(project.libs());
+      List<String> apiNames = result.errors().isEmpty() ? List.of()
+          : ApiIndex.load().methodNames();
+      java.util.Map<Path, List<String>> lines = new java.util.HashMap<>();
+      Set<Path> brokenSyntax = new HashSet<>();
       for (var d : result.errors()) {
         Path file = sources.stream()
             .filter(s -> s.getFileName().toString().equals(fileNameOf(d.path())))
             .findFirst().orElse(null);
-        List<String> suggestions = List.of();
+        List<String> suggestions = new ArrayList<>();
         if (file != null && d.code() != null && d.code().startsWith("compiler.err.cant.resolve")) {
           if (knownNames == null) {
             knownNames = knownNames(sources);
           }
           String name = identifierAt(file, d.line(), d.column());
-          suggestions = DidYouMean.suggest(name, knownNames, 3);
+          suggestions.addAll(DidYouMean.suggest(name, knownNames, 3));
         }
-        problems.add(new Problem(file, d.line(), d.column(), d.message(),
-            DiagnosticsExplanations.explain(d.code(), language).orElse(null),
-            suggestions, true));
+        List<String> source = file == null ? List.of()
+            : lines.computeIfAbsent(file, ProjectCheck::readLines);
+        String className = file == null ? null
+            : file.getFileName().toString().replaceFirst("\\.java$", "");
+        var described = friendly.describe(d, new FriendlyErrors.Context(source, className,
+            imports::lineFor, apiNames));
+        for (String s : described.suggestions()) {
+          if (!suggestions.contains(s)) suggestions.add(s);
+        }
+        // after a syntax error, the rest of the file is often only its echo
+        boolean followUp = brokenSyntax.contains(file);
+        if (d.code() != null && FriendlyErrors.SYNTAX_ERRORS.contains(d.code())) {
+          brokenSyntax.add(file);
+        }
+        String title = described.title();
+        problems.add(new Problem(file, d.line(), d.column(), title, described.explanation(),
+            List.copyOf(suggestions), true, null,
+            title.equals(d.message()) ? null : d.message(), followUp));
       }
 
       AssetLinter linter = new AssetLinter();
@@ -132,7 +162,8 @@ public final class ProjectCheck {
         }
       }
       // Scratch-to-Java pitfalls: forever loops, sleep, a second window, shared counters
-      TransitionLinter transitions = new TransitionLinter(language);
+      TransitionLinter transitions = new TransitionLinter(language)
+          .withCallbacks(LibraryCallbacks.of(project.libs()));
       TransitionLinter.Facts facts = TransitionLinter.facts(texts);
       for (Path source : sources) {
         for (TransitionLinter.Finding f : transitions.lint(source, texts.get(source), facts)) {
@@ -148,6 +179,57 @@ public final class ProjectCheck {
         .comparing((Problem p) -> p.file() == null ? "" : p.file().toString())
         .thenComparingLong(Problem::line));
     return problems;
+  }
+
+  private static List<String> readLines(Path file) {
+    try {
+      return Files.readAllLines(file, StandardCharsets.UTF_8);
+    } catch (IOException e) {
+      return List.of();
+    }
+  }
+
+  /**
+   * Import lines for classes a student uses without importing them: the
+   * top-level classes of the project's libraries and a few of the JDK.
+   */
+  static final class Imports {
+    private static final java.util.Map<String, String> JDK = java.util.Map.of(
+        "ArrayList", "java.util.ArrayList", "List", "java.util.List",
+        "HashMap", "java.util.HashMap", "Map", "java.util.Map",
+        "Scanner", "java.util.Scanner", "Arrays", "java.util.Arrays",
+        "Collections", "java.util.Collections", "HashSet", "java.util.HashSet",
+        "Set", "java.util.Set");
+    private final List<Path> jars;
+    private java.util.Map<String, String> library;
+
+    Imports(List<Path> jars) {
+      this.jars = jars;
+    }
+
+    /** {@code import a.b.Name;} or null when no library has a class of this name. */
+    String lineFor(String simpleName) {
+      if (library == null) {
+        library = new java.util.HashMap<>();
+        for (Path jar : jars) {
+          if (!jar.toString().endsWith(".jar") || !Files.isRegularFile(jar)) continue;
+          try (var zip = new java.util.zip.ZipFile(jar.toFile())) {
+            zip.stream().map(java.util.zip.ZipEntry::getName)
+                .filter(n -> n.endsWith(".class") && !n.contains("$")
+                    && !n.startsWith("META-INF/") && n.contains("/"))
+                .forEach(n -> {
+                  String name = n.substring(0, n.length() - ".class".length()).replace('/', '.');
+                  // first one wins: two classes of one name are ambiguous anyway
+                  library.putIfAbsent(name.substring(name.lastIndexOf('.') + 1), name);
+                });
+          } catch (IOException e) {
+            // an unreadable jar gives no import hints
+          }
+        }
+      }
+      String qualified = library.getOrDefault(simpleName, JDK.get(simpleName));
+      return qualified == null ? null : "import " + qualified + ";";
+    }
   }
 
   private static final Pattern IDENTIFIER = Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]*\\b");

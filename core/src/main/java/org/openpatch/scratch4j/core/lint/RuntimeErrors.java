@@ -233,6 +233,35 @@ public final class RuntimeErrors {
             ? "Werden in run() in jedem Bild neue Figuren hinzugefügt und nie entfernt?"
             : "Are new sprites added in run() every frame and never removed?";
       }
+      case "IllegalMonitorStateException" -> {
+        // wait(1) compiles (Object.wait) but is not Scratch's wait block
+        title = de ? "wait() ist nicht der Warte-Block" : "wait() is not the wait block";
+        text = de
+            ? "In Java gehört wait() zu Threads und hält nicht einfach eine Figur an."
+            : "In Java, wait() belongs to threads and does not simply pause a sprite.";
+        hint = de
+            ? "Um etwas alle paar Millisekunden zu tun, benutze getTimer().everyMillis(500) "
+                + "in run()."
+            : "To do something every few milliseconds, use getTimer().everyMillis(500) "
+                + "inside run().";
+      }
+      case "NegativeArraySizeException" -> {
+        title = de ? "Negative Array-Größe" : "Negative array size";
+        text = de
+            ? "Ein Array sollte mit weniger als 0 Plätzen erzeugt werden (" + msg + ")."
+            : "An array was created with fewer than 0 places (" + msg + ").";
+        hint = de ? "Prüfe die Zahl in new ...[anzahl]." : "Check the number in new ...[size].";
+      }
+      case "NoSuchElementException" -> {
+        title = de ? "Da ist kein Element" : "There is no element";
+        text = de
+            ? "Es wurde ein Element gelesen, aber die Liste, der Iterator oder die Eingabe "
+                + "ist schon leer."
+            : "An element was read, but the list, iterator or input is already empty.";
+        hint = de
+            ? "Prüfe vorher mit isEmpty() oder hasNext(), ob noch etwas da ist."
+            : "Check with isEmpty() or hasNext() first whether there is anything left.";
+      }
       default -> {
         title = name;
         text = msg.isEmpty() ? (de ? "Das Programm ist abgestürzt." : "The program crashed.")

@@ -48,6 +48,19 @@ class RuntimeErrorsTest {
   }
 
   @Test
+  void waitIsNotTheScratchWaitBlock() {
+    var crashes = collect("""
+        Exception in thread "Animation Thread" java.lang.IllegalMonitorStateException: current thread is not owner
+        \tat java.base/java.lang.Object.wait0(Native Method)
+        \tat java.base/java.lang.Object.wait(Object.java:378)
+        \tat Player.run(Player.java:9)""");
+    var e = RuntimeErrors.explain(crashes.get(0), PROJECT, Language.EN);
+    assertThat(e.title()).isEqualTo("wait() is not the wait block");
+    assertThat(e.hint()).contains("getTimer().everyMillis");
+    assertThat(e.line()).isEqualTo(9);
+  }
+
+  @Test
   void commonCrashesGetTheirExplanations() {
     var crashes = collect("""
         Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 5 out of bounds for length 5

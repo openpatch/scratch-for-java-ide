@@ -3,9 +3,18 @@ package org.openpatch.scratch4j.ui;
 import java.nio.file.Path;
 import java.util.List;
 
-/** One problem in the problems pane (compiler diagnostic or asset lint). */
+/**
+ * One problem in the problems pane (compiler diagnostic or asset lint).
+ * {@code original} is javac's message under a friendly headline (null if
+ * none); a {@code followUp} may go away once the error above it is fixed.
+ */
 record Problem(Path file, long line, long column, String message, String explanation,
-    List<String> suggestions, boolean error, String fix) {
+    List<String> suggestions, boolean error, String fix, String original, boolean followUp) {
+
+  Problem(Path file, long line, long column, String message, String explanation,
+      List<String> suggestions, boolean error, String fix) {
+    this(file, line, column, message, explanation, suggestions, error, fix, null, false);
+  }
 
   Problem(Path file, long line, long column, String message, String explanation,
       List<String> suggestions, boolean error) {
@@ -31,6 +40,9 @@ record Problem(Path file, long line, long column, String message, String explana
     if (suggestions != null && !suggestions.isEmpty()) {
       sb.append("\n    ").append(I18n.t("problems.didyoumean")).append(' ')
           .append(String.join(", ", suggestions));
+    }
+    if (original != null) {
+      sb.append("\n    ").append(I18n.t("problems.original", original.strip()));
     }
     return sb.toString();
   }

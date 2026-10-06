@@ -63,6 +63,20 @@ final class ProblemsPane extends ListView<Problem> {
           suggestions.getStyleClass().add("problem-suggestion");
           text.getChildren().add(suggestions);
         }
+        if (problem.original() != null) {
+          Label original = new Label(I18n.t("problems.original", problem.original().strip()));
+          original.setWrapText(true);
+          original.getStyleClass().add("problem-original");
+          original.setMinHeight(Region.USE_PREF_SIZE);
+          text.getChildren().add(original);
+        }
+        if (problem.followUp()) {
+          Label followUp = new Label(I18n.t("problems.followup"));
+          followUp.setWrapText(true);
+          followUp.getStyleClass().add("problem-followup-note");
+          followUp.setMinHeight(Region.USE_PREF_SIZE);
+          text.getChildren().add(followUp);
+        }
         if (problem.fix() != null) {
           javafx.scene.control.Button fix = new javafx.scene.control.Button(
               I18n.t("problems.fix." + problem.fix()), Icons.of("fth-tool"));
@@ -75,6 +89,8 @@ final class ProblemsPane extends ListView<Problem> {
         text.setMaxWidth(Double.MAX_VALUE);
         HBox row = new HBox(10, icon, text, location);
         row.setMinWidth(0);
+        // the error that caused it stands out; its echoes step back
+        row.setOpacity(problem.followUp() ? 0.6 : 1);
         row.setAlignment(Pos.TOP_LEFT);
         setText(null);
         setGraphic(row);

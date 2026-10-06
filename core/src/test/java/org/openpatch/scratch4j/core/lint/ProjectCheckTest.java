@@ -67,6 +67,52 @@ class ProjectCheckTest {
   }
 
   @Test
+  void errorsAfterASyntaxErrorAreMarkedAsFollowUps() throws IOException {
+    NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "echo", libraryJar());
+    Files.writeString(tmp.resolve("echo/Player.java"), """
+        public class Player extends Sprite {
+          void go() {
+            int x = 1
+            if (x > 0 {
+            }
+          }
+        }
+        """);
+    var problems = ProjectCheck.check(ScratchProject.open(tmp.resolve("echo")),
+        DiagnosticsExplanations.Language.EN).stream()
+        .filter(p -> p.file() != null && p.file().endsWith("Player.java")).toList();
+    assertThat(problems).hasSizeGreaterThan(1);
+    assertThat(problems.get(0).message()).isEqualTo("A semicolon ; is missing here");
+    assertThat(problems.get(0).original()).isEqualTo("';' expected");
+    assertThat(problems.get(0).followUp()).isFalse();
+    assertThat(problems.subList(1, problems.size())).allMatch(ProjectCheck.Problem::followUp);
+  }
+
+  @Test
+  void aLibraryClassWithoutImportGetsTheImportLine() throws IOException {
+    NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "noimport", libraryJar());
+    Files.writeString(tmp.resolve("noimport/Player.java"), """
+        public class Player extends Sprite {
+        }
+        """);
+    var problem = ProjectCheck.check(ScratchProject.open(tmp.resolve("noimport")),
+        DiagnosticsExplanations.Language.EN).stream()
+        .filter(p -> p.file() != null && p.file().endsWith("Player.java")).findFirst()
+        .orElseThrow();
+    assertThat(problem.message()).isEqualTo("Sprite needs an import");
+    assertThat(problem.explanation()).contains("import org.openpatch.scratch.Sprite;");
+  }
+
+  @Test
+  void callbacksAreReadFromTheLibraryJar() throws IOException {
+    var callbacks = LibraryCallbacks.of(java.util.List.of(libraryJar()));
+    assertThat(callbacks.sprite()).containsKeys("run", "whenClicked", "whenKeyPressed");
+    assertThat(callbacks.stage()).containsKey("run").doesNotContainKey("whenClicked");
+    assertThat(callbacks.sprite().get("whenKeyPressed"))
+        .isEqualTo(LibraryCallbacks.bundled().sprite().get("whenKeyPressed"));
+  }
+
+  @Test
   void assetLintsArePartOfTheCheck() throws IOException {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "linted", libraryJar());
     Files.writeString(tmp.resolve("linted/Player.java"), """
@@ -113,7 +159,8 @@ class ProjectCheckTest {
         DiagnosticsExplanations.Language.EN);
     assertThat(problems).extracting(ProjectCheck.Problem::error).containsOnly(true);
     assertThat(problems).anySatisfy(p -> {
-      assertThat(p.message()).startsWith("cannot find symbol");
+      assertThat(p.message()).isEqualTo("Java does not know a method named mvoe()");
+      assertThat(p.original()).startsWith("cannot find symbol");
       assertThat(p.suggestions()).contains("move");
       assertThat(p.column()).isPositive();
     });
