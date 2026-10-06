@@ -7,6 +7,8 @@ and keeps them as ordinary Java source files that also work in BlueJ and VS Code
 **Status: 0.1.0-alpha.1 candidate.** The IDE and its
 project format may change while we test it with students and teachers.
 
+![Scratch for Java Studio with the code editor and the visual stage designer side by side](docs/screenshot.png)
+
 ## Features
 
 - Create a project from a starter, tutorial, or demo; open an existing project
