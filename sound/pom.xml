@@ -7,7 +7,7 @@
   <parent>
     <groupId>org.openpatch.scratch4j</groupId>
     <artifactId>scratch4j-ide</artifactId>
-    <version>0.1.0-alpha.1</version>
+    <version>0.1.0-alpha.2</version>
   </parent>
 
   <artifactId>sound</artifactId>
