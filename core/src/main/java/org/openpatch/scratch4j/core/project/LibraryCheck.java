@@ -5,12 +5,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 /**
  * What library a project carries in {@code +libs} compared with the one the
@@ -20,10 +17,6 @@ import java.util.stream.Stream;
  * asking. Also the NRW flavour's Abiturklassen check.
  */
 public final class LibraryCheck {
-
-  /** The QUA-LiS download of the NRW Abiturklassen (not bundled: their licence is theirs). */
-  public static final String ABITURKLASSEN_URL = "https://lehrplannavigator.nrw.de/system/files/"
-      + "media/document/file/2020-03-11_implementationen_von_klassen_fuer_das_zentralabitur_ab_2018.zip";
 
   public enum State {
     /** No Scratch for Java jar at all: the project cannot compile. */
@@ -121,26 +114,6 @@ public final class LibraryCheck {
     }
     return project.javaSources().stream()
         .noneMatch(file -> file.getFileName().toString().equals("List.java"));
-  }
-
-  /**
-   * Copies the Abiturklassen ({@code *.java}) from a folder the teacher
-   * downloaded into the project root; existing files are kept. Returns the
-   * copied files.
-   */
-  public static List<Path> importAbiturklassen(ScratchProject project, Path folder)
-      throws IOException {
-    List<Path> copied = new ArrayList<>();
-    try (Stream<Path> files = Files.walk(folder, 3)) {
-      for (Path file : files.filter(f -> f.getFileName().toString().endsWith(".java")).toList()) {
-        Path target = project.root().resolve(file.getFileName().toString());
-        if (!Files.exists(target)) {
-          Files.copy(file, target);
-          copied.add(target);
-        }
-      }
-    }
-    return copied;
   }
 
   /** The library version in the project's {@code +libs} ({@code 5.6.0}), or null. */

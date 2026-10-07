@@ -61,10 +61,8 @@ class LibraryCheckTest {
     ScratchProject project = project("scratch-5.5.0-nrw-all.jar");
     project.settings().flavour = LibraryFlavour.NRW.id();
     assertThat(LibraryCheck.nrwListMissing(project)).isTrue();
-    Path download = Files.createDirectories(root.getParent().resolve(root.getFileName() + "-abi/klassen"));
-    Files.writeString(download.resolve("List.java"), "public class List<T> {}");
-    Files.writeString(download.resolve("Queue.java"), "public class Queue<T> {}");
-    assertThat(LibraryCheck.importAbiturklassen(project, download.getParent())).hasSize(2);
+    assertThat(Abiturklassen.install(project, java.util.Map.of("List", "public class List<T> {}"),
+        java.util.List.of(Abiturklassen.LIST))).hasSize(1);
     assertThat(LibraryCheck.nrwListMissing(ScratchProject.open(root))).isFalse();
     assertThat(LibraryCheck.status(project, "5.5.0").state())
         .isEqualTo(LibraryCheck.State.CURRENT);

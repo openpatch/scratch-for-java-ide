@@ -3076,6 +3076,10 @@ public class StudioApp extends javafx.application.Application {
       p.settings().flavour = flavour.id();
       p.settings().libraryPin = "";
       p.settings().save(p.root());
+      // the NRW library's API returns the Abiturklassen List: offer it right away
+      if (LibraryCheck.nrwListMissing(p)) {
+        importAbiturklassen();
+      }
     } catch (IOException e) {
       alert(e.getMessage());
       return;
@@ -3102,7 +3106,6 @@ public class StudioApp extends javafx.application.Application {
           }
           if (nrwListMissing) {
             console.err("\u26A0 " + I18n.t("library.nrw.list"));
-            console.info(LibraryCheck.ABITURKLASSEN_URL);
           }
         });
       } catch (IOException e) {
@@ -3155,25 +3158,69 @@ public class StudioApp extends javafx.application.Application {
     worker.start();
   }
 
-  /** NRW: copy the Abiturklassen (List.java, ...) the teacher downloaded from QUA-LiS. */
+  /**
+   * NRW: the Abiturklassen (QUA-LiS) the student picks, downloaded once into
+   * ~/.scratch4j/abiturklassen and copied into the project with what they need.
+   */
   private void importAbiturklassen() {
     ScratchProject p = project.get();
     if (p == null) return;
-    javafx.stage.DirectoryChooser chooser = new javafx.stage.DirectoryChooser();
-    chooser.setTitle(I18n.t("library.abiturklassen"));
-    File dir = chooser.showDialog(stage);
-    if (dir == null) {
-      console.info(I18n.t("library.abiturklassen.where") + " " + LibraryCheck.ABITURKLASSEN_URL);
-      return;
-    }
+    java.util.Set<String> present;
     try {
-      var copied = LibraryCheck.importAbiturklassen(p, dir.toPath());
-      fileTree.reload();
-      scheduleCheck();
-      setStatus(I18n.t("library.abiturklassen.done", copied.size()));
+      present = org.openpatch.scratch4j.core.project.Abiturklassen.present(p);
     } catch (IOException e) {
       alert(e.getMessage());
+      return;
     }
+    var choice = AbiturklassenDialog.show(present).orElse(null);
+    if (choice == null) return;
+    setStatus(I18n.t(choice.source() == null ? "abitur.downloading" : "abitur.copying"));
+    Thread worker = new Thread(() -> {
+      try {
+        Path source = choice.source() != null ? choice.source()
+            : org.openpatch.scratch4j.core.project.Abiturklassen.download(Path.of(
+                System.getProperty("user.home"), ".scratch4j", "abiturklassen"));
+        var written = org.openpatch.scratch4j.core.project.Abiturklassen.install(p,
+            org.openpatch.scratch4j.core.project.Abiturklassen.read(source), choice.classes());
+        // the database classes run only with the SQLite JDBC driver in +libs
+        Path driver = null;
+        String driverError = null;
+        if (org.openpatch.scratch4j.core.project.Abiturklassen.withRequirements(choice.classes())
+            .contains("DatabaseConnector")) {
+          Platform.runLater(() -> setStatus(I18n.t("abitur.driver.downloading")));
+          try {
+            driver = org.openpatch.scratch4j.core.project.Abiturklassen.installSqliteDriver(p,
+                Path.of(System.getProperty("user.home"), ".scratch4j", "abiturklassen"));
+          } catch (IOException e) {
+            driverError = e.getMessage();
+          }
+        }
+        Path addedDriver = driver;
+        String failedDriver = driverError;
+        Platform.runLater(() -> {
+          fileTree.reload();
+          scheduleCheck();
+          setStatus(I18n.t("abitur.done", written.size()));
+          for (Path file : written) {
+            console.info("\u2714 " + I18n.t("abitur.added", file.getFileName()));
+          }
+          if (addedDriver != null) {
+            console.info("\u2714 " + I18n.t("abitur.driver.added", addedDriver.getFileName()));
+          }
+          if (failedDriver != null) {
+            console.err("\u26A0 " + I18n.t("abitur.driver.failed", failedDriver));
+          }
+        });
+      } catch (IOException e) {
+        Platform.runLater(() -> {
+          setStatus(I18n.t("abitur.failed.short"));
+          alert(I18n.t("abitur.failed", e.getMessage(),
+              org.openpatch.scratch4j.core.project.Abiturklassen.URL));
+        });
+      }
+    }, "scratch4j-abiturklassen");
+    worker.setDaemon(true);
+    worker.start();
   }
 
   /** Is there a newer library on GitHub? Offers it for this project (pinned there). */
