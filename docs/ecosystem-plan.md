@@ -648,3 +648,20 @@ Linux package smoke passes with library 5.8.0. The initial browser CI run passes
 final release workflows and cross-platform smoke evidence are still pending.
 
 The plan is also tracked in Studio at docs/ecosystem-plan.md.
+
+### Release reliability follow-up
+
+- Pinned release Maven to 3.9.16 with a verified SHA-512 download. Reproduced
+  Maven 3.10 adding `maven-metadata-local.xml` to the Central bundle; the entry
+  is absent with 3.9.16.
+- Release retries reuse existing Maven Central components and wait for new
+  publication to complete. The initial 5.8.0 attempt had already published to
+  Central before a later download-assembly failure; all 378 published source
+  and resource files match the current tree.
+- Release Javadoc now uses the same Java 25 toolchain as catalog validation.
+  A clean build passes compatibility/catalog checks and still produces Java 17
+  class files (`major version: 61`).
+- Curriculum checkpoint generation pins MIME types for Java, PNG, OGG, and text
+  files. CI passes 10 static checks, 141 pages / 331 embedded Java blocks, and
+  portable teaching checks. Pages deployment succeeded, and the live checkpoint
+  and browser contract report 5.8.0 and 5.8.0-browser.1.
