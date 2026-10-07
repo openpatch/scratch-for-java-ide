@@ -666,3 +666,8 @@ The plan is also tracked in Studio at docs/ecosystem-plan.md.
   files. CI passes 10 static checks, 141 pages / 331 embedded Java blocks, and
   portable teaching checks. Pages deployment succeeded, and the live checkpoint
   and browser contract report 5.8.0 and 5.8.0-browser.1.
+- Studio release CI exposed CRLF sources on Windows. Designer region insertion
+  now preserves Windows line endings; the regression covers sprite, stage, and
+  window classes. The Linux catalog check now builds Javadoc metadata with the
+  canonical Maven/Java toolchain before comparing a fresh library checkout.
+  Local region tests and clean-checkout catalog/template comparisons pass.

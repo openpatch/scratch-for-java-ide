@@ -31,6 +31,12 @@ jobs:
         with:
           repository: openpatch/scratch-for-java
           path: .validation/library
+      - name: Set up the catalog toolchain
+        if: runner.os == 'Linux'
+        uses: ./.validation/library/.github/actions/setup-maven
+      - name: Generate reference metadata for the catalog check
+        if: runner.os == 'Linux'
+        run: mvn --batch-mode --no-transfer-progress -f .validation/library/pom.xml -DskipTests prepare-package
       - name: Require current offline catalogs
         if: runner.os == 'Linux'
         run: |

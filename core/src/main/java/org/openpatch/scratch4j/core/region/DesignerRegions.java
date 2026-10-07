@@ -33,7 +33,7 @@ public final class DesignerRegions {
   private static final String STAGE_NOTE = " (managed by the stage designer)";
   private static final Pattern CLASS = Pattern.compile(
       "(?m)^([ \\t]*)public\\s+class\\s+(\\w+)\\s+extends\\s+(Stage|Sprite|AnimatedSprite|"
-          + "UISprite|Window)\\b[^{]*\\{[ \\t]*\\n");
+          + "UISprite|Window)\\b[^{]*\\{[ \\t]*\\r?\\n");
 
   private DesignerRegions() {}
 
@@ -67,6 +67,16 @@ public final class DesignerRegions {
    * {@code Window}), whatever its direct superclass is.
    */
   public static String ensure(String source, String kind) {
+    // Work with one line separator so offsets and inserted markers agree on Windows.
+    // Preserve the original source when no regions are needed, and its CRLF style
+    // when adding regions to a Windows file.
+    String normalized = source.replace("\r\n", "\n");
+    String updated = ensureNormalized(normalized, kind);
+    if (updated.equals(normalized)) return source;
+    return source.contains("\r\n") ? updated.replace("\n", "\r\n") : updated;
+  }
+
+  private static String ensureNormalized(String source, String kind) {
     Matcher type = ANY_CLASS.matcher(source);
     if (!type.find()) {
       return source;
