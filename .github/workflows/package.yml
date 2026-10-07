@@ -80,8 +80,14 @@ jobs:
             scripts/package-ide.sh "$type"
             if [ "$type" = app-image ]; then
               # the portable build: unzip and run, no admin rights (USB sticks)
-              (cd target/package && 7z a -tzip "../../dist/scratch4j-studio-${{ matrix.name }}-portable.zip" "Scratch for Java Studio" >/dev/null \
-                || zip -qr "../../dist/scratch4j-studio-${{ matrix.name }}-portable.zip" "Scratch for Java Studio")
+              archive="../../dist/scratch4j-studio-${{ matrix.name }}-portable.zip"
+              if [ "$RUNNER_OS" = macOS ]; then
+                (cd target/package && ditto -c -k --sequesterRsrc --keepParent "Scratch for Java Studio.app" "$archive")
+              elif [ "$RUNNER_OS" = Windows ]; then
+                (cd target/package && 7z a -tzip "$archive" "Scratch for Java Studio" >/dev/null)
+              else
+                (cd target/package && zip -qry "$archive" "Scratch for Java Studio")
+              fi
             else
               cp target/package/*.${type} dist/ 2>/dev/null || true
             fi
