@@ -80,7 +80,10 @@ public final class Sb3Importer {
       }
       Files.createDirectories(root.resolve("assets/images"));
       Files.createDirectories(root.resolve("assets/sounds"));
-      Importer importer = new Importer(zip, root, mp3ToWav);
+      // clones convert only for a library that has them (whenStartsAsClone)
+      boolean clones = libraryJar != null && org.openpatch.scratch4j.core.lint.LibraryCallbacks
+          .of(List.of(libraryJar)).sprite().containsKey("whenStartsAsClone");
+      Importer importer = new Importer(zip, root, mp3ToWav, clones);
       Result result = importer.run(project);
       Path libs = root.resolve("+libs");
       Files.createDirectories(libs);
@@ -99,6 +102,7 @@ public final class Sb3Importer {
     private final ZipFile zip;
     private final Path root;
     private final Function<Path, Path> mp3ToWav;
+    private final boolean clones;
     private final List<String> notes = new ArrayList<>();
     private final Set<String> usedFiles = new HashSet<>();
     private final Set<String> classNames = new HashSet<>(Set.of("Stage", "Sprite", "Window",
@@ -106,10 +110,11 @@ public final class Sb3Importer {
     private String globalFields = "";
     private boolean needsValues;
 
-    Importer(ZipFile zip, Path root, Function<Path, Path> mp3ToWav) {
+    Importer(ZipFile zip, Path root, Function<Path, Path> mp3ToWav, boolean clones) {
       this.zip = zip;
       this.root = root;
       this.mp3ToWav = mp3ToWav;
+      this.clones = clones;
     }
 
     private record Costume(String name, String path, double centerX, double centerY,
@@ -246,7 +251,7 @@ public final class Sb3Importer {
       Map<String, Sb3Scripts.Variable> visible = new java.util.HashMap<>(globals);
       String fields = declare(sprite, false, className, visible, new HashSet<>());
       Sb3Scripts.Output scripts = new Sb3Scripts(sprite, false, "MyStage", visible, classOf)
-          .convert(fields);
+          .withClones(clones).convert(fields);
       Files.writeString(root.resolve(className + ".java"),
           classSource(className, "Sprite", "Imported from the Scratch sprite \""
               + scratchName.replace("*/", "") + "\".", scripts, setup.toString(), null),
@@ -318,7 +323,8 @@ public final class Sb3Importer {
       }
       Sb3Scripts.Output scripts = stage == null
           ? new Sb3Scripts.Output(globalFields, "", "", "", 0, 0, false)
-          : new Sb3Scripts(stage, true, className, own, classOf).convert(globalFields);
+          : new Sb3Scripts(stage, true, className, own, classOf).withClones(clones)
+              .convert(globalFields);
       Files.writeString(root.resolve(className + ".java"), classSource(className, "Stage",
           "Imported from Scratch: the stage with its backdrops and sprites.", scripts, setup,
           fields), StandardCharsets.UTF_8);

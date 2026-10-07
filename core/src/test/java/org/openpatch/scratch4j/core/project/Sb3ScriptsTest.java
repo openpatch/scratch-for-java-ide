@@ -112,6 +112,10 @@ class Sb3ScriptsTest {
       """;
 
   private Path sb3() throws Exception {
+    return sb3(PROJECT);
+  }
+
+  private Path sb3(String projectJson) throws Exception {
     Path file = tmp.resolve("game.sb3");
     var image = new java.awt.image.BufferedImage(10, 10, java.awt.image.BufferedImage.TYPE_INT_ARGB);
     ByteArrayOutputStream png = new ByteArrayOutputStream();
@@ -119,7 +123,7 @@ class Sb3ScriptsTest {
     try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(file))) {
       for (String name : List.of("project.json", "bg.png", "cat.png")) {
         zip.putNextEntry(new ZipEntry(name));
-        zip.write(name.equals("project.json") ? PROJECT.getBytes(StandardCharsets.UTF_8)
+        zip.write(name.equals("project.json") ? projectJson.getBytes(StandardCharsets.UTF_8)
             : png.toByteArray());
         zip.closeEntry();
       }
@@ -169,5 +173,100 @@ class Sb3ScriptsTest {
     var compiled = new CompilerService().compile(ScratchProject.open(root).javaSources(),
         List.of(jar), tmp.resolve("out"));
     assertThat(compiled.errors()).isEmpty();
+  }
+
+  /** A star that clones itself every second; each clone flies off and is deleted. */
+  private static final String CLONES = """
+      {"targets": [
+        {"isStage": true, "name": "Stage", "currentCostume": 0, "variables": {}, "lists": {},
+         "costumes": [{"name": "bg", "md5ext": "bg.png", "dataFormat": "png",
+           "bitmapResolution": 1, "rotationCenterX": 0, "rotationCenterY": 0}],
+         "sounds": [], "blocks": {}},
+        {"isStage": false, "name": "Star", "layerOrder": 1, "x": 0, "y": 0, "direction": 90,
+         "size": 100, "visible": true, "rotationStyle": "all around", "currentCostume": 0,
+         "variables": {}, "lists": {},
+         "costumes": [{"name": "star", "md5ext": "cat.png", "dataFormat": "png",
+           "bitmapResolution": 1, "rotationCenterX": 5, "rotationCenterY": 5}],
+         "sounds": [],
+         "blocks": {
+           "f1": {"opcode": "event_whenflagclicked", "next": "f2", "topLevel": true,
+                  "inputs": {}, "fields": {}},
+           "f2": {"opcode": "control_forever", "next": null,
+                  "inputs": {"SUBSTACK": [2, "f3"]}, "fields": {}},
+           "f3": {"opcode": "control_create_clone_of", "next": "f5",
+                  "inputs": {"CLONE_OPTION": [1, "f4"]}, "fields": {}},
+           "f4": {"opcode": "control_create_clone_of_menu", "shadow": true, "next": null,
+                  "inputs": {}, "fields": {"CLONE_OPTION": ["_myself_", null]}},
+           "f5": {"opcode": "control_wait", "next": null,
+                  "inputs": {"DURATION": [1, [5, "1"]]}, "fields": {}},
+           "c1": {"opcode": "control_start_as_clone", "next": "c2", "topLevel": true,
+                  "inputs": {}, "fields": {}},
+           "c2": {"opcode": "motion_turnright", "next": "c3",
+                  "inputs": {"DEGREES": [1, [4, "15"]]}, "fields": {}},
+           "c3": {"opcode": "control_forever", "next": null,
+                  "inputs": {"SUBSTACK": [2, "c4"]}, "fields": {}},
+           "c4": {"opcode": "motion_movesteps", "next": "c5",
+                  "inputs": {"STEPS": [1, [4, "5"]]}, "fields": {}},
+           "c5": {"opcode": "control_if", "next": null,
+                  "inputs": {"CONDITION": [2, "c6"], "SUBSTACK": [2, "c8"]}, "fields": {}},
+           "c6": {"opcode": "sensing_touchingobject", "next": null,
+                  "inputs": {"TOUCHINGOBJECTMENU": [1, "c7"]}, "fields": {}},
+           "c7": {"opcode": "sensing_touchingobjectmenu", "shadow": true, "next": null,
+                  "inputs": {}, "fields": {"TOUCHINGOBJECTMENU": ["_edge_", null]}},
+           "c8": {"opcode": "control_delete_this_clone", "next": null, "inputs": {}, "fields": {}}
+         }}
+      ]}
+      """;
+
+  @Test
+  void clonesBecomeTheLibrarysClonesWhenItHasThem() throws Exception {
+    Path sb3 = sb3(CLONES);
+    var result = Sb3Importer.importProject(sb3, tmp, "stars", libraryWithClones(), null);
+    String star = Files.readString(result.root().resolve("Star.java"));
+    assertThat(star).contains("public void whenStartsAsClone() {\n    this.turnRight(15);\n  }")
+        .doesNotContain("TODO Scratch");
+    // run() is called for the original and every clone: each part only where Scratch ran it
+    String run = star.substring(star.indexOf("public void run()"));
+    assertThat(run.indexOf("if (!this.isClone()) {")).isLessThan(run.indexOf("this.clone();"));
+    assertThat(run.indexOf("if (this.isClone()) {")).isLessThan(run.indexOf("this.move(5);"));
+    assertThat(run).contains("this.deleteThisClone();");
+  }
+
+  @Test
+  void withoutClonesInTheLibraryTheyStayTodos() throws Exception {
+    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    var result = Sb3Importer.importProject(sb3(CLONES), tmp, "stars", jar, null);
+    String star = Files.readString(result.root().resolve("Star.java"));
+    assertThat(star).contains("TODO Scratch").doesNotContain("whenStartsAsClone");
+  }
+
+  /** Just enough of a library with clones: a Sprite with whenStartsAsClone(). */
+  private Path libraryWithClones() throws Exception {
+    Path src = Files.createDirectories(tmp.resolve("lib-src/org/openpatch/scratch"));
+    Files.writeString(src.resolve("Sprite.java"), """
+        package org.openpatch.scratch;
+        public class Sprite {
+          public void run() {}
+          public void whenStartsAsClone() {}
+        }
+        """);
+    Files.writeString(src.resolve("Stage.java"), """
+        package org.openpatch.scratch;
+        public class Stage {
+          public void run() {}
+        }
+        """);
+    Path classes = tmp.resolve("lib-classes");
+    assertThat(new CompilerService().compile(List.of(src.resolve("Sprite.java"),
+        src.resolve("Stage.java")), List.of(), classes).success()).isTrue();
+    Path jar = tmp.resolve("scratch-9.9.9-all.jar");
+    try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+      for (String name : List.of("Sprite", "Stage")) {
+        zip.putNextEntry(new ZipEntry("org/openpatch/scratch/" + name + ".class"));
+        zip.write(Files.readAllBytes(classes.resolve("org/openpatch/scratch/" + name + ".class")));
+        zip.closeEntry();
+      }
+    }
+    return jar;
   }
 }

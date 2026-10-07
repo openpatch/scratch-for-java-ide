@@ -27,8 +27,21 @@ class IdeControlIT {
   @TempDir
   Path tmp;
 
+  /**
+   * The library to run against: the bundled release, or a local build with
+   * {@code -Dscratch4j.testLibraryJar=<path>} (its own pause, game speed and
+   * monitors, which the launcher prefers when they exist).
+   */
   private static Path allJar() throws Exception {
+    String local = System.getProperty("scratch4j.testLibraryJar");
+    if (local != null && !local.isBlank()) {
+      return Path.of(local);
+    }
     return LibraryJarSource.allJar(Path.of(System.getProperty("user.dir"), "target", "bundled"));
+  }
+
+  private static boolean libraryGameClock() {
+    return System.getProperty("scratch4j.testLibraryJar") != null;
   }
 
   private static void waitFor(java.util.function.BooleanSupplier condition, long millis)
@@ -152,7 +165,10 @@ class IdeControlIT {
       ProgramState atPause = states.getLast();
       assertThat(atPause.paused()).isTrue();
       Thread.sleep(1500);
-      assertThat(frames.get()).as("no frames while paused").isEqualTo(paused);
+      if (!libraryGameClock()) {
+        // Processing's loop stops; the library's own pause keeps drawing instead
+        assertThat(frames.get()).as("no frames while paused").isEqualTo(paused);
+      }
 
       handle.send("step");
       waitFor(() -> pausedAt.get() == paused + 1, 5000);
@@ -179,11 +195,16 @@ class IdeControlIT {
       }
       assertThat(orange).as("the pinned monitor is on the stage").isTrue();
 
-      // slowed down to 10 frames per second
-      long before = frames.get();
+      // slowed down to 10 game frames per second: with the library's game clock
+      // the window keeps drawing smoothly and only the game slows down
+      long before = libraryGameClock() ? states.getLast().frame() : frames.get();
       Thread.sleep(3000);
-      long perSecond = (frames.get() - before) / 3;
-      assertThat(perSecond).as("frames per second at speed 10").isBetween(5L, 15L);
+      long after = libraryGameClock() ? states.getLast().frame() : frames.get();
+      long perSecond = (after - before) / 3;
+      assertThat(perSecond).as("game frames per second at speed 10").isBetween(5L, 15L);
+      if (libraryGameClock()) {
+        assertThat(frames.get() - before).as("the window still draws often").isGreaterThan(100);
+      }
       assertThat(stderr).noneMatch(line -> line.contains("@@scratch4j-ide@@"));
     } finally {
       handle.stop();

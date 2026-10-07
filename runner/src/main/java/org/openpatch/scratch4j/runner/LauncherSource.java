@@ -132,13 +132,18 @@ public final class LauncherSource {
               @Override
               public void saveFrame() {
                 frames++;
-                Runnable task;
-                while ((task = TASKS.poll()) != null) {
+                // a task queued by a task runs with the next frame
+                for (int n = TASKS.size(); n > 0; n--) {
+                  Runnable task = TASKS.poll();
+                  if (task == null) break;
                   try {
                     task.run();
                   } catch (Throwable t) {
                     System.err.println(MARK + "error " + t);
                   }
+                }
+                if (Library.monitors()) {
+                  Library.syncPins();
                 }
                 if (monitoring && !paused && frames %% 15 == 0) {
                   report();
@@ -146,7 +151,7 @@ public final class LauncherSource {
               }
 
               public void draw() {
-                if (!PINS.isEmpty()) {
+                if (!PINS.isEmpty() && !Library.monitors()) {
                   Monitors.draw();
                 }
               }
@@ -212,22 +217,39 @@ public final class LauncherSource {
               } else if (line.equals("pause")) {
                 // after the frame being drawn: the paused picture is a whole frame
                 TASKS.add(() -> {
-                  call(applet(), "noLoop", new Class<?>[0]);
+                  if (Library.gameClock()) {
+                    Library.window("pause");
+                  } else {
+                    call(applet(), "noLoop", new Class<?>[0]);
+                  }
                   paused = true;
-                  System.err.println(MARK + "paused " + frames);
+                  System.err.println(MARK + "paused " + gameFrame());
                   report();
                 });
               } else if (line.equals("resume")) {
                 if (paused) {
                   paused = false;
-                  freshDelta();
-                  call(applet(), "loop", new Class<?>[0]);
+                  if (Library.gameClock()) {
+                    Library.window("resume");
+                  } else {
+                    freshDelta();
+                    call(applet(), "loop", new Class<?>[0]);
+                  }
                   System.err.println(MARK + "resumed");
                 }
               } else if (line.equals("step")) {
-                if (paused) {
+                if (paused && Library.gameClock()) {
+                  // the library steps with the next frame: report the one after it
                   TASKS.add(() -> {
-                    System.err.println(MARK + "paused " + frames);
+                    Library.window("step");
+                    TASKS.add(() -> {
+                      System.err.println(MARK + "paused " + gameFrame());
+                      report();
+                    });
+                  });
+                } else if (paused) {
+                  TASKS.add(() -> {
+                    System.err.println(MARK + "paused " + gameFrame());
                     report();
                   });
                   freshDelta();
@@ -236,9 +258,15 @@ public final class LauncherSource {
               } else if (line.startsWith("speed ")) {
                 try {
                   float fps = Float.parseFloat(line.substring("speed ".length()));
-                  // OpenGL changes its frame rate on the render thread only (while
-                  // paused, with the next step or on resume)
-                  TASKS.add(() -> call(applet(), "frameRate", new Class<?>[] {float.class}, fps));
+                  if (Library.gameClock()) {
+                    // the whole game in slow motion: run(), timers, gliding, animations
+                    double factor = fps / 60.0;
+                    TASKS.add(() -> Library.window("setGameSpeed", factor));
+                  } else {
+                    // OpenGL changes its frame rate on the render thread only (while
+                    // paused, with the next step or on resume)
+                    TASKS.add(() -> call(applet(), "frameRate", new Class<?>[] {float.class}, fps));
+                  }
                 } catch (NumberFormatException e) {
                   System.err.println(MARK + "error " + e);
                 }
@@ -264,6 +292,15 @@ public final class LauncherSource {
                   });
                 }
               }
+            }
+
+            /**
+             * Frames the game ran: the library's game steps when it has a game clock
+             * (its window keeps drawing while paused), else the frames drawn.
+             */
+            static long gameFrame() {
+              Object steps = Library.clockSteps();
+              return steps instanceof Long ? (Long) steps : frames;
             }
 
             /** Sends the variables of the stage and its sprites to the IDE. */
@@ -327,6 +364,92 @@ public final class LauncherSource {
           }
 
           /**
+           * What the project's library can do itself (newer versions): pause, step and
+           * game speed on its own game clock, and Scratch-style variable monitors. Older
+           * versions get the IDE's own way (Processing's loop and monitors drawn here).
+           */
+          public static final class Library {
+            static Boolean gameClock;
+            static Boolean monitors;
+            static Object pinStage;
+            /** Labels of the pins shown on pinStage. */
+            static final java.util.Set<String> shown = new java.util.HashSet<>();
+
+            static boolean gameClock() {
+              if (gameClock == null) {
+                gameClock = has(Window.class, "pause") && has(Window.class, "setGameSpeed", double.class);
+              }
+              return gameClock;
+            }
+
+            static boolean monitors() {
+              if (monitors == null) {
+                monitors = has(org.openpatch.scratch.Stage.class, "showVariable",
+                    java.util.function.Supplier.class);
+              }
+              return monitors;
+            }
+
+            static boolean has(Class<?> type, String name, Class<?>... parameters) {
+              try {
+                type.getMethod(name, parameters);
+                return true;
+              } catch (NoSuchMethodException e) {
+                return false;
+              }
+            }
+
+            static void window(String name, Object... args) {
+              Class<?>[] types = new Class<?>[args.length];
+              for (int i = 0; i < args.length; i++) {
+                types[i] = args[i] instanceof Double ? double.class : args[i].getClass();
+              }
+              IdeControl.call(Window.getInstance(), name, types, args);
+            }
+
+            /** The library's game steps, or null without a game clock. */
+            static Object clockSteps() {
+              if (!gameClock()) return null;
+              try {
+                Object clock = IdeControl.applet().getClass().getMethod("getClock")
+                    .invoke(IdeControl.applet());
+                return clock.getClass().getMethod("steps").invoke(clock);
+              } catch (ReflectiveOperationException | RuntimeException e) {
+                return null;
+              }
+            }
+
+            /** Shows the pinned values with the library's own monitors, on the current stage. */
+            static void syncPins() {
+              Window window = Window.getInstance();
+              Object stage = window == null ? null : window.getStage();
+              if (stage == null) return;
+              if (stage != pinStage) {
+                pinStage = stage;
+                shown.clear();
+              }
+              java.util.Set<String> wanted = new java.util.HashSet<>();
+              for (String[] pin : IdeControl.PINS) {
+                wanted.add(pin[2]);
+                if (shown.add(pin[2])) {
+                  String owner = pin[0];
+                  String field = pin[1];
+                  java.util.function.Supplier<Object> value = () -> Monitors.pinned(owner, field);
+                  IdeControl.call(stage, "showVariable",
+                      new Class<?>[] {String.class, java.util.function.Supplier.class}, pin[2], value);
+                }
+              }
+              for (java.util.Iterator<String> it = shown.iterator(); it.hasNext(); ) {
+                String label = it.next();
+                if (!wanted.contains(label)) {
+                  IdeControl.call(stage, "hideVariable", new Class<?>[] {String.class}, label);
+                  it.remove();
+                }
+              }
+            }
+          }
+
+          /**
            * The variables report (JSON without a library: the program's classpath has
            * none) and the monitors pinned onto the stage, drawn like Scratch's.
            */
@@ -340,7 +463,7 @@ public final class LauncherSource {
               Window window = Window.getInstance();
               org.openpatch.scratch.Stage stage = window == null ? null : window.getStage();
               StringBuilder sb = new StringBuilder("{");
-              sb.append(str("frame")).append(':').append(IdeControl.frames).append(',')
+              sb.append(str("frame")).append(':').append(IdeControl.gameFrame()).append(',')
                   .append(str("paused")).append(':').append(IdeControl.paused);
               java.util.Set<Class<?>> classes = new java.util.LinkedHashSet<>();
               if (stage != null) {

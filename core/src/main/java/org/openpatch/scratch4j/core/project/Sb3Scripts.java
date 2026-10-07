@@ -15,8 +15,11 @@ import java.util.Map;
  * "forever" into {@code run()} (which the library calls every frame), the
  * common "forever with one wait" becomes {@code getTimer(..).everyMillis(ms)}.
  * Blocks that have no faithful one-to-one translation — waits in the middle of
- * a script, clones, "ask", "wait until" — become {@code // TODO Scratch:}
- * lines that show the original block, so nothing is lost silently.
+ * a script, "ask", "wait until", and clones for a library without them —
+ * become {@code // TODO Scratch:} lines that show the original block, so
+ * nothing is lost silently. With a library that has clones, "create clone of
+ * myself", "when I start as a clone" and "delete this clone" become
+ * {@code clone()}, {@code whenStartsAsClone()} and {@code deleteThisClone()}.
  */
 final class Sb3Scripts {
 
@@ -42,6 +45,10 @@ final class Sb3Scripts {
   private boolean needsValues;
   private int loopDepth;
   private int timers;
+  /** The library has Scratch's clones (clone(), whenStartsAsClone()). */
+  private boolean clones;
+  /** This target makes or is clones: run() then tells the original and clones apart. */
+  private boolean usesClones;
 
   /**
    * {@code variables} maps Scratch variable/list ids to Java names (globals
@@ -54,6 +61,12 @@ final class Sb3Scripts {
     this.stage = stage;
     this.variables = variables;
     this.spriteClasses = spriteClasses;
+  }
+
+  /** Converts clone blocks too (the project's library has them). */
+  Sb3Scripts withClones(boolean clones) {
+    this.clones = clones;
+    return this;
   }
 
   Output convert(String ownFields) {
@@ -74,6 +87,8 @@ final class Sb3Scripts {
     Map<String, List<String>> messages = new LinkedHashMap<>();
     Map<String, List<String>> backdrops = new LinkedHashMap<>();
     List<String> clicked = new ArrayList<>();
+    List<String> asClone = new ArrayList<>();
+    List<String> cloneForevers = new ArrayList<>();
     StringBuilder methods = new StringBuilder();
     StringBuilder helpers = new StringBuilder();
     StringBuilder other = new StringBuilder();
@@ -100,6 +115,17 @@ final class Sb3Scripts {
             .computeIfAbsent(field(hat, "BACKDROP"), k -> new ArrayList<>())
             .add(statements(next, "    "));
         case "procedures_definition" -> methods.append(procedure(hat));
+        case "control_start_as_clone" -> {
+          if (this.clones && !this.stage) {
+            // like a green flag script: a trailing forever runs every frame, in clones only
+            usesClones = true;
+            flagScript(next, asClone, cloneForevers);
+          } else {
+            other.append("  // TODO Scratch: a script starting with \"").append(describe(hat))
+                .append("\" (").append(count(next) + 1).append(" blocks) was not converted.\n");
+            todos++;
+          }
+        }
         default -> {
           other.append("  // TODO Scratch: a script starting with \"").append(describe(hat))
               .append("\" (").append(count(next) + 1).append(" blocks) was not converted.\n");
@@ -109,6 +135,16 @@ final class Sb3Scripts {
     }
     String constructor = dispatch(flags, "whenGreenFlag", "", helpers);
     String run = dispatch(forevers, "forever", "", helpers);
+    if (usesClones) {
+      // In Scratch a clone runs only its "when I start as a clone" scripts, but
+      // run() is called for the original and every clone alike.
+      String original = run;
+      String asCloneRun = dispatch(cloneForevers, "foreverAsClone", "", helpers);
+      run = (original.isEmpty() ? "" : "    if (!this.isClone()) {\n" + shift(original, "  ")
+          + "    }\n")
+          + (asCloneRun.isEmpty() ? "" : "    if (this.isClone()) {\n" + shift(asCloneRun, "  ")
+          + "    }\n");
+    }
     if (!keys.isEmpty()) {
       methods.append("\n  public void whenKeyPressed(KeyCode keyCode) {\n");
       for (var key : keys.entrySet()) {
@@ -132,6 +168,10 @@ final class Sb3Scripts {
         other.append(commentOut(body));
       }
       todos++;
+    }
+    if (!asClone.isEmpty()) {
+      methods.append("\n  public void whenStartsAsClone() {\n")
+          .append(dispatch(asClone, "whenIStartAsAClone", "", helpers)).append("  }\n");
     }
     if (!messages.isEmpty()) {
       methods.append("\n  public void whenIReceive(String message) {\n");
@@ -341,6 +381,14 @@ final class Sb3Scripts {
       case "sound_stopallsounds" -> code = "this.stopAllSounds();";
       case "sound_setvolumeto" -> code = call("setVolume", num(value(b, "VOLUME")));
       case "sound_changevolumeby" -> code = call("changeVolume", num(value(b, "VOLUME")));
+      // only "of myself": another sprite's clone needs that sprite, which the class does not know
+      case "control_create_clone_of" -> {
+        code = this.clones && !this.stage && "_myself_".equals(menu(b, "CLONE_OPTION"))
+            ? "this.clone();" : null;
+        usesClones |= code != null;
+      }
+      case "control_delete_this_clone" -> code = this.clones && !this.stage
+          ? "this.deleteThisClone();" : null;
       case "event_broadcast" -> code = call("broadcast", str(value(b, "BROADCAST_INPUT")));
       case "event_broadcastandwait" -> code = waits(call("broadcast",
           str(value(b, "BROADCAST_INPUT"))), last);
