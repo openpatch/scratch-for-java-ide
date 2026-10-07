@@ -1,0 +1,25 @@
+name: Set up Windows software OpenGL
+description: Install a pinned Mesa driver on the runner for native graphics smoke checks.
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      run: |
+        # Hyper-V's inbox OpenGL driver lacks Processing's framebuffer support.
+        # Install the CI host driver after packaging; downloads keep their own runtime.
+        $mesaDirectory = Join-Path $env:RUNNER_TEMP 'scratch4j-mesa'
+        $mesaArchive = Join-Path $env:RUNNER_TEMP 'mesa3d-26.2.4-release-msvc.7z'
+        Invoke-WebRequest 'https://github.com/pal1000/mesa-dist-win/releases/download/26.2.4/mesa3d-26.2.4-release-msvc.7z' -OutFile $mesaArchive
+        $expectedHash = '351fc8c8b695878ffb3eaa044b3ead08672a48b1a045e3c3e3975811df0f6695'
+        if ((Get-FileHash $mesaArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) {
+          throw 'Mesa archive checksum mismatch'
+        }
+        & 7z x -y "-o$mesaDirectory" $mesaArchive | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'Mesa archive extraction failed' }
+        & (Join-Path $mesaDirectory 'systemwidedeploy.cmd') 1
+        if ($LASTEXITCODE -ne 0) { throw 'Mesa driver installation failed' }
+        if (!(Test-Path (Join-Path $env:SystemRoot 'System32/mesadrv.dll'))) {
+          throw 'Mesa system OpenGL driver is missing'
+        }
+        'GALLIUM_DRIVER=llvmpipe' >> $env:GITHUB_ENV
+        'LIBGL_ALWAYS_SOFTWARE=1' >> $env:GITHUB_ENV

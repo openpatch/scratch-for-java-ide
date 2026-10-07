@@ -125,6 +125,10 @@ jobs:
             & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
           }
 
+      - name: Set up Windows software OpenGL
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-windows-opengl
+
       - name: Start packaged Studio and run offline projects
         shell: bash
         run: |
