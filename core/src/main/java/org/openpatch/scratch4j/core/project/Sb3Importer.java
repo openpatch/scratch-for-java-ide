@@ -34,8 +34,9 @@ import java.util.zip.ZipFile;
  * regions hold the backdrops, stage sounds and every sprite at its position,
  * direction, size, costume, visibility, rotation style and layer.
  *
- * <p>Scripts are not converted (they are rebuilt in Java with the block
- * palette); the result lists what needs attention. Bitmap costumes are copied
+ * <p>Scripts are converted where a faithful Java equivalent is available.
+ * Migration tasks connect remaining work to original blocks and generated Java.
+ * Bitmap costumes are copied
  * (Scratch stores them at {@code bitmapResolution} 2, so sizes are halved),
  * vector costumes are rendered to PNG at 2x with Batik (the SVG is kept),
  * and MP3 sounds are converted to WAV by the caller-supplied converter.
@@ -94,6 +95,7 @@ public final class Sb3Importer {
       ProjectSettings settings = new ProjectSettings();
       settings.startStage = result.stageClass();
       settings.save(root);
+      Files.copy(sb3, root.resolve(".scratch4j/original.sb3"));
       return result;
     }
   }
@@ -109,6 +111,8 @@ public final class Sb3Importer {
         "Text", "MyStage", "ScratchValues"));
     private String globalFields = "";
     private boolean needsValues;
+    private final List<ScratchMigration.Task> tasks = new ArrayList<>();
+    private boolean concurrentTargets;
 
     Importer(ZipFile zip, Path root, Function<Path, Path> mp3ToWav, boolean clones) {
       this.zip = zip;
@@ -123,6 +127,12 @@ public final class Sb3Importer {
     private record SoundFile(String name, String path) {}
 
     Result run(JsonNode project) throws IOException {
+      int flags = 0;
+      for (JsonNode target : project.path("targets")) for (var entry : target.path("blocks").properties()) {
+        if (entry.getValue().path("opcode").asText().equals("event_whenflagclicked")
+            && entry.getValue().path("topLevel").asBoolean(false)) flags++;
+      }
+      concurrentTargets = flags > 1;
       JsonNode stage = null;
       List<JsonNode> sprites = new ArrayList<>();
       for (JsonNode target : project.path("targets")) {
@@ -251,7 +261,7 @@ public final class Sb3Importer {
       Map<String, Sb3Scripts.Variable> visible = new java.util.HashMap<>(globals);
       String fields = declare(sprite, false, className, visible, new HashSet<>());
       Sb3Scripts.Output scripts = new Sb3Scripts(sprite, false, "MyStage", visible, classOf)
-          .withClones(clones).convert(fields);
+          .withClones(clones).withConcurrentTargets(concurrentTargets).convert(fields);
       Files.writeString(root.resolve(className + ".java"),
           classSource(className, "Sprite", "Imported from the Scratch sprite \""
               + scratchName.replace("*/", "") + "\".", scripts, setup.toString(), null),
@@ -259,8 +269,17 @@ public final class Sb3Importer {
       note(scratchName, className, scripts);
     }
 
-    private void note(String owner, String className, Sb3Scripts.Output scripts) {
+    private void note(String owner, String className, Sb3Scripts.Output scripts) throws IOException {
       needsValues |= scripts.needsValues();
+      String source = Files.readString(root.resolve(className + ".java"));
+      for (Sb3Scripts.Issue issue : scripts.issues()) {
+        int offset = source.indexOf(issue.marker());
+        int line = offset < 0 ? 1 : (int) source.substring(0, offset).chars().filter(c -> c == '\n').count() + 1;
+        tasks.add(new ScratchMigration.Task(className + "-" + issue.id(), issue.id(), issue.blockId(),
+            issue.opcode(), owner, className + ".java", line, issue.message(),
+            "https://scratch4j.openpatch.org/migration#" + issue.lesson(), issue.original()));
+      }
+      ScratchMigration.save(root, tasks);
       if (scripts.scripts() > 0) {
         notes.add(owner + ": " + scripts.scripts() + " script(s) converted into " + className
             + ".java" + (scripts.todos() == 0 ? "" : ", " + scripts.todos()
@@ -277,6 +296,11 @@ public final class Sb3Importer {
       StringBuilder sb = new StringBuilder();
       sb.append("import java.util.ArrayList;\nimport java.util.List;\nimport org.openpatch.scratch.*;\n\n");
       sb.append("// ").append(comment).append('\n');
+      String generated = scripts.constructor() + scripts.run() + scripts.methods();
+      for (Sb3Scripts.Issue issue : scripts.issues()) if (!generated.contains(issue.marker())) {
+        sb.append("// ").append(issue.marker()).append("\n// ")
+            .append(issue.message().replace("\n", " ")).append('\n');
+      }
       if (scripts.scripts() > 0) {
         sb.append("// Its scripts were converted").append(scripts.todos() == 0 ? "."
             : "; look for \"TODO Scratch\" for blocks to finish by hand.").append('\n');
@@ -322,8 +346,8 @@ public final class Sb3Importer {
             v.java().substring(v.java().indexOf('.') + 1), true, v.number(), v.list()));
       }
       Sb3Scripts.Output scripts = stage == null
-          ? new Sb3Scripts.Output(globalFields, "", "", "", 0, 0, false)
-          : new Sb3Scripts(stage, true, className, own, classOf).withClones(clones)
+          ? new Sb3Scripts.Output(globalFields, "", "", "", 0, 0, false, List.of())
+          : new Sb3Scripts(stage, true, className, own, classOf).withClones(clones).withConcurrentTargets(concurrentTargets)
               .convert(globalFields);
       Files.writeString(root.resolve(className + ".java"), classSource(className, "Stage",
           "Imported from Scratch: the stage with its backdrops and sprites.", scripts, setup,

@@ -25,6 +25,55 @@ jobs:
       - name: Build and test
         run: mvn --batch-mode --no-transfer-progress verify
 
+      - name: Check shared release metadata
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v7
+        with:
+          repository: openpatch/scratch-for-java
+          path: .validation/library
+      - name: Set up the catalog toolchain
+        if: runner.os == 'Linux'
+        uses: ./.validation/library/.github/actions/setup-maven
+      - name: Generate reference metadata for the catalog check
+        if: runner.os == 'Linux'
+        working-directory: .validation/library
+        run: mvn --batch-mode --no-transfer-progress -DskipTests prepare-package
+      - name: Require current offline catalogs
+        if: runner.os == 'Linux'
+        run: |
+          python3 .validation/library/scripts/release-catalogs.py --check --studio .
+          python3 .validation/library/scripts/release-catalogs.py --archive .validation/examples.zip
+          python3 scripts/sync-templates.py --artifact .validation/examples.zip --check
+
+      - name: Checkout course activities
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v7
+        with:
+          repository: openpatch/hyperbook-informatik
+          path: .validation/curriculum
+      - name: Import and validate the complete offline course
+        if: runner.os == 'Linux'
+        run: python3 scripts/check-course-pack.py --library .validation/library --curriculum .validation/curriculum
+
+      - name: Checkout the embedded project adapter
+        if: runner.os == 'Linux'
+        uses: actions/checkout@v7
+        with:
+          repository: openpatch/online-ide
+          path: .validation/online-ide
+      - name: Prepare the browser transfer check
+        if: runner.os == 'Linux'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Continue an edited curriculum project across environments
+        if: runner.os == 'Linux'
+        run: |
+          npm --prefix .validation/online-ide ci
+          npm --prefix .validation/online-ide run browser:install -- --with-deps
+          cd .validation/online-ide
+          node scripts/test-curriculum-transfer.mjs ../curriculum/book/projekte/spielwerkstatt/checkpoints/spielwerkstatt-q-07-testen.json ../..
+
       - name: OpenGL run smoke (Linux, Xvfb)
         # A real stage opens a window in a separate JVM and exits via the smoke switch.
         if: runner.os == 'Linux'

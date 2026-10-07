@@ -64,12 +64,23 @@ public final class LauncherSource {
             try {
               main = start.getDeclaredMethod("main", String[].class);
             } catch (NoSuchMethodException e) {
-              // no main: instantiate the stage (or window) like BlueJ's new MyStage()
+              try {
+                main = start.getDeclaredMethod("main");
+              } catch (NoSuchMethodException noMain) {
+                // no main: instantiate the stage or window
+              }
             }
-            if (main != null && java.lang.reflect.Modifier.isStatic(main.getModifiers())) {
+            if (main != null) {
               // the class's own main may prepare things first (fonts, settings)
               main.setAccessible(true);
-              main.invoke(null, (Object) new String[0]);
+              Object receiver = null;
+              if (!java.lang.reflect.Modifier.isStatic(main.getModifiers())) {
+                java.lang.reflect.Constructor<?> constructor = start.getDeclaredConstructor();
+                constructor.setAccessible(true);
+                receiver = constructor.newInstance();
+              }
+              if (main.getParameterCount() == 0) main.invoke(receiver);
+              else main.invoke(receiver, (Object) new String[0]);
             } else {
               java.lang.reflect.Constructor<?> constructor = start.getDeclaredConstructor();
               constructor.setAccessible(true);

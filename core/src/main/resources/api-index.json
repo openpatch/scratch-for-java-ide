@@ -1145,6 +1145,19 @@
   },
   {
     "className": "Pen",
+    "methodName": "constructor",
+    "returnType": "new Pen",
+    "params": ["Pen p"],
+    "summary": "Copies a Pen object.",
+    "scratchblock": null,
+    "category": "Operators",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Pen/constructor",
+    "description": "Copies a Pen object.",
+    "paramDocs": ["p: Pen object to copy"],
+    "returns": null
+  },
+  {
+    "className": "Pen",
     "methodName": "down",
     "returnType": "void",
     "params": [],

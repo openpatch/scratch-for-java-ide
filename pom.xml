@@ -6,7 +6,7 @@
 
   <groupId>org.openpatch.scratch4j</groupId>
   <artifactId>scratch4j-ide</artifactId>
-  <version>0.1.0-alpha.6</version>
+  <version>0.1.0-alpha.7</version>
   <packaging>pom</packaging>
 
   <name>Scratch for Java Studio</name>
@@ -25,7 +25,7 @@
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <scratch.version>5.7.0</scratch.version>
+    <scratch.version>5.8.0</scratch.version>
     <javafx.version>25</javafx.version>
     <junit.version>5.11.4</junit.version>
     <assertj.version>3.27.3</assertj.version>

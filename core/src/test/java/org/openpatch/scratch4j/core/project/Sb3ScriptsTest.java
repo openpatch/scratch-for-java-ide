@@ -132,6 +132,27 @@ class Sb3ScriptsTest {
   }
 
   @Test
+  void migrationTasksPreserveBlocksArchiveAndTrackEditedLines() throws Exception {
+    Path archive = sb3();
+    var imported = Sb3Importer.importProject(archive, tmp, "migration", null, null);
+    assertThat(Files.readAllBytes(imported.root().resolve(".scratch4j/original.sb3")))
+        .isEqualTo(Files.readAllBytes(archive));
+    var tasks = ScratchMigration.load(imported.root());
+    var timed = tasks.stream().filter(t -> t.blockId().equals("f3")).findFirst().orElseThrow();
+    assertThat(timed.opcode()).isEqualTo("looks_sayforsecs");
+    assertThat(timed.originalBlock()).contains("Hello!", "SECS");
+    assertThat(timed.lessonUrl()).endsWith("#timing");
+    assertThat(tasks).anyMatch(t -> t.blockId().equals("r3") && t.lessonUrl().endsWith("#unsupported-blocks"));
+    assertThat(tasks).anyMatch(t -> t.blockId().equals("g1") && t.lessonUrl().endsWith("#shared-state"));
+    Path source = imported.root().resolve(timed.javaFile());
+    String text = Files.readString(source);
+    assertThat(text.lines().toList().get(timed.line() - 1)).contains(timed.markerId());
+    Files.writeString(source, "\n\n" + text);
+    assertThat(ScratchMigration.load(imported.root()).stream().filter(t -> t.id().equals(timed.id())).findFirst().orElseThrow().line())
+        .isEqualTo(timed.line() + 2);
+  }
+
+  @Test
   void scriptsBecomeEventMethodsRunAndTimersAndCompile() throws Exception {
     Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
     var result = Sb3Importer.importProject(sb3(), tmp, "game", jar, null);

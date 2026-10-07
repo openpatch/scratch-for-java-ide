@@ -167,6 +167,8 @@ final class BlockPalette extends BorderPane {
     }
   }
 
+  void refresh() { refill(); }
+
   private void refill() {
     String query = search.getText() == null ? ""
         : search.getText().trim().toLowerCase(Locale.ROOT);

@@ -2,6 +2,8 @@ package org.openpatch.scratch4j.export;
 
 import org.openpatch.scratch4j.core.compile.CompilerService;
 import org.openpatch.scratch4j.core.project.ScratchProject;
+import org.openpatch.scratch4j.core.project.PortableProject;
+import org.openpatch.scratch4j.core.project.ProjectSettings;
 import org.openpatch.scratch4j.runner.LauncherSource;
 
 import java.io.IOException;
@@ -80,6 +82,30 @@ public final class ProjectFormats {
         ProjectFormats::generated);
   }
 
+  /** Source and real assets, with optional metadata understood by the browser. */
+  public static Path exportBrowserZip(ScratchProject project, Path zipFile) throws IOException {
+    ProjectSettings settings = project.settings();
+    settings.portableVersion = 1;
+    settings.startStage = project.startStage();
+    Path source = project.sourceOf(settings.startStage);
+    if (source != null) settings.startFile = project.root().relativize(source).toString().replace('\\', '/');
+    if (settings.libraryVersion.isBlank()) settings.libraryVersion = settings.libraryPin.isBlank()
+        ? org.openpatch.scratch4j.runner.LibraryJarSource.SCRATCH_VERSION : settings.libraryPin.replaceFirst("-nrw$", "");
+    settings.sourceEnvironment = "studio";
+    if ("nrw".equals(settings.flavour)) {
+      java.util.Set<String> courseClasses = org.openpatch.scratch4j.core.project.Abiturklassen.present(project);
+      settings.desktopFiles = project.javaSources().stream()
+          .filter(path -> courseClasses.contains(path.getFileName().toString().replaceFirst("\\.java$", "")))
+          .map(path -> project.root().relativize(path).toString().replace('\\', '/')).toList();
+    }
+    settings.externalDependencies = project.libs().stream().map(path -> path.getFileName().toString())
+        .filter(name -> !name.startsWith("scratch-")).toList();
+    settings.save(project.root());
+    return Zip.zipDirectoryAs(project.root(), project.name() + "/", zipFile,
+        path -> generated(path) || path.getName(0).toString().equals("+libs")
+            || path.getName(0).toString().equals(".git") || path.toString().endsWith(".jar"));
+  }
+
   /**
    * Unpacks a shared project zip into {@code parentDir}: a zip with one top
    * folder becomes that folder, a flat zip gets a folder named after it.
@@ -95,6 +121,7 @@ public final class ProjectFormats {
         if (name.startsWith(MAC_METADATA + "/")) {
           continue; // Finder's resource forks, not part of the project
         }
+        PortableProject.path(name.endsWith("/") ? name.substring(0, name.length() - 1) : name);
         int slash = name.indexOf('/');
         if (slash < 0) {
           flat = true;
@@ -103,7 +130,7 @@ public final class ProjectFormats {
         }
       }
     }
-    String base = zipFile.getFileName().toString().replaceFirst("(?i)\\.zip$", "");
+    String base = PortableProject.path(zipFile.getFileName().toString().replaceFirst("(?i)\\.zip$", ""));
     Path root;
     Path target;
     if (!flat && tops.size() == 1) {
@@ -116,18 +143,58 @@ public final class ProjectFormats {
     if (Files.exists(root)) {
       throw new IOException("Folder already exists: " + root);
     }
-    Files.createDirectories(target);
-    Path macMetadata = target.resolve(MAC_METADATA);
-    boolean hadMacMetadata = Files.exists(macMetadata);
-    Zip.unzip(zipFile, target);
-    if (!hadMacMetadata && Files.isDirectory(macMetadata)) {
-      try (var files = Files.walk(macMetadata)) {
-        for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
-          Files.deleteIfExists(file);
+    Files.createDirectories(parentDir);
+    Path staging = Files.createTempDirectory(parentDir, ".scratch4j-zip-");
+    try {
+      java.util.Set<String> names = new java.util.HashSet<>();
+      long total = 0;
+      int count = 0;
+      try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(zipFile))) {
+        ZipEntry entry;
+        byte[] buffer = new byte[8192];
+        while ((entry = zip.getNextEntry()) != null) {
+          String name = entry.getName();
+          if (name.startsWith(MAC_METADATA + "/")) continue;
+          String normalized = PortableProject.path(name.endsWith("/") ? name.substring(0, name.length() - 1) : name);
+          if (!names.add(normalized.toLowerCase(java.util.Locale.ROOT))) throw new IOException("Conflicting project filename: " + name);
+          Path file = staging.resolve(normalized);
+          if (entry.isDirectory()) { Files.createDirectories(file); continue; }
+          if (++count > 2000) throw new IOException("Archive has more than 2,000 files");
+          Files.createDirectories(file.getParent());
+          long size = 0;
+          try (OutputStream output = Files.newOutputStream(file)) {
+            int read;
+            while ((read = zip.read(buffer)) != -1) {
+              size += read;
+              total += read;
+              if (size > 128L * 1024 * 1024 || total > 256L * 1024 * 1024) throw new IOException("Project archive exceeds size limits");
+              output.write(buffer, 0, read);
+            }
+          }
         }
       }
-    }
-    return root;
+      if (count == 0) throw new IOException("Project archive is empty");
+      Path imported = !flat && tops.size() == 1 ? staging.resolve(tops.iterator().next()) : staging;
+      Path metadataFile = imported.resolve(".scratch4j/project.json");
+      if (Files.isRegularFile(metadataFile)) {
+        ProjectSettings settings;
+        try { settings = tools.jackson.databind.json.JsonMapper.builder().build().readValue(metadataFile.toFile(), ProjectSettings.class); }
+        catch (RuntimeException e) { throw new IOException("Invalid project metadata", e); }
+        if (settings == null || settings.version != 1 || settings.portableVersion != 1
+            || !java.util.List.of("standard", "nrw").contains(settings.flavour)) throw new IOException("Unsupported project metadata");
+        if ("browser".equals(settings.sourceEnvironment)) {
+          for (Path source : ScratchProject.open(imported).javaSources()) {
+            String name = imported.relativize(source).toString().replace('\\', '/');
+            if (settings.desktopFiles != null && settings.desktopFiles.contains(name)) continue;
+            Files.writeString(source, PortableProject.implicitImports(Files.readString(source), settings.flavour));
+          }
+          settings.sourceEnvironment = "studio";
+          settings.save(imported);
+        }
+      }
+      Files.move(imported, root);
+      return root;
+    } finally { if (Files.exists(staging)) PortableProject.deleteTree(staging); }
   }
 
   /** The folder macOS Finder adds to every zip it creates. */

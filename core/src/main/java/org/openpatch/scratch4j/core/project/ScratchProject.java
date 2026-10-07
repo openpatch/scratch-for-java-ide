@@ -171,7 +171,7 @@ public final class ScratchProject {
   private boolean hasMain(String className) throws IOException {
     for (Path source : javaSources()) {
       if (source.getFileName().toString().equals(className + ".java")) {
-        return Pattern.compile("\\bstatic\\s+void\\s+main\\s*\\(")
+        return Pattern.compile("\\bvoid\\s+main\\s*\\(")
             .matcher(Files.readString(source, StandardCharsets.UTF_8)).find();
       }
     }

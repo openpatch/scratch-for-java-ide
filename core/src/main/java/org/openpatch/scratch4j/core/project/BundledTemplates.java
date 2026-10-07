@@ -21,7 +21,7 @@ public final class BundledTemplates {
 
   /** One bundled project. {@code kind} is {@code tutorial} or {@code demo}. */
   public record Template(String id, String kind, String title, String startClass,
-      List<String> files) {
+      List<String> files, List<String> requiredSheets) {
     public boolean isTutorial() {
       return "tutorial".equals(kind);
     }
@@ -57,6 +57,13 @@ public final class BundledTemplates {
   public static Path create(String id, Path parentDir, String name, Path libraryJar)
       throws IOException {
     Template template = get(id);
+    if (libraryJar != null && template.requiredSheets() != null) {
+      try (var jar = new java.util.zip.ZipFile(libraryJar.toFile())) {
+        for (String sheet : template.requiredSheets()) if (jar.getEntry("images/" + sheet + ".png") == null) {
+          throw new IOException("This example needs the " + sheet + " atlas. Update the project's Scratch for Java library.");
+        }
+      }
+    }
     Path root = parentDir.resolve(name);
     if (Files.exists(root)) {
       throw new IOException("Folder already exists: " + root);
@@ -84,6 +91,14 @@ public final class BundledTemplates {
     Files.createDirectories(root.resolve("assets/sounds"));
     ProjectSettings settings = new ProjectSettings();
     settings.startStage = template.startClass();
+    try (InputStream catalog = BundledTemplates.class.getResourceAsStream("/catalogs/examples.json")) {
+      if (catalog != null) {
+        var release = JsonMapper.builder().build().readTree(catalog);
+        settings.libraryVersion = release.path("libraryVersion").asText();
+        settings.lesson = template.isTutorial() ? template.id().replaceFirst("-100$", "") : "examples";
+        settings.checkpoint = "complete";
+      }
+    }
     settings.save(root);
     return root;
   }

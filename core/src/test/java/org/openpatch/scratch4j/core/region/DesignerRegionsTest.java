@@ -125,10 +125,49 @@ class DesignerRegionsTest {
   }
 
   @Test
+  void windowsSourcesGetRegionsAndKeepTheirLineEndings() {
+    for (String source : List.of("""
+        public class Bean extends AnimatedSprite {
+          public Bean() {
+            this.addAnimation("spin", "coffee_bean_%d", 4);
+            this.setAnimationInterval(120);
+            this.setX(12);
+          }
+        }
+        """, """
+        public class World extends Stage {
+          public World() {
+            super(640, 360);
+          }
+        }
+        """, """
+        public class Game extends Window {
+          public Game() {
+            super(640, 360, "assets");
+            this.setStage(new World());
+          }
+          public static void main(String[] args) {
+            Window.useFullScreen();
+            new Game();
+          }
+        }
+        """)) {
+      String windows = source.replace("\n", "\r\n");
+      String managed = DesignerRegions.ensure(windows);
+      assertThat(managed).isEqualTo(DesignerRegions.ensure(source).replace("\n", "\r\n"));
+      assertThat(RegionParser.has(managed, source.contains("extends Window") ? "window" : "setup"))
+          .isTrue();
+      assertThat(DesignerRegions.ensure(managed)).isEqualTo(managed);
+    }
+  }
+
+  @Test
   void everyBundledTemplateGetsRegionsAndStillCompiles() throws Exception {
     Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
     for (var template : BundledTemplates.list()) {
-      Path root = BundledTemplates.create(template.id(), tmp, template.id(), jar);
+      // Region generation and Java compilation also cover examples requiring newer artwork.
+      // Runtime asset availability is checked separately by BundledTemplatesTest.
+      Path root = BundledTemplates.create(template.id(), tmp, template.id(), null);
       ScratchProject project = ScratchProject.open(root);
       for (Path source : project.javaSources()) {
         String text = Files.readString(source);

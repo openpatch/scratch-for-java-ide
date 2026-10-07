@@ -23,7 +23,12 @@ class BundledTemplatesTest {
         .containsExactly("getting-started-100", "make-it-walk-100", "catch-the-coins-100",
             "red-light-green-light-100", "guess-the-number-100", "bouncy-hedgehog-100",
             "dodge-the-rocks-100");
-    assertThat(all.stream().filter(t -> !t.isTutorial())).hasSize(21);
+    try (var in = BundledTemplates.class.getResourceAsStream("/catalogs/examples.json")) {
+      var catalog = tools.jackson.databind.json.JsonMapper.builder().build().readTree(in);
+      long demos = java.util.stream.StreamSupport.stream(catalog.path("examples").spliterator(), false)
+          .filter(entry -> entry.path("kind").asText().equals("demo")).count();
+      assertThat(all.stream().filter(t -> !t.isTutorial())).hasSize((int) demos);
+    } catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
     assertThat(all).allSatisfy(t -> assertThat(t.startClass()).isNotBlank());
   }
 
@@ -31,7 +36,19 @@ class BundledTemplatesTest {
   void everyTemplateCreatesACompilingProjectWithItsStartClass() throws Exception {
     Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
     for (BundledTemplates.Template template : BundledTemplates.list()) {
-      Path root = BundledTemplates.create(template.id(), tmp, template.id(), jar);
+      boolean available;
+      try (var archive = new java.util.zip.ZipFile(jar.toFile())) {
+        available = template.requiredSheets() == null || template.requiredSheets().stream()
+            .allMatch(sheet -> archive.getEntry("images/" + sheet + ".png") != null);
+      }
+      if (!available) {
+        org.assertj.core.api.Assertions.assertThatIOException()
+            .isThrownBy(() -> BundledTemplates.create(template.id(), tmp, template.id(), jar))
+            .withMessageContaining("Update");
+        assertThat(tmp.resolve(template.id())).doesNotExist();
+      }
+      Path root = BundledTemplates.create(template.id(), tmp, template.id(), available ? jar : null);
+      if (!available) Files.copy(jar, root.resolve("+libs").resolve(jar.getFileName()));
       ScratchProject project = ScratchProject.open(root);
       assertThat(project.startStage()).as(template.id()).isEqualTo(template.startClass());
       assertThat(root.resolve("+libs").resolve(jar.getFileName())).isRegularFile();

@@ -20,7 +20,7 @@ float offset(float blocks, vec2 uv) {
 }
 
 void main( void ) {
-	vec2 uv = vertTexCoord.st;
+  vec2 uv = vertTexCoord.st;
 
     gl_FragColor = texture2D(texture, uv);
     gl_FragColor.r = texture2D(texture, uv + vec2(offset(64.0, uv) * 0.03, 0.0)).r;

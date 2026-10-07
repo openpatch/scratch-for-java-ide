@@ -22,6 +22,26 @@ public final class BuiltinAssetIndex {
   private final List<String> sounds;
 
   private BuiltinAssetIndex() {
+    try (var in = BuiltinAssetIndex.class.getResourceAsStream("/catalogs/assets.json")) {
+      if (in != null) {
+        var catalog = tools.jackson.databind.json.JsonMapper.builder().build().readTree(in);
+        if (catalog.path("schemaVersion").asInt() != 1) throw new IllegalStateException("Unsupported asset catalog");
+        List<BuiltinImage> loaded = new ArrayList<>();
+        for (var image : catalog.path("images")) {
+          // A development catalog may describe assets newer than Studio's bundled library.
+          if (!BuiltinAssets.contains(image.path("id").asText())) continue;
+          loaded.add(new BuiltinImage(image.path("name").asText(), image.path("sheet").asText(),
+              image.path("sheetPath").asText(), image.path("x").asInt(), image.path("y").asInt(),
+              image.path("width").asInt(), image.path("height").asInt(), image.path("direction").asDouble(),
+              image.path("referenceName").asText()));
+        }
+        images = List.copyOf(loaded);
+        List<String> names = new ArrayList<>();
+        catalog.path("sounds").forEach(sound -> names.add(sound.path("id").asText()));
+        sounds = List.copyOf(names);
+        return;
+      }
+    } catch (java.io.IOException e) { throw new java.io.UncheckedIOException(e); }
     List<BuiltinImage> loaded = new ArrayList<>();
     for (BuiltinAssets.Entry e : BuiltinAssets.getEntries()) {
       loaded.add(new BuiltinImage(e.name, e.sheet, e.sheetPath, e.x, e.y,

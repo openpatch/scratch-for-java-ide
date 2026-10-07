@@ -60,6 +60,8 @@ class AssetCallsTest {
     BuiltinAssetIndex builtins = BuiltinAssetIndex.get();
     List<String> missing = new ArrayList<>();
     for (var template : BundledTemplates.list()) {
+      if (template.requiredSheets() != null && template.requiredSheets().stream()
+          .anyMatch(sheet -> builtins.images().stream().noneMatch(image -> image.sheet().equals(sheet)))) continue;
       Path root = BundledTemplates.create(template.id(), tmp, template.id(), null);
       ScratchProject project = ScratchProject.open(root);
       for (String sprite : project.spriteClasses()) {
@@ -81,6 +83,13 @@ class AssetCallsTest {
           continue; // a base class that is never made itself (Figure)
         }
         String look = SpriteLook.of(root, sprite);
+        if (look == null && !inheritsAssets && AssetCalls.of(source).stream()
+            .filter(c -> !c.method().equals("addSound"))
+            .allMatch(c -> c.args().stream().noneMatch(String.class::isInstance))) {
+          // A computed constructor argument, such as the platform's loop-selected
+          // tile, cannot be resolved without running the student's Java.
+          continue;
+        }
         String image = look == null ? null : look.replaceFirst("#.*$", "");
         boolean found = image != null && (Files.isRegularFile(root.resolve(image))
             || builtins.image(image).isPresent());
@@ -93,6 +102,15 @@ class AssetCallsTest {
     assertThat(SpriteLook.of(stress, "Knight")).isEqualTo("assets/knight/Idle (1).png");
     assertThat(SpriteLook.of(tmp.resolve("red-light-green-light-100"), "Racer"))
         .isEqualTo("bee");
+  }
+
+  @Test
+  void conditionalCostumeUsesTheKnownConstructorArgument() {
+    List<String> sources = List.of(
+        "class Ladder extends Sprite { Ladder(boolean top) { addCostume(top ? \"ladderTop\" : \"ladderMid\"); } }",
+        "class Stage { void build() { new Ladder(false); } }");
+    assertThat(SpriteLook.of(sources, "Ladder")).isEqualTo("ladderMid");
+    assertThat(SpriteLook.of(List.of(sources.getFirst()), "Ladder")).isNull();
   }
 
   @Test
