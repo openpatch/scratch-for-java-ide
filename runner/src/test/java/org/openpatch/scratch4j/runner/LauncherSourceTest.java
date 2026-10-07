@@ -55,4 +55,21 @@ class LauncherSourceTest {
     assertThat(new CompilerService().compile(List.of(file, window, sampling), List.of(),
         root.resolve("classes")).success()).isTrue();
   }
+
+  @Test
+  void launcherStartsJava25CompactSourceMain() throws Exception {
+    Path launcher = root.resolve("Scratch4JLauncher.java");
+    Path main = root.resolve("Main.java");
+    Path classes = root.resolve("classes");
+    Files.writeString(launcher, LauncherSource.generate(new ProjectSettings()));
+    Files.writeString(main, "void main() { System.out.println(\"COMPACT_STARTED\"); }\n");
+    Path jar = LibraryJarSource.allJar(root.resolve("bundled"));
+    assertThat(new CompilerService().compile(List.of(launcher, main), List.of(jar), classes).success()).isTrue();
+    Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        "-cp", classes + java.io.File.pathSeparator + jar, "Scratch4JLauncher", "Main").redirectErrorStream(true).start();
+    assertThat(process.waitFor(20, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+    assertThat(process.exitValue()).as(output).isZero();
+    assertThat(output).contains("COMPACT_STARTED");
+  }
 }

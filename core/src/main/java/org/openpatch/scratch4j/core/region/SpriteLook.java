@@ -5,6 +5,7 @@ import com.sun.source.tree.BinaryTree;
 import com.sun.source.tree.BlockTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
+import com.sun.source.tree.ConditionalExpressionTree;
 import com.sun.source.tree.ExpressionStatementTree;
 import com.sun.source.tree.ExpressionTree;
 import com.sun.source.tree.IdentifierTree;
@@ -235,6 +236,9 @@ public final class SpriteLook {
   static Object eval(ExpressionTree e, Map<String, Object> env) {
     if (e instanceof LiteralTree lit) return lit.getValue();
     if (e instanceof ParenthesizedTree p) return eval(p.getExpression(), env);
+    if (e instanceof ConditionalExpressionTree c && eval(c.getCondition(), env) instanceof Boolean condition) {
+      return eval(condition ? c.getTrueExpression() : c.getFalseExpression(), env);
+    }
     if (e instanceof IdentifierTree id) return env.get(id.getName().toString());
     if (e instanceof MemberSelectTree m && m.getExpression().toString().equals("this")) {
       return env.get(m.getIdentifier().toString());

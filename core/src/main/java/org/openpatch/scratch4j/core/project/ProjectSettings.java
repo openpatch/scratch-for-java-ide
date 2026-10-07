@@ -1,6 +1,8 @@
 package org.openpatch.scratch4j.core.project;
 
 import tools.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import org.openpatch.scratch4j.core.io.AtomicFiles;
 
 import java.io.IOException;
@@ -20,6 +22,23 @@ public final class ProjectSettings {
   private static final JsonMapper MAPPER = JsonMapper.builder().build();
 
   public int version = 1;
+  public int portableVersion = 1;
+  public String startFile = "";
+  public String libraryVersion = "";
+  public String sourceEnvironment = "studio";
+  public String lesson = "";
+  public String checkpoint = "";
+  public java.util.List<String> browserFeatures = new java.util.ArrayList<>();
+  public java.util.List<String> externalDependencies = new java.util.ArrayList<>();
+  /** Course-provided Java classes replaced by the browser's NRW library, retained as files. */
+  public java.util.List<String> desktopFiles = new java.util.ArrayList<>();
+  private final java.util.Map<String, Object> extra = new java.util.LinkedHashMap<>();
+
+  @JsonAnySetter
+  public void extra(String name, Object value) { extra.put(name, value); }
+
+  @JsonAnyGetter
+  public java.util.Map<String, Object> extra() { return extra; }
   /** Simple class name of the stage Run and Export use; empty = auto-detect. */
   public String startStage = "";
   public String flavour = LibraryFlavour.STANDARD.id();

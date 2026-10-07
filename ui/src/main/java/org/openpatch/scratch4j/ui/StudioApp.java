@@ -83,6 +83,7 @@ public class StudioApp extends javafx.application.Application {
   private final ApiIndex apiIndex = ApiIndex.load();
   private final ProjectRunner runner = new ProjectRunner();
   private final AtomicReference<RunHandle> currentRun = new AtomicReference<>();
+  private final java.util.concurrent.atomic.AtomicLong teachingRunGeneration = new java.util.concurrent.atomic.AtomicLong();
   private final AtomicReference<ScratchProject> project = new AtomicReference<>();
   private final BooleanProperty running = new SimpleBooleanProperty(false);
   private final ToggleButton debugToggle = new ToggleButton(null, Icons.of("fth-target"));
@@ -123,6 +124,7 @@ public class StudioApp extends javafx.application.Application {
   private TabPane bottomTabs;
   private Tab problemsTab;
   private Tab consoleTab;
+  private ScratchMigrationPane migrationPane;
   private Tab debuggerTab;
   private Tab searchTab;
   private SearchResultsView searchResults;
@@ -178,7 +180,10 @@ public class StudioApp extends javafx.application.Application {
       stopProgram();
     });
     stage.show();
-    openFromArguments();
+    List<String> startupArgs = getParameters().getRaw();
+    if (startupArgs.size() == 2 && startupArgs.get(0).equals("--smoke")) {
+      PackagedSmoke.start(this, stage, Path.of(startupArgs.get(1)).toAbsolutePath());
+    } else openFromArguments();
   }
 
   // --- layout --------------------------------------------------------------------
@@ -299,7 +304,9 @@ public class StudioApp extends javafx.application.Application {
             : "unpin " + owner + " " + field));
     variablesTab = new Tab(I18n.t("variables.title"), variablesView);
     variablesTab.setGraphic(Icons.of("fth-eye"));
-    bottomTabs = new TabPane(problemsTab, consoleTab, variablesTab, searchTab, debuggerTab);
+    migrationPane = new ScratchMigrationPane((file, line) -> editor.openAt(file, line), this::browse);
+    Tab migrationTab = new Tab(I18n.t("migration.title"), migrationPane);
+    bottomTabs = new TabPane(problemsTab, consoleTab, variablesTab, searchTab, debuggerTab, migrationTab);
     bottomTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
     bottomTabs.getStyleClass().add("bottom-tabs");
     bottomTabs.setMinHeight(90);
@@ -588,7 +595,8 @@ public class StudioApp extends javafx.application.Application {
         }),
         item("menu.run.step", "fth-skip-forward", new KeyCodeCombination(KeyCode.F8),
             this::stepFrame),
-        item("menu.run.check", "fth-check-circle", null, this::checkProject));
+        item("menu.run.check", "fth-check-circle", null, this::checkProject),
+        item("menu.run.tests", "fth-check-square", null, this::runTeachingTests));
 
     Menu exportMenu = new Menu(I18n.t("menu.export"));
     exportMenu.getItems().addAll(
@@ -886,6 +894,8 @@ public class StudioApp extends javafx.application.Application {
     saveAll();
     stopProgram();
     project.set(p);
+    try { apiIndex.useProject(p); palette.refresh(); }
+    catch (IOException e) { console.err(e.getMessage()); }
     Prefs.addRecentProject(p.root());
     stage.setTitle(p.name() + " — Scratch for Java Studio");
     projectTitle.setText(p.name());
@@ -943,6 +953,8 @@ public class StudioApp extends javafx.application.Application {
     updatePaletteContext();
     console.clear();
     problems.setProblems(List.of());
+    try { migrationPane.setTasks(p.root(), org.openpatch.scratch4j.core.project.ScratchMigration.load(p.root())); }
+    catch (IOException e) { migrationPane.setTasks(p.root(), List.of()); console.err(e.getMessage()); }
     setStatus(I18n.t("status.opened", p.name()));
     try {
       String start = p.firstStage();
@@ -2469,6 +2481,46 @@ public class StudioApp extends javafx.application.Application {
 
   // --- run -------------------------------------------------------------------------
 
+  private void runTeachingTests() {
+    ScratchProject p = project.get();
+    if (p == null) return;
+    saveAll();
+    stopProgram();
+    long generation = teachingRunGeneration.incrementAndGet();
+    running.set(true);
+    bottomTabs.getSelectionModel().select(consoleTab);
+    Thread.ofVirtual().start(() -> {
+      RunHandle handle = null;
+      try {
+        handle = new org.openpatch.scratch4j.runner.TeachingTestRunner().run(p, new RunListener() {
+          public void onStdout(String line) { Platform.runLater(() -> console.info(line)); }
+          public void onStderr(String line) { Platform.runLater(() -> console.err(line)); }
+        });
+        if (teachingRunGeneration.get() != generation || !currentRun.compareAndSet(null, handle)) {
+          handle.stop();
+          return;
+        }
+        if (teachingRunGeneration.get() != generation) {
+          currentRun.compareAndSet(handle, null);
+          handle.stop();
+          return;
+        }
+        int code = handle.exitFuture().get(30, java.util.concurrent.TimeUnit.SECONDS);
+        Platform.runLater(() -> {
+          if (teachingRunGeneration.get() == generation) setStatus(I18n.t("tests.result", code));
+        });
+      } catch (Exception error) {
+        if (handle != null) handle.stop();
+        Platform.runLater(() -> console.err(error.getMessage()));
+      } finally {
+        currentRun.compareAndSet(handle, null);
+        Platform.runLater(() -> {
+          if (teachingRunGeneration.get() == generation) running.set(false);
+        });
+      }
+    });
+  }
+
   private void runProgram() {
     ScratchProject p = project.get();
     if (p == null) {
@@ -2856,6 +2908,7 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void stopProgram() {
+    teachingRunGeneration.incrementAndGet();
     endDebugSession();
     closeLiveSession(liveSession);
     RunHandle handle = currentRun.getAndSet(null);
@@ -3059,7 +3112,9 @@ public class StudioApp extends javafx.application.Application {
         new SeparatorMenuItem(),
         library, new SeparatorMenuItem(),
         item("menu.project.sharezip", "fth-share-2", null, this::shareZip),
+        item("menu.project.browserzip", "fth-share-2", null, this::shareBrowserZip),
         item("menu.project.openzip", "fth-archive", null, this::openSharedZip),
+        item("menu.project.course", "fth-book-open", null, this::importCoursePack),
         new SeparatorMenuItem(),
         item("menu.project.snippet.import", "fth-clipboard", null, this::importSnippet),
         item("menu.project.snippet.export", "fth-copy", null, this::exportCompact));
@@ -3155,6 +3210,7 @@ public class StudioApp extends javafx.application.Application {
         Platform.runLater(() -> {
           fileTree.reload();
           setStatus(I18n.t("library.installed", jar.getFileName()));
+          try { apiIndex.useProject(p); palette.refresh(); } catch (IOException e) { console.err(e.getMessage()); }
           scheduleCheck();
         });
       } catch (IOException e) {
@@ -3264,6 +3320,7 @@ public class StudioApp extends javafx.application.Application {
                 Platform.runLater(() -> {
                   fileTree.reload();
                   setStatus(I18n.t("library.installed", jar.getFileName()));
+                  try { apiIndex.useProject(p); palette.refresh(); } catch (IOException e) { console.err(e.getMessage()); }
                   scheduleCheck();
                 });
               } catch (IOException e) {
@@ -3296,10 +3353,35 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
+  private void importCoursePack() {
+    javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
+    chooser.setTitle(I18n.t("menu.project.course"));
+    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Course pack ZIP", "*.zip"));
+    File archive = chooser.showOpenDialog(stage);
+    if (archive == null) return;
+    DirectoryChooser parent = new DirectoryChooser();
+    parent.setTitle(I18n.t("sb3.target"));
+    File folder = parent.showDialog(stage);
+    if (folder == null) return;
+    try {
+      var libraries = new java.util.HashMap<String, Path>();
+      for (LibraryFlavour flavour : LibraryFlavour.values()) {
+        libraries.put(flavour.id(), LibraryJarSource.jar(flavour, libraryDirFor(flavour)));
+      }
+      var imported = org.openpatch.scratch4j.export.CoursePack.importZip(archive.toPath(), folder.toPath(), libraries);
+      var names = imported.projects().stream().map(path -> imported.root().relativize(path).toString()).toList();
+      javafx.scene.control.ChoiceDialog<String> choose = new javafx.scene.control.ChoiceDialog<>(names.get(0), names);
+      choose.setTitle(I18n.t("menu.project.course"));
+      choose.setHeaderText(I18n.t("course.choose"));
+      Theme.style(choose);
+      choose.showAndWait().ifPresent(name -> openProjectAt(imported.root().resolve(name)));
+    } catch (IOException e) { alert(e.getMessage()); }
+  }
+
   private void openSharedZip() {
     javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
     chooser.setTitle(I18n.t("menu.project.openzip"));
-    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Zip", "*.zip"));
+    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Project ZIP / workspace JSON", "*.zip", "*.json"));
     File zip = chooser.showOpenDialog(stage);
     if (zip == null) return;
     javafx.stage.DirectoryChooser parent = new javafx.stage.DirectoryChooser();
@@ -3308,11 +3390,30 @@ public class StudioApp extends javafx.application.Application {
     File folder = parent.showDialog(stage);
     if (folder == null) return;
     try {
-      openProjectAt(org.openpatch.scratch4j.export.ProjectFormats.importZip(zip.toPath(),
-          folder.toPath()));
+      Path imported = zip.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".json")
+          ? org.openpatch.scratch4j.core.project.PortableProject.importWorkspace(zip.toPath(), folder.toPath())
+          : org.openpatch.scratch4j.export.ProjectFormats.importZip(zip.toPath(), folder.toPath());
+      openProjectAt(imported);
+      ScratchProject opened = project.get();
+      if (opened != null && "nrw".equals(opened.settings().flavour)
+          && !org.openpatch.scratch4j.core.project.Abiturklassen.present(opened).contains("List")) {
+        alert(I18n.t("project.transfer.nrw"));
+      }
     } catch (IOException e) {
       alert(e.getMessage());
     }
+  }
+
+  private void shareBrowserZip() {
+    ScratchProject p = project.get();
+    if (p == null) return;
+    saveAll();
+    try {
+      Path zip = org.openpatch.scratch4j.export.ProjectFormats.exportBrowserZip(p,
+          p.root().resolve("export").resolve(p.name() + "-browser.zip"));
+      fileTree.reload();
+      setStatus(I18n.t("export.done", zip));
+    } catch (IOException e) { alert(I18n.t("export.failed", e.getMessage())); }
   }
 
   /** Online IDE / docs example: paste it, get normal classes. */

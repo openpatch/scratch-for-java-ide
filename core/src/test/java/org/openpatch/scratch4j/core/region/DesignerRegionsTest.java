@@ -128,7 +128,9 @@ class DesignerRegionsTest {
   void everyBundledTemplateGetsRegionsAndStillCompiles() throws Exception {
     Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
     for (var template : BundledTemplates.list()) {
-      Path root = BundledTemplates.create(template.id(), tmp, template.id(), jar);
+      // Region generation and Java compilation also cover examples requiring newer artwork.
+      // Runtime asset availability is checked separately by BundledTemplatesTest.
+      Path root = BundledTemplates.create(template.id(), tmp, template.id(), null);
       ScratchProject project = ScratchProject.open(root);
       for (Path source : project.javaSources()) {
         String text = Files.readString(source);

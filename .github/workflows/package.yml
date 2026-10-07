@@ -42,10 +42,10 @@ jobs:
             types: msi app-image
           - name: macos-arm64
             os: macos-15
-            types: dmg
+            types: dmg app-image
           - name: macos-x64
             os: macos-15-intel
-            types: dmg
+            types: dmg app-image
     steps:
       - uses: actions/checkout@v7
 
@@ -122,16 +122,17 @@ jobs:
             & $signtool.FullName sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
           }
 
-      - name: Smoke test the packaged runtime (Linux, Xvfb)
-        if: runner.os == 'Linux'
+      - name: Start packaged Studio and run offline projects
+        shell: bash
         run: |
-          sudo apt-get install -y xvfb >/dev/null 2>&1 || true
-          scripts/package-ide.sh app-image
-          APP="target/package/Scratch for Java Studio"
-          compgen -G "$APP/lib/app/library/scratch-*-all.jar" >/dev/null
-          "$APP/lib/runtime/bin/java" --list-modules | grep -q jdk.compiler
-          test -f "$APP/lib/app/javafx-controls-25-linux.jar"
-          "$APP/lib/runtime/bin/java" -XX:+AllowEnhancedClassRedefinition -version
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get install -y xvfb libgl1-mesa-dri
+            LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio"
+          elif [ "$RUNNER_OS" = macOS ]; then
+            python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio.app"
+          else
+            python scripts/smoke-packaged.py "target/package/Scratch for Java Studio"
+          fi
 
       - uses: actions/upload-artifact@v7
         with:

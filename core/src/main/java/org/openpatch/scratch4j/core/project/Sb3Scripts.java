@@ -25,7 +25,23 @@ final class Sb3Scripts {
 
   /** What one target contributes to its class. */
   record Output(String fields, String constructor, String run, String methods, int scripts,
-      int todos, boolean needsValues) {}
+      int todos, boolean needsValues, List<Issue> issues) {}
+
+  record Issue(String id, String blockId, String opcode, String message, String lesson, String original) {
+    String marker() { return "scratch4j:migration " + id; }
+  }
+
+  private final List<Issue> issues = new ArrayList<>();
+
+  private Issue issue(String blockId, String message, String lesson) {
+    JsonNode block = blocks.path(blockId);
+    String id = java.util.UUID.nameUUIDFromBytes((blockId + "|" + message)
+        .getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+    for (Issue existing : issues) if (existing.id().equals(id)) return existing;
+    Issue issue = new Issue(id, blockId, op(block), message, lesson, block.toString());
+    issues.add(issue);
+    return issue;
+  }
 
   private enum Type { NUM, STR, BOOL, OBJ }
 
@@ -49,6 +65,12 @@ final class Sb3Scripts {
   private boolean clones;
   /** This target makes or is clones: run() then tells the original and clones apart. */
   private boolean usesClones;
+  private boolean concurrentTargets;
+
+  Sb3Scripts withConcurrentTargets(boolean concurrent) {
+    this.concurrentTargets = concurrent;
+    return this;
+  }
 
   /**
    * {@code variables} maps Scratch variable/list ids to Java names (globals
@@ -196,9 +218,30 @@ final class Sb3Scripts {
       methods.append("  }\n");
     }
     methods.append(helpers);
+    List<String> hats = new ArrayList<>();
+    for (var entry : blocks.properties()) {
+      JsonNode block = entry.getValue();
+      if (!block.path("topLevel").asBoolean(false) || block.path("shadow").asBoolean(false)
+          || op(block).equals("procedures_definition")) continue;
+      hats.add(entry.getKey());
+      if (!SUPPORTED_HATS.contains(op(block)) || (stage && op(block).equals("event_whenstageclicked"))
+          || (!clones && op(block).equals("control_start_as_clone"))) {
+        issue(entry.getKey(), "This Scratch event needs a Java implementation. Its original script is preserved.",
+            "unsupported-blocks");
+      }
+    }
+    if (hats.size() > 1 || concurrentTargets) for (String id : hats) {
+      issue(id, "Scratch scripts can overlap. Java event handlers and helper calls run in sequence; review shared state and waiting.",
+          "shared-state");
+    }
     return new Output(ownFields, constructor, run,
-        methods + (other.length() > 0 ? "\n" + other : ""), scripts, todos, needsValues);
+        methods + (other.length() > 0 ? "\n" + other : ""), scripts, todos, needsValues, List.copyOf(issues));
   }
+
+  private static final java.util.Set<String> SUPPORTED_HATS = java.util.Set.of(
+      "event_whenflagclicked", "event_whenkeypressed", "event_whenthisspriteclicked",
+      "event_whenstageclicked", "event_whenbroadcastreceived", "event_whenbackdropswitchesto",
+      "control_start_as_clone");
 
   /** Statements before a trailing forever run once; the forever body runs every frame. */
   /** Statements before a trailing forever run once; the forever body runs every frame. */
@@ -431,7 +474,13 @@ final class Sb3Scripts {
     }
     if (code == null) {
       todos++;
-      return indent + "// TODO Scratch: " + describe(b) + "\n";
+      Issue task = issue(id, "Implement this block in Java: " + describe(b), "unsupported-blocks");
+      return indent + "// " + task.marker() + "\n" + indent + "// TODO Scratch: " + describe(b) + "\n";
+    }
+    if (code.contains("this block waited;")) {
+      Issue task = issue(id, "This Scratch block waited before the next block. Continue the sequence using run() and a timer.",
+          "timing");
+      code = "// " + task.marker() + "\n" + indent + code;
     }
     return indent + code.replace("\n" + indent + "}", "\n" + indent + "}") + "\n";
   }
@@ -789,7 +838,14 @@ final class Sb3Scripts {
         break;
     }
     todos++;
-    return new Expr("0 /* TODO Scratch: " + describe(b).replace("*/", "") + " */", Type.NUM);
+    String marker = "";
+    for (var entry : blocks.properties()) if (entry.getValue().equals(b)) {
+      Issue task = issue(entry.getKey(), "This reporter was replaced with 0. Implement the original expression before using its result.",
+          "unsupported-blocks");
+      marker = task.marker() + "; ";
+      break;
+    }
+    return new Expr("0 /* " + marker + "TODO Scratch: " + describe(b).replace("*/", "") + " */", Type.NUM);
   }
 
   private Expr arithmetic(JsonNode b, String operator) {

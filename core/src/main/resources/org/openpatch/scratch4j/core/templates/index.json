@@ -10,6 +10,10 @@
       "MyStage.java",
       "README.md",
       "package.bluej"
+    ],
+    "requiredSheets": [
+      "jumper",
+      "tappy_plane"
     ]
   },
   {
@@ -23,6 +27,10 @@
       "WalkStage.java",
       "Walker.java",
       "package.bluej"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -37,6 +45,10 @@
       "Coin.java",
       "README.md",
       "package.bluej"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -51,6 +63,10 @@
       "Racer.java",
       "Referee.java",
       "package.bluej"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -63,6 +79,10 @@
       "GuessStage.java",
       "README.md",
       "package.bluej"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -81,7 +101,8 @@
       "package.bluej",
       "playground.jpg",
       "trampoline.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "dodge-the-rocks-100",
@@ -97,6 +118,10 @@
       "Rock.java",
       "TitleStage.java",
       "package.bluej"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -107,6 +132,29 @@
     "files": [
       "CatSketch.java",
       "sprites/cat.png"
+    ],
+    "requiredSheets": []
+  },
+  {
+    "id": "demo-catPlatformer",
+    "kind": "demo",
+    "title": "Cat Platformer",
+    "startClass": "CatPlatformer",
+    "files": [
+      "Bean.java",
+      "Bug.java",
+      "Cat.java",
+      "CatPlatformer.java",
+      "Goal.java",
+      "Ground.java",
+      "Heart.java",
+      "Ladder.java",
+      "Platform.java"
+    ],
+    "requiredSheets": [
+      "cat",
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -125,7 +173,8 @@
       "sprites/hour.png",
       "sprites/minute.png",
       "sprites/second.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-coinCollector",
@@ -137,6 +186,10 @@
       "CoinCollector.java",
       "Ground.java",
       "Player.java"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -157,7 +210,8 @@
       "assets/donut.png",
       "assets/donut.svg",
       "assets/grid.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-glide",
@@ -166,6 +220,10 @@
     "startClass": "Glide",
     "files": [
       "Glide.java"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -179,7 +237,8 @@
       "backdrops/chalk_board.jpg",
       "sounds/bensound-enigmatic.ogg",
       "sprites/pen.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-quiz",
@@ -188,6 +247,10 @@
     "startClass": "Quiz",
     "files": [
       "Quiz.java"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   },
   {
@@ -197,7 +260,8 @@
     "startClass": "RainbowVine",
     "files": [
       "RainbowVine.java"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-randomDot",
@@ -206,7 +270,8 @@
     "startClass": "RandomDot",
     "files": [
       "RandomDot.java"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-robot",
@@ -217,7 +282,8 @@
       "RobotSprite.java",
       "RobotStage.java",
       "sprites/robot.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-saving",
@@ -227,7 +293,8 @@
     "files": [
       "ExampleSettings.java",
       "Saving.java"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-sensing",
@@ -238,7 +305,8 @@
       "Sensing.java",
       "sprites/hero.png",
       "sprites/hero2.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-shader",
@@ -261,7 +329,8 @@
       "neon.frag",
       "pixel.frag",
       "pixelate.frag"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-shakespeare",
@@ -273,7 +342,8 @@
       "Population.java",
       "Shakespeare.java",
       "assets/Singkong.ttf"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-smartRocket",
@@ -289,7 +359,8 @@
       "Ziel.java",
       "assets/rocket.png",
       "assets/target.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-stressTest",
@@ -394,7 +465,8 @@
       "assets/ninja/Walk (8).png",
       "assets/ninja/Walk (9).png",
       "assets/outback.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-tiled",
@@ -427,6 +499,9 @@
       "assets/TilesetFloor.png",
       "assets/TilesetWater.png",
       "save.json"
+    ],
+    "requiredSheets": [
+      "platformer"
     ]
   },
   {
@@ -436,7 +511,8 @@
     "startClass": "TimedDot",
     "files": [
       "TimedDot.java"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-timer",
@@ -445,7 +521,8 @@
     "startClass": "TimerStage",
     "files": [
       "TimerStage.java"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-ui",
@@ -458,7 +535,8 @@
       "bar_round_gloss_large_gray.png",
       "crosshair_color_c.png",
       "metalPanel_greenCorner.png"
-    ]
+    ],
+    "requiredSheets": []
   },
   {
     "id": "demo-volume",
@@ -467,6 +545,10 @@
     "startClass": "Volume",
     "files": [
       "Volume.java"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
     ]
   }
 ]

@@ -8,24 +8,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Contract test: the IDE reads the library's internal asset registries
- * (pinned scratch 5.7.0). If the library moves or renames them, this fails and
+ * (pinned scratch 5.8.0). If the library moves or renames them, this fails and
  * the pin must be revisited.
  */
 class BuiltinAssetIndexContractTest {
 
   private final BuiltinAssetIndex index = BuiltinAssetIndex.get();
 
+  @Test void sharedCatalogCoordinatesAndAliasesMatchThePinnedRuntimeRegistry() {
+    for (var entry : org.openpatch.scratch.internal.BuiltinAssets.getEntries()) {
+      assertThat(index.image(entry.sheet + "/" + entry.name)).hasValueSatisfying(image -> {
+        assertThat(image.x()).isEqualTo(entry.x);
+        assertThat(image.y()).isEqualTo(entry.y);
+        assertThat(image.width()).isEqualTo(entry.width);
+        assertThat(image.height()).isEqualTo(entry.height);
+        assertThat(image.direction()).isEqualTo(entry.direction);
+        assertThat(image.referenceName()).isEqualTo(org.openpatch.scratch.internal.BuiltinAssets.getReferenceName(entry));
+      });
+    }
+    assertThat(index.sounds()).containsExactlyElementsOf(org.openpatch.scratch.internal.BuiltinSounds.getNames());
+  }
+
   @Test
-  void shipsTheFourKenneySheets() {
+  void shipsTheKenneyAndCatSheets() {
     assertThat(index.images().stream().map(BuiltinImage::sheet).distinct().toList())
-        .containsExactlyInAnyOrder("platformer", "jumper", "space_shooter", "tappy_plane");
+        .containsExactlyInAnyOrder("platformer", "jumper", "space_shooter", "tappy_plane", "cat");
   }
 
   @Test
   void hasTheDocumentedBuiltinImageAndSoundCounts() {
-    // 841 sprite entries on 4 sheets and 266 sounds, verified against the jar.
-    assertThat(index.images()).hasSize(841);
-    assertThat(index.imageNames()).hasSize(841);
+    // 922 sprite entries on 5 sheets and 266 sounds, verified against the jar.
+    assertThat(index.images()).hasSize(922);
+    assertThat(index.imageNames()).hasSize(922);
     assertThat(index.sounds().stream().distinct().count()).isEqualTo(266);
   }
 

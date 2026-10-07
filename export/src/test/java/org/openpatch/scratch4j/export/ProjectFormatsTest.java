@@ -98,4 +98,55 @@ class ProjectFormatsTest {
     assertThat(unpacked.resolve("MyStage.java")).hasContent("class X {}");
     assertThat(unpacked.resolve("assets/sounds/beep.wav")).hasContent("beep");
   }
+
+  @Test
+  void browserZipPreservesSourceAssetsAndMetadataWithoutBundledJars() throws Exception {
+    ScratchProject project = project();
+    project.settings().lesson = "roundtrip";
+    Files.write(project.root().resolve("assets/image.png"), new byte[] {0, 1, 2, (byte)255});
+    Files.writeString(project.root().resolve("identity.frag"), "shader source");
+    Path archive = ProjectFormats.exportBrowserZip(project, tmp.resolve("out/browser.zip"));
+    assertThat(Zip.readEntry(archive, "game/MyStage.java")).contains("class MyStage");
+    assertThat(Zip.readEntry(archive, "game/identity.frag")).isEqualTo("shader source");
+    assertThat(Zip.readEntry(archive, "game/.scratch4j/project.json")).contains("roundtrip", "libraryVersion", "startFile");
+    try (var zip = new java.util.zip.ZipFile(archive.toFile())) {
+      assertThat(zip.stream().map(java.util.zip.ZipEntry::getName).toList()).noneMatch(name -> name.endsWith(".jar"));
+    }
+    Path imported = ProjectFormats.importZip(archive, tmp.resolve("imported"));
+    assertThat(Files.readAllBytes(imported.resolve("assets/image.png"))).containsExactly(0, 1, 2, (byte)255);
+    assertThat(ScratchProject.open(imported).settings().lesson).isEqualTo("roundtrip");
+  }
+
+  @Test
+  void browserImportKeepsCourseProvidedDesktopSourcesUnchanged() throws Exception {
+    Path archive = tmp.resolve("course.zip");
+    String list = "/// School-provided course class\npublic class List<T> {}\n";
+    try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
+      var files = java.util.Map.of("List.java", list, "Main.java", "void main() {}\n",
+          ".scratch4j/project.json", "{\"version\":1,\"sourceEnvironment\":\"browser\",\"flavour\":\"nrw\",\"desktopFiles\":[\"List.java\"]}");
+      for (var entry : files.entrySet()) {
+        zip.putNextEntry(new java.util.zip.ZipEntry(entry.getKey()));
+        zip.write(entry.getValue().getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+      }
+    }
+    Path imported = ProjectFormats.importZip(archive, tmp.resolve("import"));
+    assertThat(Files.readString(imported.resolve("List.java"))).isEqualTo(list);
+    assertThat(Files.readString(imported.resolve("Main.java"))).contains("import org.openpatch.scratch.*;");
+  }
+
+  @Test
+  void unsafeOrBrokenArchivesNeverPublishPartialProjects() throws Exception {
+    Path archive = tmp.resolve("bad.zip");
+    try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
+      zip.putNextEntry(new java.util.zip.ZipEntry("game/Main.java"));
+      zip.write("class Main {}".getBytes(StandardCharsets.UTF_8));
+      zip.closeEntry();
+      zip.putNextEntry(new java.util.zip.ZipEntry("../escape.java"));
+      zip.write("bad".getBytes(StandardCharsets.UTF_8));
+    }
+    org.assertj.core.api.Assertions.assertThatIOException().isThrownBy(() -> ProjectFormats.importZip(archive, tmp.resolve("imported")));
+    assertThat(tmp.resolve("escape.java")).doesNotExist();
+    assertThat(tmp.resolve("imported/game")).doesNotExist();
+  }
 }

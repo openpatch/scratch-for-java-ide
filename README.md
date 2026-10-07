@@ -4,7 +4,7 @@ Scratch for Java Studio is a desktop IDE for students moving from Scratch to
 Java. It builds projects with [Scratch for Java](https://github.com/openpatch/scratch-for-java)
 and keeps them as ordinary Java source files that also work in BlueJ and VS Code.
 
-**Status: 0.1.0-alpha.6 candidate.** The IDE and its
+**Status: 0.1.0-alpha.7.** The IDE and its
 project format may change while we test it with students and teachers.
 
 ![Scratch for Java Studio with the code editor and the visual stage designer side by side](docs/screenshot.png)
@@ -68,3 +68,30 @@ The IDE is [MIT licensed](LICENSE). Bundled Scratch for Java artwork and sounds
 come from [Kenney](https://kenney.nl) under CC0. OGG and MP3 support uses
 replaceable LGPL libraries; RichTextFX, AtlantaFX, Ikonli, and Feather icons
 retain their respective licenses.
+
+
+## Continue between browser and desktop
+
+Open a browser workspace JSON or portable project ZIP through the Project menu.
+Export a Browser project ZIP to continue in an embedded IDE revision with ZIP
+support. Code, assets, flavor and lesson identity travel with the project. NRW
+course classes remain ordinary source on desktop and are retained in the browser.
+
+Use Project > Import course pack for the offline tutorial/Spielwerkstatt pack.
+Run > Run behavior checks executes transferred browser test classes with bundled
+JUnit, leaving their source unchanged. Scratch imports have a Scratch migration
+tab linking timing/unsupported-block tasks to the original block and Java source;
+the original .sb3 remains in the project.
+
+Maintainer checks after `mvn verify`:
+
+```sh
+python3 scripts/check-course-pack.py --library /path/to/scratch-for-java \
+  --curriculum /path/to/hyperbook-informatik
+python3 scripts/sync-templates.py --artifact /path/to/scratch-catalogs.zip --check
+```
+
+The course check imports and compiles all 18 projects and runs the score tests.
+Use `--libraries /path/to/bundled/library` for a fully offline check. The native
+packaging workflow runs `scripts/smoke-packaged.py` on each supported OS. Local
+Linux validation uses Xvfb when no display is available.

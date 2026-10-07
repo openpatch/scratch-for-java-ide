@@ -35,8 +35,11 @@ mvn ${MVN_ARGS:-} --batch-mode --no-transfer-progress -DskipTests package
 
 # the library jar students' projects carry in +libs
 ALL_JAR="${2:-${SCRATCH4J_ALL_JAR:-}}"
+V="$(grep -o 'SCRATCH_VERSION = "[^" ]*"' runner/src/main/java/org/openpatch/scratch4j/runner/LibraryJarSource.java | cut -d'"' -f2)"
 if [ -z "$ALL_JAR" ]; then
-  ALL_JAR="$(ls runner/target/bundled/scratch-*-all.jar 2>/dev/null | head -1 || true)"
+  if [ -f "runner/target/bundled/scratch-$V-all.jar" ]; then
+    ALL_JAR="runner/target/bundled/scratch-$V-all.jar"
+  fi
 fi
 if [ -z "$ALL_JAR" ]; then
   V="$(grep -o 'SCRATCH_VERSION = "[^"]*"' runner/src/main/java/org/openpatch/scratch4j/runner/LibraryJarSource.java | cut -d'"' -f2)"
@@ -55,7 +58,7 @@ if [ ! -f "$NRW_JAR" ]; then
   NRW_JAR="$OUT/$(basename "$ALL_JAR" -all.jar)-nrw-all.jar"
   V="$(basename "$ALL_JAR" -all.jar | sed 's/^scratch-//')"
   curl -fsSL -o "$NRW_JAR" "https://github.com/openpatch/scratch-for-java/releases/download/v$V/scratch-$V-nrw-all.jar" \
-    || { echo "warning: no NRW jar bundled (offline?)"; rm -f "$NRW_JAR"; }
+    || { echo "error: packaging requires the NRW jar; provide SCRATCH4J_NRW_ALL_JAR for offline packaging" >&2; exit 1; }
 fi
 [ -f "$NRW_JAR" ] && cp "$NRW_JAR" "$INPUT/library/"
 MAIN_JAR="app-$MAVEN_VERSION.jar"
