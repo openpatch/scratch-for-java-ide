@@ -196,7 +196,7 @@ public final class Sb3Importer {
         };
         if (style != null) {
           setup.append(indent).append(field)
-              .append(".setRotationStyle(org.openpatch.scratch.RotationStyle.").append(style)
+              .append(".setRotationStyle(RotationStyle.").append(style)
               .append(");\n");
         }
         double size = sprite.path("size").asDouble(100) / resolution;

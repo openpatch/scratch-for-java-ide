@@ -128,7 +128,7 @@ public final class WindowDocument {
     }
     if (settings.pixelArt()) {
       optionsBody.append(options.indent())
-          .append("Window.useTextureSampling(org.openpatch.scratch.TextureSampling.POINT);\n");
+          .append("Window.useTextureSampling(TextureSampling.POINT);\n");
     }
     if (settings.splashLogo() != null && !settings.splashLogo().isBlank()) {
       optionsBody.append(options.indent()).append("Window.useSplashLogo(\"")
@@ -141,6 +141,10 @@ public final class WindowDocument {
       String rest = size.group(3) == null ? "" : size.group(3);
       result = result.substring(0, size.start()) + "super(" + settings.width() + ", "
           + settings.height() + rest + ")" + result.substring(size.end());
+    }
+    if (settings.pixelArt()) {
+      result = org.openpatch.scratch4j.core.project.JavaImports.ensure(result,
+          "org.openpatch.scratch.TextureSampling");
     }
     return result;
   }

@@ -672,8 +672,7 @@ final class StageDesignerView extends BorderPane {
     rotationStyleBox.setMaxWidth(Double.MAX_VALUE);
     rotationStyleBox.setOnAction(e -> {
       if (!inspectorUpdating && selected != null && rotationStyleBox.getValue() != null) {
-        selected.rotationStyle("org.openpatch.scratch.RotationStyle."
-            + rotationStyleBox.getValue().name());
+        selected.rotationStyle("RotationStyle." + rotationStyleBox.getValue().name());
         writeRegions();
       }
     });

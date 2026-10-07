@@ -570,6 +570,20 @@ final class CodeEditor extends BorderPane {
     area.requestFocus();
   }
 
+  /**
+   * Adds {@code import} lines for these classes unless the file already has
+   * them (or a wildcard import of their package); the caret stays in place.
+   */
+  void addImports(List<String> qualifiedNames) {
+    for (String name : qualifiedNames) {
+      var insertion = org.openpatch.scratch4j.core.project.JavaImports.insertion(
+          area.getText(), name);
+      if (insertion != null) {
+        area.insertText(insertion.offset(), insertion.text());
+      }
+    }
+  }
+
   private static String indentOf(String line) {
     int i = 0;
     while (i < line.length() && (line.charAt(i) == ' ' || line.charAt(i) == '\t')) {

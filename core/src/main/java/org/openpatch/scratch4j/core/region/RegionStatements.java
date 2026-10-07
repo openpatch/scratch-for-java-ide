@@ -251,8 +251,10 @@ public final class RegionStatements {
             .append(number(ref.direction())).append(");\n");
       }
       if (ref.rotationStyle() != null) {
+        // older designer versions wrote org.openpatch.scratch.RotationStyle...
         sb.append(indent).append(ref.name()).append(".setRotationStyle(")
-            .append(ref.rotationStyle()).append(");\n");
+            .append(ref.rotationStyle().replaceFirst("^org\\.openpatch\\.scratch\\.", ""))
+            .append(");\n");
       }
       if (ref.hasSize()) {
         sb.append(indent).append(ref.name()).append(".setSize(")

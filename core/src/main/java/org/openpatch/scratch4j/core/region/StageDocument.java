@@ -222,6 +222,9 @@ public final class StageDocument {
     if (styles) {
       result = ensureImport(result, "TextStyle");
     }
+    if (updated.sprites().stream().anyMatch(r -> r.rotationStyle() != null)) {
+      result = ensureImport(result, "RotationStyle");
+    }
     return result;
   }
 
@@ -231,18 +234,8 @@ public final class StageDocument {
    * already imported. Generated {@code Text} fields need it to compile.
    */
   static String ensureImport(String source, String simpleName) {
-    String qualified = "org.openpatch.scratch." + simpleName;
-    if (Pattern.compile("import\\s+" + Pattern.quote(qualified) + "\\s*;").matcher(source).find()
-        || Pattern.compile("import\\s+org\\.openpatch\\.scratch\\.\\*\\s*;").matcher(source).find()) {
-      return source;
-    }
-    Matcher imports = Pattern.compile("(?m)^import\\s+[^;]+;[ \\t]*\\n").matcher(source);
-    int at = 0;
-    while (imports.find()) {
-      at = imports.end();
-    }
-    return source.substring(0, at) + "import " + qualified + ";\n"
-        + (at == 0 ? "\n" : "") + source.substring(at);
+    return org.openpatch.scratch4j.core.project.JavaImports.ensure(source,
+        "org.openpatch.scratch." + simpleName);
   }
 
   /** Convenience: write(this model()). */

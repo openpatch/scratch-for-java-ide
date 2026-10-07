@@ -905,7 +905,7 @@ public class StudioApp extends javafx.application.Application {
       if (target == null) {
         setStatus(I18n.t("stages.switch.open.code"));
       } else {
-        target.insertBlock(snippet);
+        insertWithImports(target, snippet);
       }
     });
     selector.setOnDuplicate((oldName, newName) -> {
@@ -3519,9 +3519,36 @@ public class StudioApp extends javafx.application.Application {
   private void insertFromPalette(ApiMethod method) {
     CodeEditor active = editor.activeEditor();
     if (active != null) {
-      active.insertBlock(BlockPalette.snippet(method));
+      insertWithImports(active, BlockPalette.snippet(method));
     } else {
       setStatus(I18n.t("palette.open.editor.first"));
+    }
+  }
+
+  /** The project's library classes by simple name, for imports (read once per project). */
+  private org.openpatch.scratch4j.core.project.JavaImports.Library importLibrary;
+  private List<Path> importLibraryJars;
+
+  /**
+   * Inserts code and the imports its library classes need ({@code Window},
+   * {@code KeyCode}, ...), so it compiles without fully qualified names.
+   */
+  private void insertWithImports(CodeEditor target, String snippet) {
+    target.insertBlock(snippet);
+    ScratchProject p = project.get();
+    if (p == null) return;
+    try {
+      List<Path> jars = p.libs();
+      if (importLibrary == null || !jars.equals(importLibraryJars)) {
+        importLibrary = new org.openpatch.scratch4j.core.project.JavaImports.Library(jars);
+        importLibraryJars = jars;
+      }
+      List<String> own = p.javaSources().stream()
+          .map(f -> f.getFileName().toString().replaceFirst("\\.java$", "")).toList();
+      target.addImports(org.openpatch.scratch4j.core.project.JavaImports.neededBy(
+          snippet, importLibrary, own));
+    } catch (IOException e) {
+      // no imports: javac's friendly message names the missing one
     }
   }
 

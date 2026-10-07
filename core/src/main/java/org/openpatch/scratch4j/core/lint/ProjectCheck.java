@@ -69,7 +69,7 @@ public final class ProjectCheck {
 
       Set<String> knownNames = null;
       FriendlyErrors friendly = new FriendlyErrors(language);
-      Imports imports = new Imports(project.libs());
+      var library = new org.openpatch.scratch4j.core.project.JavaImports.Library(project.libs());
       List<String> apiNames = result.errors().isEmpty() ? List.of()
           : ApiIndex.load().methodNames();
       java.util.Map<Path, List<String>> lines = new java.util.HashMap<>();
@@ -91,7 +91,10 @@ public final class ProjectCheck {
         String className = file == null ? null
             : file.getFileName().toString().replaceFirst("\\.java$", "");
         var described = friendly.describe(d, new FriendlyErrors.Context(source, className,
-            imports::lineFor, apiNames));
+            name -> {
+              String qualified = library.qualified(name);
+              return qualified == null ? null : "import " + qualified + ";";
+            }, apiNames));
         for (String s : described.suggestions()) {
           if (!suggestions.contains(s)) suggestions.add(s);
         }
@@ -186,49 +189,6 @@ public final class ProjectCheck {
       return Files.readAllLines(file, StandardCharsets.UTF_8);
     } catch (IOException e) {
       return List.of();
-    }
-  }
-
-  /**
-   * Import lines for classes a student uses without importing them: the
-   * top-level classes of the project's libraries and a few of the JDK.
-   */
-  static final class Imports {
-    private static final java.util.Map<String, String> JDK = java.util.Map.of(
-        "ArrayList", "java.util.ArrayList", "List", "java.util.List",
-        "HashMap", "java.util.HashMap", "Map", "java.util.Map",
-        "Scanner", "java.util.Scanner", "Arrays", "java.util.Arrays",
-        "Collections", "java.util.Collections", "HashSet", "java.util.HashSet",
-        "Set", "java.util.Set");
-    private final List<Path> jars;
-    private java.util.Map<String, String> library;
-
-    Imports(List<Path> jars) {
-      this.jars = jars;
-    }
-
-    /** {@code import a.b.Name;} or null when no library has a class of this name. */
-    String lineFor(String simpleName) {
-      if (library == null) {
-        library = new java.util.HashMap<>();
-        for (Path jar : jars) {
-          if (!jar.toString().endsWith(".jar") || !Files.isRegularFile(jar)) continue;
-          try (var zip = new java.util.zip.ZipFile(jar.toFile())) {
-            zip.stream().map(java.util.zip.ZipEntry::getName)
-                .filter(n -> n.endsWith(".class") && !n.contains("$")
-                    && !n.startsWith("META-INF/") && n.contains("/"))
-                .forEach(n -> {
-                  String name = n.substring(0, n.length() - ".class".length()).replace('/', '.');
-                  // first one wins: two classes of one name are ambiguous anyway
-                  library.putIfAbsent(name.substring(name.lastIndexOf('.') + 1), name);
-                });
-          } catch (IOException e) {
-            // an unreadable jar gives no import hints
-          }
-        }
-      }
-      String qualified = library.getOrDefault(simpleName, JDK.get(simpleName));
-      return qualified == null ? null : "import " + qualified + ";";
     }
   }
 

@@ -241,10 +241,10 @@ final class StageSelectorView extends BorderPane {
           I18n.t("stages.switch.insert"), Icons.of("fth-arrow-right-circle"));
       MenuItem immediate = new MenuItem(I18n.t("stages.switch.now"));
       immediate.setOnAction(e -> onInsertSwitch.accept(
-          "org.openpatch.scratch.Window.getInstance().setStage(new " + name + "());\n"));
+          "Window.getInstance().setStage(new " + name + "());\n"));
       MenuItem transition = new MenuItem(I18n.t("stages.switch.transition"));
       transition.setOnAction(e -> onInsertSwitch.accept(
-          "org.openpatch.scratch.Window.getInstance().transitionToStage(new "
+          "Window.getInstance().transitionToStage(new "
               + name + "(), 500);\n"));
       switchMenu.getItems().addAll(immediate, transition);
       setContextMenu(new ContextMenu(run, design, code, start,

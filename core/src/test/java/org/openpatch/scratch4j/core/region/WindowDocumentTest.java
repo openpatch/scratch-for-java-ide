@@ -16,7 +16,8 @@ class WindowDocumentTest {
         .contains("this.setStage(new Level1());")
         .contains("this.setDebug(true);")
         .contains("Window.useFullScreen();")
-        .contains("Window.useTextureSampling(org.openpatch.scratch.TextureSampling.POINT);")
+        .contains("Window.useTextureSampling(TextureSampling.POINT);")
+        .contains("import org.openpatch.scratch.TextureSampling;\n")
         .contains("Window.useSplashLogo(\"assets/images/logo.png\");");
     assertThat(WindowDocument.isManaged(source)).isTrue();
     assertThat(WindowDocument.read(source)).isEqualTo(settings);

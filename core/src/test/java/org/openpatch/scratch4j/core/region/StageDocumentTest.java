@@ -79,13 +79,35 @@ class StageDocumentTest {
   void spriteRotationStyleAndCurrentCostumeRoundTrip() {
     StageDocument doc = StageDocument.read(PLAN_SAMPLE);
     SpriteRef player = doc.model().sprites().byName("player");
-    player.rotationStyle("org.openpatch.scratch.RotationStyle.LEFT_RIGHT");
+    player.rotationStyle("RotationStyle.LEFT_RIGHT");
     player.currentCostume("player_walk");
 
     String source = doc.write();
-    assertThat(source).contains("player.setRotationStyle(org.openpatch.scratch.RotationStyle.LEFT_RIGHT);")
+    // a simple name and an import, like a student would write it
+    assertThat(source).contains("player.setRotationStyle(RotationStyle.LEFT_RIGHT);")
+        .contains("import org.openpatch.scratch.RotationStyle;\n")
+        .doesNotContain("org.openpatch.scratch.RotationStyle.")
         .contains("player.switchCostume(\"player_walk\");");
     assertThat(StageDocument.read(source).model()).isEqualTo(doc.model());
+    assertThat(StageDocument.read(source).write()).isEqualTo(source);
+  }
+
+  @Test
+  void aQualifiedRotationStyleFromOlderVersionsIsWrittenShort() {
+    StageDocument doc = StageDocument.read(PLAN_SAMPLE);
+    doc.model().sprites().byName("player")
+        .rotationStyle("org.openpatch.scratch.RotationStyle.DONT");
+    String source = doc.write();
+    assertThat(source).contains("player.setRotationStyle(RotationStyle.DONT);")
+        .doesNotContain("org.openpatch.scratch.RotationStyle.DONT");
+  }
+
+  @Test
+  void aWildcardImportIsEnough() {
+    String sample = "import org.openpatch.scratch.*;\n\n" + PLAN_SAMPLE;
+    StageDocument doc = StageDocument.read(sample);
+    doc.model().sprites().byName("player").rotationStyle("RotationStyle.LEFT_RIGHT");
+    assertThat(doc.write()).doesNotContain("import org.openpatch.scratch.RotationStyle;");
   }
 
   @Test
