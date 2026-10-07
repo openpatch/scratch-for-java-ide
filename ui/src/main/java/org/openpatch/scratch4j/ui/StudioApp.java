@@ -154,14 +154,21 @@ public class StudioApp extends javafx.application.Application {
     this.stage = stage;
     I18n.set(Prefs.language());
     buildUi();
-    scene = new Scene(root, 1360, 840);
+    // Sizes are in logical pixels: with display scaling (150% on a 1080p screen
+    // leaves about 1280x690) a fixed size would push the window off the screen.
+    javafx.geometry.Rectangle2D screen = javafx.stage.Screen.getPrimary().getVisualBounds();
+    double frame = 40; // title bar and borders, which the scene size leaves out
+    double width = Math.min(1360, screen.getWidth() - frame);
+    double height = Math.min(840, screen.getHeight() - frame);
+    scene = new Scene(root, width, height);
     Theme.apply(scene);
     checkDelay.setOnFinished(e -> checkProject());
     stage.setTitle("Scratch for Java Studio");
     stage.getIcons().add(Branding.icon());
     stage.setScene(scene);
-    stage.setMinWidth(900);
-    stage.setMinHeight(600);
+    stage.setMinWidth(Math.min(900, screen.getWidth()));
+    stage.setMinHeight(Math.min(600, screen.getHeight()));
+    if (width < 1360 || height < 840) stage.setMaximized(true);
     stage.setOnCloseRequest(e -> {
       if (editor != null && !editor.confirmUnsavedHitboxes()) {
         e.consume();

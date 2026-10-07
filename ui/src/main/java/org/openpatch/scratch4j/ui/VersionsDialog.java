@@ -194,9 +194,12 @@ final class VersionsDialog {
     SplitPane split = new SplitPane(list, right);
     split.setDividerPositions(0.3);
     BorderPane content = new BorderPane(split);
-    content.setPrefSize(940, 580);
+    javafx.geometry.Rectangle2D screen = javafx.stage.Screen.getPrimary().getVisualBounds();
+    double width = Math.min(980, screen.getWidth() - 40);
+    double height = Math.min(680, screen.getHeight() - 60);
+    content.setPrefSize(width - 40, height - 100);
     dialog.getDialogPane().setContent(content);
-    dialog.getDialogPane().setPrefSize(980, 680);
+    dialog.getDialogPane().setPrefSize(width, height);
     if (!versions.isEmpty()) list.getSelectionModel().selectFirst();
     dialog.setResizable(true);
     return dialog;
