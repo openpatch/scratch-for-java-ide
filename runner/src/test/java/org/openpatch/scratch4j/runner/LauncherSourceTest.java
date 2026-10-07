@@ -57,6 +57,50 @@ class LauncherSourceTest {
   }
 
   @Test
+  void controlledSmokeCountdownWaitsForTheFirstFrame() throws Exception {
+    Path launcher = root.resolve("Scratch4JLauncher.java");
+    Path main = root.resolve("Delayed.java");
+    Path window = root.resolve("org/openpatch/scratch/Window.java");
+    Path classes = root.resolve("classes");
+    Files.createDirectories(window.getParent());
+    Files.writeString(launcher, LauncherSource.generate());
+    Files.writeString(main, """
+        public class Delayed {
+          public static void main(String[] args) throws Exception {
+            Thread.sleep(2000);
+            System.out.println("FIRST_FRAME");
+            Scratch4JLauncher.IdeControl.frames = 1;
+            Thread.sleep(10000);
+          }
+        }
+        """);
+    Files.writeString(window, """
+        package org.openpatch.scratch;
+        public class Window {
+          public static Window getInstance() { return new Window(); }
+          public void setDebug(boolean value) {}
+          public Stage getStage() { return null; }
+          public void exit() { System.out.println("SMOKE_EXIT"); System.exit(0); }
+        }
+        """);
+    Path jar = LibraryJarSource.allJar(root.resolve("bundled"));
+    assertThat(new CompilerService().compile(List.of(launcher, main, window), List.of(jar), classes)
+        .errors()).isEmpty();
+    Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        "-Dscratch4j.ide.control=true", "-Dscratch4j.ide.exitAfter=1", "-cp",
+        classes + java.io.File.pathSeparator + jar, "Scratch4JLauncher", "Delayed")
+        .redirectErrorStream(true).start();
+    try {
+      assertThat(process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+      assertThat(process.exitValue()).as(output).isZero();
+      assertThat(output).contains("FIRST_FRAME", "SMOKE_EXIT");
+    } finally {
+      process.destroyForcibly();
+    }
+  }
+
+  @Test
   void launcherStartsJava25CompactSourceMain() throws Exception {
     Path launcher = root.resolve("Scratch4JLauncher.java");
     Path main = root.resolve("Main.java");

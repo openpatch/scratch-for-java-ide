@@ -8,7 +8,8 @@ import org.openpatch.scratch4j.core.project.ProjectSettings;
  * {@code main} when it has one, otherwise instantiates it (the first
  * {@code Stage} creates the library's singleton {@code Window}), and
  * implements the smoke-test switch {@code -Dscratch4j.ide.exitAfter=N}, which
- * closes the window after N seconds so CI can run programs headlessly.
+ * closes the window after N seconds so CI can run programs headlessly. With
+ * the control channel enabled, that countdown starts after the first frame.
  *
  * <p>The class name is fixed so re-running does not litter the build folder;
  * it lives in the default package like the student's classes.
@@ -45,6 +46,11 @@ public final class LauncherSource {
             if (exitAfter > 0) {
               Thread hook = new Thread(() -> {
                 try {
+                  // Native graphics startup can take longer than the smoke duration.
+                  // Give controlled runs their full duration after rendering starts.
+                  if (Boolean.getBoolean("scratch4j.ide.control")) {
+                    while (IdeControl.frames < 1) Thread.sleep(25);
+                  }
                   Thread.sleep(exitAfter * 1000L);
                   Window.getInstance().exit();
                 } catch (InterruptedException e) {
