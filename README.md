@@ -4,7 +4,7 @@ Scratch for Java Studio is a desktop IDE for students moving from Scratch to
 Java. It builds projects with [Scratch for Java](https://github.com/openpatch/scratch-for-java)
 and keeps them as ordinary Java source files that also work in BlueJ and VS Code.
 
-**Status: 0.1.0-alpha.7.** The IDE and its
+**Status: 0.1.0-alpha.8.** The IDE and its
 project format may change while we test it with students and teachers.
 
 ![Scratch for Java Studio with the code editor and the visual stage designer side by side](docs/screenshot.png)
