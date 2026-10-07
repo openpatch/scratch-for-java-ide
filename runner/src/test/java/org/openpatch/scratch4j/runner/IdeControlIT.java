@@ -40,8 +40,13 @@ class IdeControlIT {
     return LibraryJarSource.allJar(Path.of(System.getProperty("user.dir"), "target", "bundled"));
   }
 
+  /** The library pauses and slows down itself (5.7.0 on), so its window keeps drawing. */
   private static boolean libraryGameClock() {
-    return System.getProperty("scratch4j.testLibraryJar") != null;
+    try (var zip = new java.util.zip.ZipFile(allJar().toFile())) {
+      return zip.getEntry("org/openpatch/scratch/internal/GameClock.class") != null;
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   private static void waitFor(java.util.function.BooleanSupplier condition, long millis)

@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Contract test: the IDE reads the library's internal asset registries
- * (pinned scratch 5.6.0). If the library moves or renames them, this fails and
+ * (pinned scratch 5.7.0). If the library moves or renames them, this fails and
  * the pin must be revisited.
  */
 class BuiltinAssetIndexContractTest {

@@ -13,9 +13,9 @@ class ApiIndexTest {
   @Test
   void bundlesTheWholePublicApiWithAllScratchblocks() {
     assertThat(index.methods().size()).isGreaterThan(300);
-    // 141 @scratchblock tags exist in the library sources - all must be indexed
+    // 146 @scratchblock tags exist in the library sources - all must be indexed
     assertThat(index.methods().stream().filter(m -> m.scratchblock() != null))
-        .hasSize(141);
+        .hasSize(146);
   }
 
   @Test

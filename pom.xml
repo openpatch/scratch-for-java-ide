@@ -25,7 +25,7 @@
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <scratch.version>5.6.0</scratch.version>
+    <scratch.version>5.7.0</scratch.version>
     <javafx.version>25</javafx.version>
     <junit.version>5.11.4</junit.version>
     <assertj.version>3.27.3</assertj.version>

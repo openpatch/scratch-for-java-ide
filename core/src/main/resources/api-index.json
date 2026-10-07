@@ -69,13 +69,13 @@
     "methodName": "clone",
     "returnType": "AnimatedSprite",
     "params": [],
-    "summary": "Creates a copy of this sprite with the same animations, and adds it to the same stage.",
+    "summary": "Creates a clone of this sprite with the same animations, playing the same\none, and puts it on the stage right behind this sprite.",
     "scratchblock": null,
     "category": "Control",
     "docsUrl": "https://scratch4j.openpatch.org/reference/AnimatedSprite/clone",
-    "description": "Creates a copy of this sprite with the same animations, and adds it to the same stage.",
+    "description": "Creates a clone of this sprite with the same animations, playing the same one, and puts it on the stage right behind this sprite. See clone().",
     "paramDocs": [],
-    "returns": "the copy"
+    "returns": "the clone, of the same class as this sprite"
   },
   {
     "className": "AnimatedSprite",
@@ -1145,19 +1145,6 @@
   },
   {
     "className": "Pen",
-    "methodName": "constructor",
-    "returnType": "new Pen",
-    "params": ["Pen p"],
-    "summary": "Copies a Pen object.",
-    "scratchblock": null,
-    "category": "Operators",
-    "docsUrl": "https://scratch4j.openpatch.org/reference/Pen/constructor",
-    "description": "Copies a Pen object.",
-    "paramDocs": ["p: Pen object to copy"],
-    "returns": null
-  },
-  {
-    "className": "Pen",
     "methodName": "down",
     "returnType": "void",
     "params": [],
@@ -1980,13 +1967,13 @@
     "methodName": "clone",
     "returnType": "Sprite",
     "params": [],
-    "summary": "Creates a clone of the current sprite.",
+    "summary": "Creates a clone of this sprite, like Scratch's \"create clone of myself\": a\nnew sprite of the same class (a clone of a {",
     "scratchblock": "create clone of [myself v]",
     "category": "Control",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/clone",
-    "description": "Creates a clone of the current sprite. The cloned sprite will have the same properties as the original sprite, including its costumes, position, direction, and pen.",
+    "description": "Creates a clone of this sprite, like Scratch's \"create clone of myself\": a new sprite of the same class (a clone of a Cat is a Cat), with the same costume, position, direction, size and pen, and a copy of the variables of your class. It is put on the stage right behind this sprite, and its whenStartsAsClone() runs; the constructor does not run again.\n\nNumbers, text and booleans in your variables are the clone's own. A list or another object is shared with the original: give the clone its own in whenStartsAsClone() if it needs one.\n\nBullet bullet = (Bullet) this.clone();",
     "paramDocs": [],
-    "returns": "a new Sprite object that is a clone of the current sprite"
+    "returns": "the clone, of the same class as this sprite"
   },
   {
     "className": "Sprite",
@@ -2038,6 +2025,19 @@
     "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/debug",
     "description": "Prints a debug message to stdout when debug mode is enabled. The message is prefixed with the sprite's class name so you can tell which sprite it came from.\n\nExample:\n\nthis.debug(\"x =\", getX(), \"y =\", getY());\n// prints: [CatSprite] x = 100.0 y = 200.0",
     "paramDocs": ["values: one or more values to print"],
+    "returns": null
+  },
+  {
+    "className": "Sprite",
+    "methodName": "deleteThisClone",
+    "returnType": "void",
+    "params": [],
+    "summary": "Removes this sprite from the stage if it is a clone, like Scratch's\n\"delete this clone\".",
+    "scratchblock": "delete this clone",
+    "category": "Control",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/deleteThisClone",
+    "description": "Removes this sprite from the stage if it is a clone, like Scratch's \"delete this clone\". The original stays.",
+    "paramDocs": [],
     "returns": null
   },
   {
@@ -2588,6 +2588,19 @@
   },
   {
     "className": "Sprite",
+    "methodName": "hideVariable",
+    "returnType": "void",
+    "params": ["String name"],
+    "summary": "Hides the monitor of a variable that {",
+    "scratchblock": "hide variable [name v]",
+    "category": "Looks",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/hideVariable",
+    "description": "Hides the monitor of a variable that showVariable(String, showed.",
+    "paramDocs": ["name: the name the monitor was shown with"],
+    "returns": null
+  },
+  {
+    "className": "Sprite",
     "methodName": "ifOnEdgeBounce",
     "returnType": "void",
     "params": [],
@@ -2611,6 +2624,19 @@
     "description": "Checks whether a question is on screen and still waiting for an answer.",
     "paramDocs": [],
     "returns": "true while a question is waiting"
+  },
+  {
+    "className": "Sprite",
+    "methodName": "isClone",
+    "returnType": "boolean",
+    "params": [],
+    "summary": "Whether this sprite is a clone, made by {",
+    "scratchblock": null,
+    "category": "Control",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/isClone",
+    "description": "Whether this sprite is a clone, made by clone().",
+    "paramDocs": [],
+    "returns": "true for a clone, false for the original"
   },
   {
     "className": "Sprite",
@@ -2917,10 +2943,10 @@
     "returnType": "void",
     "params": [],
     "summary": "Removes this sprite from its current stage.",
-    "scratchblock": "delete this clone",
-    "category": "Control",
+    "scratchblock": null,
+    "category": "Motion",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/remove",
-    "description": "Removes this sprite from its current stage.",
+    "description": "Removes this sprite from its current stage. For \"delete this clone\", see deleteThisClone().",
     "paramDocs": [],
     "returns": null
   },
@@ -3238,6 +3264,19 @@
   },
   {
     "className": "Sprite",
+    "methodName": "showVariable",
+    "returnType": "void",
+    "params": ["String name", "java.util.function.Supplier<?> value"],
+    "summary": "Shows a monitor for one of this sprite's variables in the top left corner\nof the stage, like Scratch's variable monitors: \"Cat: score\" and the\ncurrent value, updated every frame.",
+    "scratchblock": "show variable [name v]",
+    "category": "Looks",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/showVariable",
+    "description": "Shows a monitor for one of this sprite's variables in the top left corner of the stage, like Scratch's variable monitors: \"Cat: score\" and the current value, updated every frame. Showing the same name again replaces the monitor; it goes away with the sprite.\n\npublic Cat() {\n  this.addCostume(\"cat\", \"bunny1_stand\");\n  this.showVariable(\"lives\", () -> lives);\n}",
+    "paramDocs": ["name: the variable's name, shown after the sprite's", "value: gives the value to show; asked for it every frame"],
+    "returns": null
+  },
+  {
+    "className": "Sprite",
     "methodName": "stamp",
     "returnType": "void",
     "params": [],
@@ -3480,6 +3519,19 @@
     "category": "Motion",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/whenRemovedFromStage",
     "description": "This method is called when the sprite is removed from the stage. Override this method to define custom behavior when the sprite is removed.",
+    "paramDocs": [],
+    "returns": null
+  },
+  {
+    "className": "Sprite",
+    "methodName": "whenStartsAsClone",
+    "returnType": "void",
+    "params": [],
+    "summary": "Runs when this sprite was just made as a clone, like Scratch's \"when I\nstart as a clone\".",
+    "scratchblock": "when I start as a clone",
+    "category": "Events",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/whenStartsAsClone",
+    "description": "Runs when this sprite was just made as a clone, like Scratch's \"when I start as a clone\". Override it to give clones their own behaviour, for example to send a bullet on its way.\n\npublic void whenStartsAsClone() {\n  this.show();\n  this.goToRandomPosition();\n}",
     "paramDocs": [],
     "returns": null
   },
@@ -4044,6 +4096,19 @@
   },
   {
     "className": "Stage",
+    "methodName": "hideVariable",
+    "returnType": "void",
+    "params": ["String name"],
+    "summary": "Hides the monitor of a variable that {",
+    "scratchblock": "hide variable [name v]",
+    "category": "Looks",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/hideVariable",
+    "description": "Hides the monitor of a variable that showVariable(String, showed.",
+    "paramDocs": ["name: the name the monitor was shown with"],
+    "returns": null
+  },
+  {
+    "className": "Stage",
     "methodName": "isAsking",
     "returnType": "boolean",
     "params": [],
@@ -4378,6 +4443,19 @@
     "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/setVolume",
     "description": "Sets how loud every sound of this stage plays.",
     "paramDocs": ["percent: 0 for silent, 100 for full volume"],
+    "returns": null
+  },
+  {
+    "className": "Stage",
+    "methodName": "showVariable",
+    "returnType": "void",
+    "params": ["String name", "java.util.function.Supplier<?> value"],
+    "summary": "Shows a monitor for a variable in the top left corner of the stage, like\nScratch's variable monitors: the name and the current value, updated every\nframe.",
+    "scratchblock": "show variable [name v]",
+    "category": "Looks",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/showVariable",
+    "description": "Shows a monitor for a variable in the top left corner of the stage, like Scratch's variable monitors: the name and the current value, updated every frame. Showing the same name again replaces the monitor.\n\nthis.showVariable(\"score\", () -> score);",
+    "paramDocs": ["name: what the monitor says", "value: gives the value to show; asked for it every frame"],
     "returns": null
   },
   {
@@ -5451,13 +5529,13 @@
     "methodName": "millis",
     "returnType": "static int",
     "params": [],
-    "summary": "Returns the number of milliseconds since the program started.",
+    "summary": "Returns the number of milliseconds of game time since the program started.",
     "scratchblock": "(timer)",
     "category": "Sensing",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Timer/millis",
-    "description": "Returns the number of milliseconds since the program started.",
+    "description": "Returns the number of milliseconds of game time since the program started. Game time stands still while the game is paused and runs slower or faster with the game speed (see pause() and setGameSpeed(double)); without either, it is the real time.",
     "paramDocs": [],
-    "returns": "the number of milliseconds since the program started"
+    "returns": "the milliseconds of game time since the program started"
   },
   {
     "className": "Timer",
@@ -5971,13 +6049,26 @@
     "methodName": "getDeltaTime",
     "returnType": "double",
     "params": [],
-    "summary": "Gets the seconds passed since the last frame.",
+    "summary": "Gets the seconds of game time passed since the last frame.",
     "scratchblock": null,
     "category": "Window",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/getDeltaTime",
-    "description": "Gets the seconds passed since the last frame.",
+    "description": "Gets the seconds of game time passed since the last frame. While the game is paused this is 0, and at half speed half the real time.",
     "paramDocs": [],
     "returns": "seconds since last frame"
+  },
+  {
+    "className": "Window",
+    "methodName": "getGameSpeed",
+    "returnType": "double",
+    "params": [],
+    "summary": "The game speed set with {",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/getGameSpeed",
+    "description": "The game speed set with setGameSpeed(double).",
+    "paramDocs": [],
+    "returns": "1 for normal speed"
   },
   {
     "className": "Window",
@@ -6098,6 +6189,45 @@
   },
   {
     "className": "Window",
+    "methodName": "isPaused",
+    "returnType": "boolean",
+    "params": [],
+    "summary": "Whether the game is paused.",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/isPaused",
+    "description": "Whether the game is paused.",
+    "paramDocs": [],
+    "returns": "true while paused"
+  },
+  {
+    "className": "Window",
+    "methodName": "pause",
+    "returnType": "void",
+    "params": [],
+    "summary": "Pauses the game: {",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/pause",
+    "description": "Pauses the game: run() is no longer called, and timers, gliding and animations stand still. The window keeps drawing, so the paused picture stays visible, and keys and clicks still reach methods like whenKeyPressed, so a key can resume() the game.",
+    "paramDocs": [],
+    "returns": null
+  },
+  {
+    "className": "Window",
+    "methodName": "resume",
+    "returnType": "void",
+    "params": [],
+    "summary": "Lets a paused game go on where it stopped.",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/resume",
+    "description": "Lets a paused game go on where it stopped.",
+    "paramDocs": [],
+    "returns": null
+  },
+  {
+    "className": "Window",
     "methodName": "setDebug",
     "returnType": "void",
     "params": ["boolean debug"],
@@ -6111,6 +6241,19 @@
   },
   {
     "className": "Window",
+    "methodName": "setGameSpeed",
+    "returnType": "void",
+    "params": ["double speed"],
+    "summary": "Makes the game run slower or faster: 1 is normal, 0.",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/setGameSpeed",
+    "description": "Makes the game run slower or faster: 1 is normal, 0.5 half as fast, 2 twice as fast. run(), timers, gliding and animations all follow, so the whole game looks like slow motion; the window keeps drawing smoothly.",
+    "paramDocs": ["speed: 1 for normal speed, smaller for slower, larger for faster"],
+    "returns": null
+  },
+  {
+    "className": "Window",
     "methodName": "setStage",
     "returnType": "void",
     "params": ["Stage stage"],
@@ -6120,6 +6263,19 @@
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/setStage",
     "description": "Sets the current stage of the application.",
     "paramDocs": ["stage: the new stage to be set"],
+    "returns": null
+  },
+  {
+    "className": "Window",
+    "methodName": "step",
+    "returnType": "void",
+    "params": [],
+    "summary": "While the game is paused: runs it for exactly one frame (every\n{",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/step",
+    "description": "While the game is paused: runs it for exactly one frame (every run() once) and pauses again. Useful to watch closely what happens, for example when two sprites touch.",
+    "paramDocs": [],
     "returns": null
   },
   {

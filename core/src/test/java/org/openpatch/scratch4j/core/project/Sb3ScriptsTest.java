@@ -221,7 +221,7 @@ class Sb3ScriptsTest {
   @Test
   void clonesBecomeTheLibrarysClonesWhenItHasThem() throws Exception {
     Path sb3 = sb3(CLONES);
-    var result = Sb3Importer.importProject(sb3, tmp, "stars", libraryWithClones(), null);
+    var result = Sb3Importer.importProject(sb3, tmp, "stars", library(true), null);
     String star = Files.readString(result.root().resolve("Star.java"));
     assertThat(star).contains("public void whenStartsAsClone() {\n    this.turnRight(15);\n  }")
         .doesNotContain("TODO Scratch");
@@ -234,22 +234,24 @@ class Sb3ScriptsTest {
 
   @Test
   void withoutClonesInTheLibraryTheyStayTodos() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
-    var result = Sb3Importer.importProject(sb3(CLONES), tmp, "stars", jar, null);
+    var result = Sb3Importer.importProject(sb3(CLONES), tmp, "stars", library(false), null);
     String star = Files.readString(result.root().resolve("Star.java"));
     assertThat(star).contains("TODO Scratch").doesNotContain("whenStartsAsClone");
   }
 
-  /** Just enough of a library with clones: a Sprite with whenStartsAsClone(). */
-  private Path libraryWithClones() throws Exception {
+  /**
+   * Just enough of a library (5.7.0 and later have clones, older ones not): a
+   * Sprite with or without whenStartsAsClone().
+   */
+  private Path library(boolean clones) throws Exception {
     Path src = Files.createDirectories(tmp.resolve("lib-src/org/openpatch/scratch"));
     Files.writeString(src.resolve("Sprite.java"), """
         package org.openpatch.scratch;
         public class Sprite {
           public void run() {}
-          public void whenStartsAsClone() {}
+          %s
         }
-        """);
+        """.formatted(clones ? "public void whenStartsAsClone() {}" : ""));
     Files.writeString(src.resolve("Stage.java"), """
         package org.openpatch.scratch;
         public class Stage {

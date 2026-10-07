@@ -20,7 +20,7 @@ import java.nio.file.StandardCopyOption;
  */
 public final class LibraryJarSource {
 
-  public static final String SCRATCH_VERSION = "5.6.0";
+  public static final String SCRATCH_VERSION = "5.7.0";
 
   private static final String RELEASE_URL =
       "https://github.com/openpatch/scratch-for-java/releases/download/v"
