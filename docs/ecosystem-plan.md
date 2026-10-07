@@ -22,8 +22,9 @@ passing check. Detailed commands/results follow in Batches 4–7.
 Release progress: the embedded browser build `v2.2.1-hyperbook.26` and Hyperbook
 `0.112.0` are published. Hyperbook Informatik is deployed with that version;
 its CI passed 10 static checks, compiled 141 pages / 331 Java blocks, and ran
-the portable teaching checks. Library `5.8.0` and Studio `0.1.0-alpha.7`
-publication are in progress.
+the portable teaching checks. Library `5.8.0` is published to Maven Central
+and GitHub, including standard/NRW JARs, shared catalogs, and the offline course
+pack. Studio `0.1.0-alpha.7` publication is in progress.
 
 ## Repositories and responsibilities
 
