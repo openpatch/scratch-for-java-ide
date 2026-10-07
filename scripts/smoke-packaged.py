@@ -23,5 +23,5 @@ with tempfile.TemporaryDirectory(prefix="scratch-studio-smoke-") as temporary:
     report = Path(temporary) / "report.txt"
     message = report.read_text() if report.is_file() else "No packaged smoke report"
     if result.returncode or not message.startswith("PASS:"):
-        raise SystemExit(message + "\n" + result.stdout[-2000:] + result.stderr[-4000:])
+        raise SystemExit(message + "\n" + result.stdout[-64000:] + result.stderr[-10000:])
     print(message.strip())

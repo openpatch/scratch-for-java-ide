@@ -34,18 +34,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: linux-x64
-            os: ubuntu-latest
-            types: deb app-image appimage
           - name: windows-x64
             os: windows-latest
-            types: msi app-image
-          - name: macos-arm64
-            os: macos-15
-            types: dmg app-image
-          - name: macos-x64
-            os: macos-15-intel
-            types: dmg app-image
+            types: app-image
     steps:
       - uses: actions/checkout@v7
 
@@ -66,6 +57,10 @@ jobs:
           dotnet tool install --global wix --version 5.0.2
           wix extension add --global WixToolset.Util.wixext/5.0.2
           wix extension list --global
+
+      - name: Report Windows graphics adapter
+        shell: pwsh
+        run: Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,VideoProcessor | Format-List
 
       - name: Build and package
         shell: bash
