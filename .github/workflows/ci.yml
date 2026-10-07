@@ -25,11 +25,26 @@ jobs:
       - name: Build and test
         run: mvn --batch-mode --no-transfer-progress verify
 
+      - name: Identify the bundled library release
+        if: runner.os == 'Linux'
+        id: library-release
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          namespace = '{http://maven.apache.org/POM/4.0.0}'
+          version = ET.parse('pom.xml').findtext(f'{namespace}properties/{namespace}scratch.version')
+          if not version:
+              raise SystemExit('Missing bundled library version')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('ref=v' + version, file=output)
+          PY
       - name: Check shared release metadata
         if: runner.os == 'Linux'
         uses: actions/checkout@v7
         with:
           repository: openpatch/scratch-for-java
+          ref: ${{ steps.library-release.outputs.ref }}
           path: .validation/library
       - name: Set up the catalog toolchain
         if: runner.os == 'Linux'

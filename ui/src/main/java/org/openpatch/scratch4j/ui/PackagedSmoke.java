@@ -33,16 +33,32 @@ final class PackagedSmoke {
             Files.writeString(project.root().resolve("List.java"), "public class List<T> {}\n");
           }
           List<String> errors = new java.util.concurrent.CopyOnWriteArrayList<>();
+          List<String> outputLines = new java.util.concurrent.CopyOnWriteArrayList<>();
           AtomicLong frames = new AtomicLong(-1);
           RunHandle handle = new ProjectRunner().run(project,
               RunConfig.of(project.startStage()).withJava(java).withControl().withExitAfter(4),
               new RunListener() {
                 public void onStderr(String line) { errors.add(line); }
+                public void onStdout(String line) { outputLines.add(line); }
                 public void onFrames(long count) { frames.set(count); }
               });
           int code;
           try { code = handle.exitFuture().get(40, TimeUnit.SECONDS); }
-          catch (Exception e) { handle.stop(); throw e; }
+          catch (Exception e) {
+            Path jcmd = java.resolveSibling(isWindows() ? "jcmd.exe" : "jcmd");
+            try {
+              if (Files.isRegularFile(jcmd)) {
+                Process dump = new ProcessBuilder(jcmd.toString(), Long.toString(handle.pid()),
+                    "Thread.print").inheritIO().start();
+                if (!dump.waitFor(5, TimeUnit.SECONDS)) dump.destroyForcibly();
+              }
+            } catch (Exception diagnosticError) {
+              System.err.println("Thread diagnostic failed: " + diagnosticError);
+            }
+            handle.stop();
+            throw new IllegalStateException(name + " timed out; frames=" + frames.get()
+                + "; stdout=" + outputLines + "; stderr=" + errors, e);
+          }
           if (code != 0 || frames.get() <= 0) throw new IllegalStateException(name + " did not draw: " + code + " " + errors);
           Path source = project.root().resolve("MyStage.java");
           String saved = Files.readString(source);
