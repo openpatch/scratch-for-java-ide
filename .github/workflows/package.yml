@@ -13,10 +13,12 @@ jobs:
     # the Windows .exe of exported student apps, cross-compiled once
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - run: |
-          sudo apt-get install --no-install-recommends -y gcc-mingw-w64-x86-64
-          scripts/build-win-launcher.sh
+      - uses: actions/download-artifact@v7
+        with:
+          name: win-launcher
+          run-id: 37667565783
+          github-token: ${{ github.token }}
+          path: export/src/main/resources/org/openpatch/scratch4j/export/launcher/
       - uses: actions/upload-artifact@v7
         with:
           name: win-launcher
