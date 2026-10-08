@@ -50,11 +50,13 @@ final class NewProjectDialog {
 
   private static final String EXAMPLE = "example";
 
-  private static Path lastDir = Path.of(System.getProperty("user.home"));
+  /** The folder the project goes in: the remembered projects folder, or one the user picks. */
+  private static Path lastDir = ProjectsFolder.current();
 
   private NewProjectDialog() {}
 
   static Optional<Result> show(Window owner) {
+    lastDir = ProjectsFolder.current();
     Dialog<Result> dialog = new Dialog<>();
     dialog.initOwner(owner);
     dialog.setTitle(I18n.t("wizard.title"));
@@ -201,7 +203,7 @@ final class NewProjectDialog {
     Button choose = new Button(I18n.t("wizard.folder.choose"), Icons.of("fth-folder"));
     choose.setOnAction(e -> {
       DirectoryChooser chooser = new DirectoryChooser();
-      chooser.setInitialDirectory(lastDir.toFile());
+      chooser.setInitialDirectory(ProjectsFolder.existing(lastDir));
       chooser.setTitle(I18n.t("wizard.folder.choose"));
       File dir = chooser.showDialog(dialog.getDialogPane().getScene().getWindow());
       if (dir != null) {

@@ -860,6 +860,8 @@ public class StudioApp extends javafx.application.Application {
   private void createProject() {
     NewProjectDialog.show(stage).ifPresent(result -> {
       try {
+        // the default projects folder is made when the first project goes there
+        Files.createDirectories(result.parentDir());
         Path allJar = LibraryJarSource.allJar(bundledLibraryDir());
         if (result.lesson() != null) {
           var lesson = org.openpatch.scratch4j.core.lesson.Lesson.bundled(result.lesson());
@@ -894,7 +896,7 @@ public class StudioApp extends javafx.application.Application {
     }
     javafx.stage.DirectoryChooser parent = new javafx.stage.DirectoryChooser();
     parent.setTitle(I18n.t("sb3.target"));
-    parent.setInitialDirectory(sb3.getParentFile());
+    parent.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File folder = parent.showDialog(stage);
     if (folder == null) {
       return;
@@ -944,6 +946,7 @@ public class StudioApp extends javafx.application.Application {
   private void openProject() {
     DirectoryChooser chooser = new DirectoryChooser();
     chooser.setTitle(I18n.t("menu.file.open"));
+    chooser.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File dir = chooser.showDialog(stage);
     if (dir != null) {
       openProjectAt(dir.toPath());
@@ -970,6 +973,7 @@ public class StudioApp extends javafx.application.Application {
     try { apiIndex.useProject(p); palette.refresh(); }
     catch (IOException e) { console.err(e.getMessage()); }
     Prefs.addRecentProject(p.root());
+    ProjectsFolder.remember(p.root().getParent());
     stage.setTitle(p.name() + " — Scratch for Java Studio");
     projectTitle.setText(p.name());
     hasProject.set(true);
@@ -3756,6 +3760,7 @@ public class StudioApp extends javafx.application.Application {
     if (archive == null) return;
     DirectoryChooser parent = new DirectoryChooser();
     parent.setTitle(I18n.t("sb3.target"));
+    parent.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File folder = parent.showDialog(stage);
     if (folder == null) return;
     try {
@@ -3781,7 +3786,7 @@ public class StudioApp extends javafx.application.Application {
     if (zip == null) return;
     javafx.stage.DirectoryChooser parent = new javafx.stage.DirectoryChooser();
     parent.setTitle(I18n.t("sb3.target"));
-    parent.setInitialDirectory(zip.getParentFile());
+    parent.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File folder = parent.showDialog(stage);
     if (folder == null) return;
     try {

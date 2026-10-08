@@ -164,6 +164,15 @@ final class Prefs {
     NODE.putBoolean("graphics.compatibility", on);
   }
 
+  /** The folder the last project was created in or opened from ("" if none yet). */
+  static String projectsFolder() {
+    return NODE.get("projects.lastDir", "");
+  }
+
+  static void projectsFolder(String folder) {
+    NODE.put("projects.lastDir", folder);
+  }
+
   static int editorFontSize() {
     return NODE.getInt("editor.fontSize", 14);
   }
