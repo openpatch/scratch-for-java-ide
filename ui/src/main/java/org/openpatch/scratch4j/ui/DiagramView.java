@@ -190,8 +190,8 @@ final class DiagramView extends BorderPane {
         }
       }
       String title = (c.isInterface() ? "«interface» " : "") + c.name();
-      boxes.add(new UmlCanvas.Box(c.name(), title, c.isAbstract() || c.isInterface(), false,
-          c.library(), sections, depth(c, depth)));
+      boxes.add(new UmlCanvas.Box(c.name(), UmlCanvas.BoxKind.CLASS, title,
+          c.isAbstract() || c.isInterface(), false, c.library(), sections, depth(c, depth)));
       if (c.superclass() != null && model.byName(c.superclass()) != null
           && (library.isSelected() || !model.byName(c.superclass()).library())) {
         edges.add(new UmlCanvas.Edge(c.name(), c.superclass(),
@@ -317,7 +317,7 @@ final class DiagramView extends BorderPane {
       String title = name.getOrDefault(o.id(), "") + " : " + o.className();
       List<String> values = o.values().stream()
           .map(v -> v.name() + " = " + v.value()).toList();
-      boxes.add(new UmlCanvas.Box(id, title.trim(), false, true, false,
+      boxes.add(new UmlCanvas.Box(id, UmlCanvas.BoxKind.OBJECT, title.trim(), false, true, false,
           values.isEmpty() ? List.of() : List.of(values), layer.getOrDefault(o.id(), 0)));
       for (Debugger.Reference r : o.references()) {
         edges.add(new UmlCanvas.Edge(id, String.valueOf(r.target()),

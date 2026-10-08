@@ -25,9 +25,10 @@ import java.util.function.Consumer;
 final class UmlCanvas extends Canvas {
 
   enum EdgeKind { INHERITANCE, ASSOCIATION }
+  enum BoxKind { CLASS, OBJECT }
 
   /** A box: title (italic for abstract, underlined for objects), then sections of lines. */
-  record Box(String id, String title, boolean italic, boolean underline, boolean faded,
+  record Box(String id, BoxKind kind, String title, boolean italic, boolean underline, boolean faded,
       List<List<String>> sections, int layer) {}
 
   record Edge(String from, String to, EdgeKind kind, String label) {}
@@ -178,10 +179,18 @@ final class UmlCanvas extends Canvas {
     if (r == null) return;
     Color stroke = b.faded() ? Color.web("#a0a4ad") : Color.web("#3d2a6b");
     g.setFill(b.faded() ? Color.web("#f1f2f5") : Color.web("#f3efff"));
-    g.fillRect(r[0], r[1], r[2], r[3]);
+    if (b.kind() == BoxKind.OBJECT) {
+      g.fillRoundRect(r[0], r[1], r[2], r[3], 12, 12);
+    } else {
+      g.fillRect(r[0], r[1], r[2], r[3]);
+    }
     g.setStroke(stroke);
     g.setLineWidth(1.4);
-    g.strokeRect(r[0], r[1], r[2], r[3]);
+    if (b.kind() == BoxKind.OBJECT) {
+      g.strokeRoundRect(r[0], r[1], r[2], r[3], 12, 12);
+    } else {
+      g.strokeRect(r[0], r[1], r[2], r[3]);
+    }
     g.setTextBaseline(VPos.TOP);
     g.setTextAlign(TextAlignment.CENTER);
     g.setFill(stroke);
