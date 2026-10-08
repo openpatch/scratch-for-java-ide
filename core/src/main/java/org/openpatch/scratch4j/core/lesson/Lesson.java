@@ -33,11 +33,37 @@ import java.util.regex.Pattern;
  *       ({@code this.say("Hi")} also finds {@code this.say( "Hi" )});</li>
  *   <li>{@code {"changed": {"file": ..., "pattern": "move\\((\\d+)\\)", "from": "4"}}}:
  *       some match's first group is no longer {@code from};</li>
+ *   <li>{@code {"classExists": {"name": "Coin", "extends": "Sprite", "min": 1}}}:
+ *       the project declares such a class (every field optional; {@code extends}
+ *       also counts classes that extend it through other project classes,
+ *       {@code min} how many there must be);</li>
+ *   <li>{@code {"methodExists": {"name": "whenClicked", "file": "Bunny.java"}}}:
+ *       a method of that name is declared (in that file, or anywhere);</li>
+ *   <li>{@code {"lineChanged": {"file": "Bunny.java", "line": "this.move(4);"}}}:
+ *       the line is gone from the file (changed or removed; spacing does not
+ *       matter, every copy of it must be gone);</li>
  *   <li>{@code {"all": [check, ...]}}: every check is met.</li>
  * </ul>
+ *
+ * <p>{@code languages} lists the languages the lesson is written in (for
+ * example only {@code "de"}); a student whose IDE speaks another language
+ * sees the English text if there is one, else the lesson's own language.
  */
-public record Lesson(String id, String template, Map<String, String> title,
-    List<Step> steps) {
+public record Lesson(String id, String template, List<String> languages,
+    Map<String, String> title, List<Step> steps) {
+
+  /** The languages the IDE can write lessons in, in the order it offers them. */
+  public static final List<String> LANGUAGES = List.of("de", "en");
+
+  /** A lesson in the languages its title is written in. */
+  public Lesson(String id, String template, Map<String, String> title, List<Step> steps) {
+    this(id, template, languagesOf(title), title, steps);
+  }
+
+  private static List<String> languagesOf(Map<String, String> title) {
+    List<String> out = LANGUAGES.stream().filter(title::containsKey).toList();
+    return out.isEmpty() ? List.of("en") : out;
+  }
 
   /** The project file a lesson is kept in. */
   public static final String FILE = ".scratch4j/lesson.json";
@@ -120,6 +146,74 @@ public record Lesson(String id, String template, Map<String, String> title,
     }
   }
 
+  private static final Pattern CLASS_DECLARATION = Pattern.compile(
+      "\\bclass\\s+(\\w+)(?:\\s*<[^>{]*>)?(?:\\s+extends\\s+(\\w+))?");
+
+  /**
+   * At least {@code min} classes with this name (blank: any) that extend
+   * {@code base} (blank: anything), directly or through project classes.
+   */
+  public record ClassExists(String name, String base, int min) implements Check {
+    @Override public boolean met(Facts facts) {
+      Map<String, String> parents = new LinkedHashMap<>();
+      for (String text : facts.files().values()) {
+        Matcher m = CLASS_DECLARATION.matcher(code(text));
+        while (m.find()) {
+          parents.put(m.group(1), m.group(2) == null ? "" : m.group(2));
+        }
+      }
+      long count = parents.keySet().stream()
+          .filter(c -> name.isBlank() || c.equals(name.strip()))
+          .filter(c -> base.isBlank() || extendsBase(c, base.strip(), parents))
+          .count();
+      return count >= Math.max(1, min);
+    }
+
+    private static boolean extendsBase(String type, String base, Map<String, String> parents) {
+      String parent = parents.get(type);
+      for (int depth = 0; parent != null && !parent.isEmpty() && depth < 20; depth++) {
+        if (parent.equals(base)) {
+          return true;
+        }
+        parent = parents.get(parent);
+      }
+      return false;
+    }
+
+    @Override public boolean readsCode() {
+      return true;
+    }
+  }
+
+  /** A method called {@code name} is declared, in {@code file} (blank: in any file). */
+  public record MethodExists(String name, String file) implements Check {
+    @Override public boolean met(Facts facts) {
+      // a declaration: the name and its parameters, then the body (a call ends with ;)
+      Pattern declaration = Pattern.compile("\\b" + Pattern.quote(name.strip())
+          + "\\s*\\([^;{}()]*\\)\\s*(?:throws\\s+[\\w.,\\s]+)?\\{");
+      return facts.files().entrySet().stream()
+          .filter(e -> file.isBlank() || e.getKey().equals(file.strip()))
+          .anyMatch(e -> declaration.matcher(code(e.getValue())).find());
+    }
+
+    @Override public boolean readsCode() {
+      return true;
+    }
+  }
+
+  /** {@code line} is no longer in {@code file} (changed or removed). */
+  public record LineChanged(String file, String line) implements Check {
+    @Override public boolean met(Facts facts) {
+      String text = facts.files().get(file);
+      return text != null
+          && !Pattern.compile(literalPattern(line)).matcher(code(text)).find();
+    }
+
+    @Override public boolean readsCode() {
+      return true;
+    }
+  }
+
   /** Every check is met. */
   public record All(List<Check> checks) implements Check {
     @Override public boolean met(Facts facts) {
@@ -188,8 +282,14 @@ public record Lesson(String id, String template, Map<String, String> title,
     if (steps.isEmpty()) {
       throw new IOException("A lesson needs steps");
     }
+    Map<String, String> title = texts(root.path("title"));
+    List<String> languages = new ArrayList<>();
+    for (JsonNode language : root.path("languages")) {
+      languages.add(language.asString());
+    }
     return new Lesson(root.path("id").asString(), root.path("template").asString(""),
-        texts(root.path("title")), List.copyOf(steps));
+        languages.isEmpty() ? languagesOf(title) : List.copyOf(languages), title,
+        List.copyOf(steps));
   }
 
   private static Check check(JsonNode node) throws IOException {
@@ -208,6 +308,19 @@ public record Lesson(String id, String template, Map<String, String> title,
       String pattern = c.path("pattern").asString();
       validate(pattern);
       return new Changed(c.path("file").asString(), pattern, c.path("from").asString());
+    }
+    if (node.has("classExists")) {
+      JsonNode c = node.get("classExists");
+      return new ClassExists(c.path("name").asString(""), c.path("extends").asString(""),
+          c.path("min").asInt(1));
+    }
+    if (node.has("methodExists")) {
+      JsonNode c = node.get("methodExists");
+      return new MethodExists(c.path("name").asString(), c.path("file").asString(""));
+    }
+    if (node.has("lineChanged")) {
+      JsonNode c = node.get("lineChanged");
+      return new LineChanged(c.path("file").asString(), c.path("line").asString());
     }
     if (node.has("all")) {
       List<Check> checks = new ArrayList<>();
@@ -260,6 +373,8 @@ public record Lesson(String id, String template, Map<String, String> title,
     if (template != null && !template.isEmpty()) {
       root.put("template", template);
     }
+    var languageArray = root.putArray("languages");
+    languages.forEach(languageArray::add);
     putTexts(root.putObject("title"), title);
     var array = root.putArray("steps");
     for (Step step : steps) {
@@ -305,6 +420,22 @@ public record Lesson(String id, String template, Map<String, String> title,
         changed.put("pattern", c.pattern());
         changed.put("from", c.from());
       }
+      case ClassExists c -> {
+        var exists = node.putObject("classExists");
+        if (!c.name().isBlank()) exists.put("name", c.name());
+        if (!c.base().isBlank()) exists.put("extends", c.base());
+        if (c.min() > 1) exists.put("min", c.min());
+      }
+      case MethodExists m -> {
+        var exists = node.putObject("methodExists");
+        exists.put("name", m.name());
+        if (!m.file().isBlank()) exists.put("file", m.file());
+      }
+      case LineChanged l -> {
+        var changed = node.putObject("lineChanged");
+        changed.put("file", l.file());
+        changed.put("line", l.line());
+      }
       case All a -> {
         var all = node.putArray("all");
         for (Check inner : a.checks()) {
@@ -326,9 +457,12 @@ public record Lesson(String id, String template, Map<String, String> title,
     return out;
   }
 
+  /** The text in the student's language, else English, else the language it has. */
   private static String text(Map<String, String> texts, Locale locale) {
     String text = texts.get(locale.getLanguage());
-    return text != null ? text : texts.getOrDefault("en", "");
+    if (text == null) text = texts.get("en");
+    if (text == null) text = texts.values().stream().findFirst().orElse("");
+    return text;
   }
 
   /** The code without comments, so a commented-out line does not count. */

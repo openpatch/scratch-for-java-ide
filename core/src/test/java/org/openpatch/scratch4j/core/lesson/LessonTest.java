@@ -129,6 +129,73 @@ class LessonTest {
     assertThat(Lesson.parse(json).steps().get(0).check()).isEqualTo(check);
   }
 
+  private static Lesson.Facts facts(String... nameAndText) {
+    Map<String, String> files = new LinkedHashMap<>();
+    for (int i = 0; i < nameAndText.length; i += 2) {
+      files.put(nameAndText[i], nameAndText[i + 1]);
+    }
+    return new Lesson.Facts(files, true, false);
+  }
+
+  @Test
+  void aClassIsFoundByNameByWhatItExtendsAndByCount() {
+    var project = facts(
+        "Bunny.java", "public class Bunny extends Sprite { }",
+        "Enemy.java", "public class Enemy extends AnimatedSprite { }",
+        "Bee.java", "public class Bee extends Enemy { }",
+        "Old.java", "// public class Coin extends Sprite { }");
+    assertThat(new Lesson.ClassExists("Bee", "", 1).met(project)).isTrue();
+    assertThat(new Lesson.ClassExists("Coin", "", 1).met(project)).as("commented out").isFalse();
+    assertThat(new Lesson.ClassExists("Bee", "AnimatedSprite", 1).met(project))
+        .as("through Enemy").isTrue();
+    assertThat(new Lesson.ClassExists("Bee", "Sprite", 1).met(project)).isFalse();
+    assertThat(new Lesson.ClassExists("", "AnimatedSprite", 2).met(project)).isTrue();
+    assertThat(new Lesson.ClassExists("", "Sprite", 2).met(project))
+        .as("a second sprite class is still missing").isFalse();
+  }
+
+  @Test
+  void aMethodIsADeclarationNotACall() {
+    var calls = facts("Bunny.java", "class Bunny { void run() { this.whenClicked(); } }");
+    var declares = facts("Bunny.java",
+        "class Bunny { public void whenClicked() {\n this.say(\"Hi\"); } }");
+    assertThat(new Lesson.MethodExists("whenClicked", "").met(calls)).isFalse();
+    assertThat(new Lesson.MethodExists("whenClicked", "").met(declares)).isTrue();
+    assertThat(new Lesson.MethodExists("whenClicked", "Bunny.java").met(declares)).isTrue();
+    assertThat(new Lesson.MethodExists("whenClicked", "Other.java").met(declares)).isFalse();
+    assertThat(new Lesson.MethodExists("whenKeyPressed", "")
+        .met(facts("A.java", "class A { public void whenKeyPressed(int keyCode) { } }"))).isTrue();
+  }
+
+  @Test
+  void aLineIsChangedWhenEveryCopyIsGone() {
+    var check = new Lesson.LineChanged("Bunny.java", "this.move(4);");
+    assertThat(check.met(facts("Bunny.java", "this.move( 4 );\nthis.move(4);"))).isFalse();
+    assertThat(check.met(facts("Bunny.java", "this.move(8);\nthis.move(4) ;"))).isFalse();
+    assertThat(check.met(facts("Bunny.java", "this.move(8);\nthis.move(10);"))).isTrue();
+    assertThat(check.met(facts("Bunny.java", "// this.move(4);\nthis.move(8);")))
+        .as("a commented-out copy does not count").isTrue();
+    assertThat(check.met(facts("Other.java", "x"))).as("no such file").isFalse();
+  }
+
+  @Test
+  void theNewChecksAndTheLanguagesAreWrittenAndReadBack() throws IOException {
+    var steps = List.of(
+        new Lesson.Step("a", Map.of("de", "A"), Map.of("de", "Text"), null,
+            new Lesson.ClassExists("", "Sprite", 2)),
+        new Lesson.Step("b", Map.of("de", "B"), Map.of("de", "Text"), null,
+            new Lesson.MethodExists("whenClicked", "Bunny.java")),
+        new Lesson.Step("c", Map.of("de", "C"), Map.of("de", "Text"), null,
+            new Lesson.LineChanged("Bunny.java", "this.move(4);")));
+    Lesson german = new Lesson("x", "", List.of("de"), Map.of("de", "Nur Deutsch"), steps);
+    assertThat(Lesson.parse(german.toJson())).isEqualTo(german);
+    // an English IDE shows the German text instead of nothing
+    assertThat(german.title(Locale.ENGLISH)).isEqualTo("Nur Deutsch");
+    assertThat(german.steps().get(0).text(Locale.ENGLISH)).isEqualTo("Text");
+    // without a list, the languages come from the title
+    assertThat(Lesson.bundled("first-steps").languages()).containsExactly("de", "en");
+  }
+
   @Test
   void aBrokenPatternIsReportedWhenTheLessonLoads() {
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> Lesson.parse(

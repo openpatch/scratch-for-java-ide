@@ -45,4 +45,57 @@ class LessonEditorIT {
       ((javafx.stage.Stage) pane.getScene().getWindow()).close();
     });
   }
+
+  @Test
+  void aNewLessonInAGermanIdeIsGermanOnlyAndChecksForANewSpriteClass() throws Exception {
+    I18n.set(I18n.Language.DE);
+    startFx();
+    javafx.application.Platform.runLater(() -> LessonEditorDialog.show(null, null, "x",
+        List.of("Bunny.java", "Coin.java"), () -> new Lesson.Facts(Map.of(
+            "Bunny.java", "public class Bunny extends Sprite { }",
+            "Coin.java", "public class Coin extends Sprite { }"), true, false)));
+    settle();
+    try {
+      onFx(() -> {
+        var pane = javafx.stage.Window.getWindows().stream()
+            .filter(w -> w.getScene() != null
+                && w.getScene().getRoot() instanceof javafx.scene.control.DialogPane)
+            .findFirst().orElseThrow().getScene().getRoot();
+        var boxes = pane.lookupAll(".check-box").stream()
+            .map(n -> (javafx.scene.control.CheckBox) n)
+            .filter(b -> b.getText().equals("Deutsch") || b.getText().equals("Englisch")).toList();
+        assertThat(boxes).hasSize(2);
+        assertThat(boxes).filteredOn(javafx.scene.control.CheckBox::isSelected)
+            .extracting(javafx.scene.control.CheckBox::getText).containsExactly("Deutsch");
+        // no English field is shown
+        assertThat(pane.lookupAll(".label").stream()
+            .filter(n -> n.isVisible() && "EN".equals(((javafx.scene.control.Label) n).getText())))
+            .isEmpty();
+        @SuppressWarnings("unchecked")
+        var kind = (javafx.scene.control.ComboBox<LessonEditorDialog.Kind>) pane.lookupAll(
+            ".combo-box").stream().filter(n -> ((javafx.scene.control.ComboBox<?>) n)
+                .getItems().contains(LessonEditorDialog.Kind.CLASS)).findFirst().orElseThrow();
+        kind.setValue(LessonEditorDialog.Kind.CLASS);
+        @SuppressWarnings("unchecked")
+        var base = (javafx.scene.control.ComboBox<String>) pane.lookupAll(".combo-box").stream()
+            .filter(n -> ((javafx.scene.control.ComboBox<?>) n).getItems().contains("Sprite"))
+            .findFirst().orElseThrow();
+        base.getEditor().setText("Sprite");
+        @SuppressWarnings("unchecked")
+        var min = (javafx.scene.control.Spinner<Integer>) pane.lookup(".spinner");
+        min.getValueFactory().setValue(2);
+        var test = pane.lookupAll(".button").stream()
+            .filter(b -> b instanceof javafx.scene.control.Button button
+                && "Mit dem aktuellen Code testen".equals(button.getText()))
+            .map(b -> (javafx.scene.control.Button) b).findFirst().orElseThrow();
+        test.fire();
+        var result = (javafx.scene.control.Label) pane.lookup(".lessoneditor-result");
+        assertThat(result.getText()).contains("Mit dem aktuellen Code geschafft");
+        UiSmokeIT.snapshot(pane, Path.of("target/lesson-editor-de.png"));
+        ((javafx.stage.Stage) pane.getScene().getWindow()).close();
+      });
+    } finally {
+      I18n.set(I18n.Language.EN);
+    }
+  }
 }
