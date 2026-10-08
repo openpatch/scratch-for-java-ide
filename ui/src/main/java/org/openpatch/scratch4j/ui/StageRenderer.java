@@ -744,6 +744,8 @@ final class StageRenderer {
   private List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> ghosts = List.of();
   private double spriteAlpha = 1;
   private int ghostLine = -1;
+  /** How strongly ghosts are drawn: faded in the designer, solid in a thumbnail. */
+  private double ghostAlpha = 0.4;
 
   /** Outlines the ghosts one line of code makes (-1: none); whether that changed. */
   boolean highlightGhostLine(int line) {
@@ -771,9 +773,8 @@ final class StageRenderer {
     g.translate(-cameraX * scale, cameraY * scale);
     spriteAlpha = 0.4;
     for (var ghost : ghosts) {
-      SpriteRef ref = new SpriteRef("ghost", ghost.type());
-      ref.setPosition(ghost.x(), ghost.y());
-      spriteAlpha = ghost.line() == ghostLine ? 0.85 : 0.4;
+      SpriteRef ref = ghostRef(ghost);
+      spriteAlpha = ghost.line() == ghostLine ? Math.max(0.85, ghostAlpha) : ghostAlpha;
       Look look = look(ref);
       drawSprite(g, ref, look, w, h, scale);
       if (ghost.line() == ghostLine) {
@@ -793,14 +794,22 @@ final class StageRenderer {
     g.restore();
   }
 
+  /** A ghost as a sprite: its class, its place, and its own costume when its arguments set it. */
+  private static SpriteRef ghostRef(org.openpatch.scratch4j.core.region.CodeSprites.Ghost ghost) {
+    SpriteRef ref = new SpriteRef("ghost", ghost.type());
+    ref.setPosition(ghost.x(), ghost.y());
+    if (ghost.costume() != null) {
+      ref.costume(ghost.costume()); // new Racer("ladybug", ...) looks like a ladybug
+    }
+    return ref;
+  }
+
   /** The ghost under a canvas point, or null. */
   org.openpatch.scratch4j.core.region.CodeSprites.Ghost ghostAt(double canvasX,
       double canvasY, double w, double h, double scale) {
     for (int i = ghosts.size() - 1; i >= 0; i--) {
       var ghost = ghosts.get(i);
-      SpriteRef ref = new SpriteRef("ghost", ghost.type());
-      ref.setPosition(ghost.x(), ghost.y());
-      Look look = look(ref);
+      Look look = look(ghostRef(ghost));
       double cx = w / 2 + (ghost.x() - cameraX) * scale;
       double cy = h / 2 - (ghost.y() - cameraY) * scale;
       double hw = Math.max(8, look.width() * scale / 2);
@@ -979,11 +988,20 @@ final class StageRenderer {
     } catch (IOException | RuntimeException e) {
       model = StageModel.create();
     }
-    double scale = width / model.width();
-    Canvas canvas = new Canvas(width, model.height() * scale);
-    draw(canvas.getGraphicsContext2D(), model, scale, false);
-    SnapshotParameters params = new SnapshotParameters();
-    params.setFill(Color.TRANSPARENT);
-    return canvas.snapshot(params, null);
+    // sprites the stage's code adds are part of what it looks like
+    List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> designerGhosts = ghosts;
+    ghosts = org.openpatch.scratch4j.core.region.CodeSprites.of(project.root(), stageClass);
+    ghostAlpha = 1;
+    try {
+      double scale = width / model.width();
+      Canvas canvas = new Canvas(width, model.height() * scale);
+      draw(canvas.getGraphicsContext2D(), model, scale, false);
+      SnapshotParameters params = new SnapshotParameters();
+      params.setFill(Color.TRANSPARENT);
+      return canvas.snapshot(params, null);
+    } finally {
+      ghosts = designerGhosts;
+      ghostAlpha = 0.4;
+    }
   }
 }

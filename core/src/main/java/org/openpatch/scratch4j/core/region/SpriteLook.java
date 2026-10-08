@@ -53,7 +53,7 @@ public final class SpriteLook {
   private final Map<String, ClassTree> classes = new LinkedHashMap<>();
   private final List<NewClassTree> creations = new ArrayList<>();
 
-  private SpriteLook(List<String> sources) {
+  SpriteLook(List<String> sources) {
     JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
     if (compiler == null) return;
     List<Source> units = new ArrayList<>();
@@ -96,6 +96,125 @@ public final class SpriteLook {
   /** The first look of {@code className} among these sources. */
   public static String of(List<String> sources, String className) {
     return new SpriteLook(sources).look(className);
+  }
+
+  /**
+   * What one way of making the class looks like: the {@code new Racer("bee", 60, 2.2)}
+   * it comes from ("" when the project never makes one) and every costume its
+   * constructor adds, in the order Java runs it.
+   */
+  public record Variant(String creation, List<String> costumes) {}
+
+  /**
+   * Each distinct way the project makes {@code className} and the costumes it
+   * gets, so a class whose costumes come from constructor parameters
+   * ({@code addCostume(creature)}) shows them all: bee, ladybug, snail.
+   */
+  public static List<Variant> variants(Path root, String className) {
+    List<String> sources = new ArrayList<>();
+    try (Stream<Path> files = Files.list(root)) {
+      for (Path f : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
+        sources.add(Files.readString(f, StandardCharsets.UTF_8));
+      }
+    } catch (IOException e) {
+      return List.of();
+    }
+    return new SpriteLook(sources).variants(className);
+  }
+
+  List<Variant> variants(String className) {
+    ClassTree cls = classes.get(className);
+    if (cls == null) return List.of();
+    List<Variant> out = new ArrayList<>();
+    List<List<Object>> seen = new ArrayList<>();
+    for (NewClassTree creation : creations) {
+      if (!simple(creation.getIdentifier().toString()).equals(className)) continue;
+      List<Object> values = new ArrayList<>();
+      for (ExpressionTree a : creation.getArguments()) values.add(eval(a, Map.of()));
+      if (seen.contains(values)) continue;
+      seen.add(values);
+      List<String> costumes = new ArrayList<>();
+      collect(cls, values, costumes, 0);
+      out.add(new Variant(creation.toString(), List.copyOf(costumes.stream().distinct().toList())));
+    }
+    if (out.isEmpty()) {
+      List<String> costumes = new ArrayList<>();
+      collect(cls, null, costumes, 0);
+      out.add(new Variant("", List.copyOf(costumes.stream().distinct().toList())));
+    }
+    return out;
+  }
+
+  /**
+   * The look of {@code className} made with these argument values (null:
+   * unknown), as one {@code new Racer("ladybug", 0, 1.6)} in a stage starts.
+   */
+  String lookWith(String className, List<Object> args) {
+    ClassTree cls = classes.get(className);
+    if (cls == null) return null;
+    String[] found = {null};
+    run(cls, args, found, 0);
+    return found[0];
+  }
+
+  /** Every costume a constructor adds, through super(...) and this(...), in run order. */
+  private void collect(ClassTree cls, List<Object> args, List<String> out, int depth) {
+    if (depth > 8) return;
+    MethodTree ctor = constructor(cls, args);
+    Map<String, Object> env = new HashMap<>();
+    for (Tree member : cls.getMembers()) {
+      if (member instanceof VariableTree field && field.getInitializer() != null) {
+        Object v = eval(field.getInitializer(), env);
+        if (v != null) env.put(field.getName().toString(), v);
+      }
+    }
+    if (ctor == null) {
+      collectSuper(cls, List.of(), out, depth);
+      return;
+    }
+    for (int i = 0; i < ctor.getParameters().size(); i++) {
+      Object v = args != null && i < args.size() ? args.get(i) : null;
+      if (v != null) env.put(ctor.getParameters().get(i).getName().toString(), v);
+    }
+    List<? extends StatementTree> body = ctor.getBody().getStatements();
+    boolean explicit = !body.isEmpty() && body.get(0) instanceof ExpressionStatementTree es
+        && es.getExpression() instanceof MethodInvocationTree call
+        && ("super".equals(name(call)) || "this".equals(name(call)));
+    if (!explicit) {
+      collectSuper(cls, List.of(), out, depth); // Java runs super() first
+    }
+    for (StatementTree statement : body) {
+      if (statement instanceof VariableTree local && local.getInitializer() != null) {
+        Object v = eval(local.getInitializer(), env);
+        if (v != null) env.put(local.getName().toString(), v);
+      } else if (statement instanceof ExpressionStatementTree es) {
+        ExpressionTree e = es.getExpression();
+        if (e instanceof AssignmentTree assign) {
+          Object v = eval(assign.getExpression(), env);
+          String target = assign.getVariable() instanceof MemberSelectTree m
+              ? m.getIdentifier().toString() : assign.getVariable().toString();
+          if (v != null) env.put(target, v); else env.remove(target);
+        } else if (e instanceof MethodInvocationTree call) {
+          String name = name(call);
+          List<Object> values = new ArrayList<>();
+          for (ExpressionTree a : call.getArguments()) values.add(eval(a, env));
+          if ("super".equals(name)) {
+            collectSuper(cls, values, out, depth);
+          } else if ("this".equals(name)) {
+            collect(cls, values, out, depth + 1);
+          } else if (onThis(call)) {
+            String costume = costume(name, values);
+            if (costume != null) out.add(costume);
+          }
+        }
+      }
+    }
+  }
+
+  private void collectSuper(ClassTree cls, List<Object> args, List<String> out, int depth) {
+    if (cls.getExtendsClause() == null) return;
+    ClassTree parent = classes.get(simple(cls.getExtendsClause().toString()));
+    if (parent != null) collect(parent, args, out, depth + 1);
   }
 
   private String look(String className) {

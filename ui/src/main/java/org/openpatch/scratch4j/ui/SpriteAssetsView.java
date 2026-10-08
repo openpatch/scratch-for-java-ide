@@ -44,6 +44,8 @@ final class SpriteAssetsView extends BorderPane {
   private final ListView<SpriteAssets.Entry> animations = new ListView<>();
   private final Canvas hitboxCanvas = new Canvas(520, 380);
   private final ComboBox<String> hitboxCostume = new ComboBox<>();
+  /** Costumes the constructor adds from its parameters, per way the project makes it. */
+  private final VBox fromCode = new VBox(6);
   private final List<Point2D> vertices = new ArrayList<>();
   private final Label hitboxHelp = new Label();
   private final Label hitboxState = new Label();
@@ -217,8 +219,10 @@ final class SpriteAssetsView extends BorderPane {
           hitboxLabels.put(ref, entry.name());
         }
       }
+      String className = file.getFileName().toString().replaceFirst("\\.java$", "");
+      showFromCode(className, entries, images);
       String start = org.openpatch.scratch4j.core.region.SpriteLook.of(project.root(),
-          file.getFileName().toString().replaceFirst("\\.java$", ""));
+          className);
       if (start != null) {
         images.remove(start);
         images.add(0, start);
@@ -233,6 +237,60 @@ final class SpriteAssetsView extends BorderPane {
     } catch (IOException | RuntimeException e) {
       alert(e.getMessage());
     }
+  }
+
+  /**
+   * Costumes the code works out rather than names ({@code addCostume(creature)}):
+   * shown read-only below the list, one row per {@code new Racer("bee", ...)}
+   * in the project, and offered as hitbox images.
+   */
+  private void showFromCode(String className, List<SpriteAssets.Entry> entries,
+      List<String> images) {
+    fromCode.getChildren().clear();
+    java.util.Set<String> named = new java.util.HashSet<>();
+    for (SpriteAssets.Entry entry : entries) {
+      named.add(entry.name());
+      if (entry.reference() != null) named.add(entry.reference());
+    }
+    List<org.openpatch.scratch4j.core.region.SpriteLook.Variant> variants =
+        org.openpatch.scratch4j.core.region.SpriteLook.variants(project.root(), className);
+    boolean any = false;
+    for (var variant : variants) {
+      List<String> extra = variant.costumes().stream()
+          .filter(c -> !named.contains(c) && !c.contains("#")).toList();
+      if (extra.isEmpty()) continue;
+      any = true;
+      javafx.scene.layout.FlowPane row = new javafx.scene.layout.FlowPane(10, 6);
+      for (String costume : extra) {
+        Image image = CostumeView.costume(costume, project.root());
+        javafx.scene.image.ImageView view = new javafx.scene.image.ImageView(image);
+        view.setFitWidth(40);
+        view.setFitHeight(40);
+        view.setPreserveRatio(true);
+        Label tile = new Label(costume, view);
+        tile.setContentDisplay(javafx.scene.control.ContentDisplay.TOP);
+        tile.getStyleClass().add("code-costume");
+        row.getChildren().add(tile);
+        if (!images.contains(costume)) {
+          images.add(costume);
+          hitboxLabels.put(costume, costume);
+        }
+      }
+      Label made = new Label(variant.creation().isEmpty()
+          ? I18n.t("spriteassets.fromcode.any") : variant.creation());
+      made.getStyleClass().add("code-costume-creation");
+      fromCode.getChildren().addAll(made, row);
+    }
+    if (any) {
+      Label title = new Label(I18n.t("spriteassets.fromcode"));
+      title.getStyleClass().add("form-label");
+      Label hint = new Label(I18n.t("spriteassets.fromcode.hint"));
+      hint.setWrapText(true);
+      hint.getStyleClass().add("card-button-hint");
+      fromCode.getChildren().addAll(0, List.of(title, hint));
+    }
+    fromCode.setVisible(any);
+    fromCode.setManaged(any);
   }
 
   private javafx.scene.Node assetPane(ListView<SpriteAssets.Entry> list,
@@ -301,8 +359,28 @@ final class SpriteAssetsView extends BorderPane {
         }
       } catch (IOException ignored) { }
     }
-    VBox pane = new VBox(8, buttons, list,
-        new Label(I18n.t("spriteassets.handwritten.note")));
+    Label note = new Label(I18n.t("spriteassets.handwritten.note"));
+    VBox pane = new VBox(8, buttons, list, note);
+    if (kind == SpriteAssets.Kind.COSTUME) {
+      javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(fromCode);
+      scroll.setFitToWidth(true);
+      scroll.visibleProperty().bind(fromCode.visibleProperty());
+      scroll.managedProperty().bind(fromCode.managedProperty());
+      pane.getChildren().add(scroll);
+      // a class whose costumes all come from the code: they get the room, not an empty list
+      var listShown = javafx.beans.binding.Bindings.isNotEmpty(list.getItems())
+          .or(fromCode.visibleProperty().not());
+      for (javafx.scene.Node node : List.of(list, note)) {
+        node.visibleProperty().bind(listShown);
+        node.managedProperty().bind(listShown);
+      }
+      listShown.addListener((o, was, shown) -> {
+        VBox.setVgrow(scroll, shown ? javafx.scene.layout.Priority.NEVER
+            : javafx.scene.layout.Priority.ALWAYS);
+        scroll.setMaxHeight(shown ? 220 : Double.MAX_VALUE);
+      });
+      scroll.setMaxHeight(220);
+    }
     VBox.setVgrow(list, javafx.scene.layout.Priority.ALWAYS);
     pane.setPadding(new Insets(8));
     HBox.setHgrow(pane, javafx.scene.layout.Priority.ALWAYS);

@@ -1658,7 +1658,8 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
-  private void openSpriteAssets(Path sourceFile) {
+  /** Opens a sprite class's costumes, sounds and hitbox (also used by tests). */
+  void openSpriteAssets(Path sourceFile) {
     ScratchProject p = project.get();
     if (p == null || sourceFile == null) return;
     if (!VisualMode.isSpriteSource(sourceFile)) {

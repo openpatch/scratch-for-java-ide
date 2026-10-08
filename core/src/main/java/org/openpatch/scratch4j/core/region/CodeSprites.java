@@ -52,8 +52,17 @@ import java.util.stream.Stream;
  */
 public final class CodeSprites {
 
-  /** A sprite made in code: its class, where it starts, and the line that makes it. */
-  public record Ghost(String type, double x, double y, int line) {}
+  /**
+   * A sprite made in code: its class, where it starts, the line that makes it,
+   * and the costume it starts with when its constructor arguments decide it
+   * ({@code new Racer("ladybug", ...)}; null: the class's usual look).
+   */
+  public record Ghost(String type, double x, double y, int line, String costume) {
+
+    public Ghost(String type, double x, double y, int line) {
+      this(type, x, y, line, null);
+    }
+  }
 
   private static final int MAX_LOOP = 64;
   private static final int MAX_GHOSTS = 200;
@@ -62,10 +71,13 @@ public final class CodeSprites {
   private final Map<ClassTree, CompilationUnitTree> units = new HashMap<>();
   private final Map<String, Object> constants = new HashMap<>();
   private final Path root;
+  /** Works out a sprite's costume from its constructor arguments. */
+  private final SpriteLook looks;
   private SourcePositions positions;
 
   private CodeSprites(Path root, List<String> sources) {
     this.root = root;
+    this.looks = new SpriteLook(sources);
     JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
     if (compiler == null) return;
     List<Source> files = new ArrayList<>();
@@ -157,6 +169,8 @@ public final class CodeSprites {
     double x;
     double y;
     final int line;
+    /** The constructor arguments as far as they are known (null where not). */
+    List<Object> args = List.of();
 
     Made(String type, double x, double y, int line) {
       this.type = type;
@@ -207,7 +221,10 @@ public final class CodeSprites {
       ExpressionTree arg = args.get(0);
       Made made = arg instanceof NewClassTree created ? create(created, env, unit)
           : locals.get(arg.toString().replaceFirst("^this\\.", ""));
-      if (made != null) out.add(new Ghost(made.type, made.x, made.y, made.line));
+      if (made != null) {
+        out.add(new Ghost(made.type, made.x, made.y, made.line,
+            made.args.isEmpty() ? null : looks.lookWith(made.type, made.args)));
+      }
       return;
     }
     Made made = locals.get(target.replaceFirst("^this\\.", ""));
@@ -275,6 +292,7 @@ public final class CodeSprites {
     for (ExpressionTree a : created.getArguments()) args.add(eval(a, env));
     Made made = new Made(type, 0, 0, (int) unit.getLineMap().getLineNumber(
         positions.getStartPosition(unit, created)));
+    made.args = args;
     construct(classes.get(type), args, made, 0);
     return made;
   }
