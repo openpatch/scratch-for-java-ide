@@ -36,9 +36,25 @@ public record CompilerDiagnostic(
       case WARNING, MANDATORY_WARNING -> Kind.WARNING;
       default -> Kind.NOTE;
     };
-    String path = d.getSource() == null ? "" : d.getSource().getName();
+    String path = d.getSource() == null ? "" : pathOf(d.getSource());
     return new CompilerDiagnostic(kind, path, d.getLineNumber(), d.getColumnNumber(),
         d.getCode(), d.getMessage(messageLocale), d.getMessage(java.util.Locale.ROOT));
+  }
+
+  /**
+   * A file source's platform path. {@code getName()} of a URI-backed source is
+   * the URI's path, {@code /C:/...} on Windows, which {@code Path.of} rejects.
+   */
+  private static String pathOf(FileObject source) {
+    java.net.URI uri = source.toUri();
+    if ("file".equals(uri.getScheme())) {
+      try {
+        return java.nio.file.Path.of(uri).toString();
+      } catch (RuntimeException e) {
+        // fall through to javac's name
+      }
+    }
+    return source.getName();
   }
 
   public boolean isError() {
