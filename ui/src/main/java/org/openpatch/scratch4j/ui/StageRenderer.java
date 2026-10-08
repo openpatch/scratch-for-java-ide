@@ -82,7 +82,7 @@ final class StageRenderer {
   /** Defaults a sprite class sets on itself in its constructor. */
   private record ClassDefaults(long modified, String costume, Double size, Double direction,
       RotationStyle style, Map<String, String> costumes, double[] hitbox,
-      double[] rotationCenter, Double width, Double height, int[] nineSlice) {}
+      double[] rotationCenter, Double width, Double height, int[] nineSlice, double[] start) {}
 
   private static final Pattern COSTUME = Pattern.compile("addCostume\\(\\s*\"([^\"]+)\"");
   private static final Pattern COSTUME_WITH_PATH =
@@ -110,6 +110,17 @@ final class StageRenderer {
 
   StageRenderer(ScratchProject project) {
     this.project = project;
+  }
+
+  /**
+   * Where a sprite stands: the stage's own {@code setPosition}, else where its
+   * constructor puts it, as {@code new Referee()} runs before the stage's calls.
+   */
+  double[] position(SpriteRef ref) {
+    if (ref.hasPosition() || ref.isText()) {
+      return new double[] {ref.x(), ref.y()};
+    }
+    return defaultsOf(ref.type()).start().clone();
   }
 
   Look look(SpriteRef ref) {
@@ -596,7 +607,7 @@ final class StageRenderer {
       modified = Files.getLastModifiedTime(file).toMillis();
     } catch (IOException e) {
       return new ClassDefaults(0, null, null, null, RotationStyle.ALL_AROUND,
-          Map.of(), null, null, null, null, null);
+          Map.of(), null, null, null, null, null, new double[] {0, 0});
     }
     ClassDefaults cached = defaults.get(className);
     if (cached != null && cached.modified() == modified) {
@@ -678,7 +689,8 @@ final class StageRenderer {
     }
     ClassDefaults fresh = new ClassDefaults(modified, costume, size, direction,
         style, java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(costumes)),
-        hitbox, rotationCenter, width, height, nineSlice);
+        hitbox, rotationCenter, width, height, nineSlice,
+        org.openpatch.scratch4j.core.region.CodeSprites.start(project.root(), className));
     defaults.put(className, fresh);
     return fresh;
   }
@@ -827,8 +839,9 @@ final class StageRenderer {
 
   private void drawSprite(GraphicsContext g, SpriteRef ref, Look look,
       double w, double h, double scale) {
-    double x = ref.hasPosition() ? ref.x() : 0;
-    double y = ref.hasPosition() ? ref.y() : 0;
+    double[] at = position(ref);
+    double x = at[0];
+    double y = at[1];
     double dw = look.width() * scale;
     double dh = look.height() * scale;
     g.save();
@@ -936,8 +949,9 @@ final class StageRenderer {
       g.translate((cameraX - cameraX(ref)) * scale, -(cameraY - cameraY(ref)) * scale);
       Look look = look(ref);
       ClassDefaults defaults = defaultsOf(ref.type());
-      double x = ref.hasPosition() ? ref.x() : 0;
-      double y = ref.hasPosition() ? ref.y() : 0;
+      double[] at = position(ref);
+      double x = at[0];
+      double y = at[1];
       g.save();
       g.translate(model.width() * scale / 2 + x * scale,
           model.height() * scale / 2 - y * scale);

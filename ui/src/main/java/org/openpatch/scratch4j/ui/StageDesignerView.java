@@ -51,7 +51,8 @@ import java.util.Locale;
  * The stage designer: the stage in Scratch coordinates (origin centre, y up)
  * with its backdrop and sprites; drag to move, the round handle turns
  * (direction), the corner handle scales (size %); arrows nudge, Delete
- * removes, Ctrl+D duplicates, Ctrl+Z undoes. The side panel shows the
+ * removes, Ctrl+C/Ctrl+X/Ctrl+V copy, cut and paste, Ctrl+D duplicates,
+ * Ctrl+Z undoes. The side panel shows the
  * selected sprite's numbers, the sprites on the stage, the sprite classes to
  * add and the stage's size and backdrops. Every change is written through
  * the region round-trip into the stage class - the code stays the truth.
@@ -64,6 +65,11 @@ final class StageDesignerView extends BorderPane {
   }
 
   private enum Drag { NONE, MOVE, ROTATE, RESIZE }
+
+  /** The sprite copied with Ctrl+C / Ctrl+X, where it stood: it pastes into any stage of its project. */
+  private static SpriteRef clipboard;
+  /** The project the clipboard sprite's class belongs to. */
+  private static Path clipboardRoot;
 
   private static final double HANDLE_RADIUS = 7;
   private static final double ROTATE_HANDLE_GAP = 26;
@@ -1017,8 +1023,9 @@ final class StageDesignerView extends BorderPane {
     StageRenderer.Look look = renderer.look(selected);
     selectedName.setText(selected.name());
     selectedType.setText(selected.type());
-    xField.setText(RegionStatements.number(selected.hasPosition() ? selected.x() : 0));
-    yField.setText(RegionStatements.number(selected.hasPosition() ? selected.y() : 0));
+    double[] at = renderer.position(selected);
+    xField.setText(RegionStatements.number(at[0]));
+    yField.setText(RegionStatements.number(at[1]));
     directionField.setText(RegionStatements.number(look.direction()));
     sizeField.setText(RegionStatements.number(look.size()));
     visibleToggle.setSelected(selected.isVisible());
@@ -1124,8 +1131,9 @@ final class StageDesignerView extends BorderPane {
 
   /** Canvas centre of the drawn box (a text's box is not centred on its position). */
   private double[] centre(SpriteRef ref, double scale) {
-    double x = ref.hasPosition() ? ref.x() : 0;
-    double y = ref.hasPosition() ? ref.y() : 0;
+    double[] at = renderer.position(ref);
+    double x = at[0];
+    double y = at[1];
     StageRenderer.Look look = renderer.look(ref);
     return new double[] {canvas.getWidth() / 2 + (x - renderer.cameraX(ref) + look.offsetX())
         * scale, canvas.getHeight() / 2 + (-(y - renderer.cameraY(ref)) + look.offsetY()) * scale};
@@ -1215,8 +1223,9 @@ final class StageDesignerView extends BorderPane {
       if (selected != null) {
         drag = Drag.MOVE;
         double[] xy = toScratch(e.getX(), e.getY(), selected);
-        dragOffsetX = (selected.hasPosition() ? selected.x() : 0) - xy[0];
-        dragOffsetY = (selected.hasPosition() ? selected.y() : 0) - xy[1];
+        double[] at = renderer.position(selected);
+        dragOffsetX = at[0] - xy[0];
+        dragOffsetY = at[1] - xy[1];
         canvas.setCursor(javafx.scene.Cursor.CLOSED_HAND);
       }
     } else if (drag == Drag.RESIZE) {
@@ -1248,8 +1257,9 @@ final class StageDesignerView extends BorderPane {
         selected.setPosition(Math.round(x), Math.round(y));
       }
       case ROTATE -> {
-        double sx = selected.hasPosition() ? selected.x() : 0;
-        double sy = selected.hasPosition() ? selected.y() : 0;
+        double[] at = renderer.position(selected);
+        double sx = at[0];
+        double sy = at[1];
         double direction = 90 - Math.toDegrees(Math.atan2(xy[1] - sy, xy[0] - sx));
         if (e.isShiftDown()) {
           direction = Math.round(direction / 15) * 15;
@@ -1307,12 +1317,18 @@ final class StageDesignerView extends BorderPane {
       e.consume();
       return;
     }
+    if (e.isShortcutDown() && e.getCode() == KeyCode.V) {
+      paste();
+      e.consume();
+      return;
+    }
     if (selected == null || isReadOnly()) {
       return;
     }
     double step = e.isShiftDown() ? 10 : 1;
-    double x = selected.hasPosition() ? selected.x() : 0;
-    double y = selected.hasPosition() ? selected.y() : 0;
+    double[] at = renderer.position(selected);
+    double x = at[0];
+    double y = at[1];
     switch (e.getCode()) {
       case LEFT -> selected.setPosition(x - step, y);
       case RIGHT -> selected.setPosition(x + step, y);
@@ -1323,9 +1339,13 @@ final class StageDesignerView extends BorderPane {
         e.consume();
         return;
       }
-      case D -> {
+      case C, X, D -> {
         if (e.isShortcutDown()) {
-          duplicateSelected();
+          if (e.getCode() == KeyCode.D) {
+            duplicateSelected();
+          } else {
+            copySelected(e.getCode() == KeyCode.X);
+          }
           e.consume();
         }
         return;
@@ -1356,8 +1376,9 @@ final class StageDesignerView extends BorderPane {
     }
     StageRenderer.Look look = renderer.look(selected);
     try {
-      double x = parse(xField.getText(), selected.hasPosition() ? selected.x() : 0);
-      double y = parse(yField.getText(), selected.hasPosition() ? selected.y() : 0);
+      double[] at = renderer.position(selected);
+      double x = parse(xField.getText(), at[0]);
+      double y = parse(yField.getText(), at[1]);
       if (selected.isText()) {
         String words = StageRenderer.escape(textWordsField.getText().replace("\\n", "\n"));
         double wrap = Math.max(0, parse(textWrapField.getText(), selected.textWidth()));
@@ -1376,7 +1397,8 @@ final class StageDesignerView extends BorderPane {
       double pxWidth = ui ? parse(pxWidthField.getText(), look.width()) : look.width();
       double pxHeight = ui ? parse(pxHeightField.getText(), look.height()) : look.height();
       boolean sizeChanged = size != look.size();
-      boolean changed = !selected.hasPosition() || x != selected.x() || y != selected.y()
+      boolean moved = x != at[0] || y != at[1];
+      boolean changed = moved
           || direction != look.direction() || sizeChanged
           || Math.abs(pxWidth - look.width()) > 0.005 || Math.abs(pxHeight - look.height()) > 0.005;
       if (!changed) {
@@ -1394,7 +1416,10 @@ final class StageDesignerView extends BorderPane {
         selected.clearWidth();
         selected.clearHeight();
       }
-      selected.setPosition(x, y);
+      // where the constructor puts it stays the constructor's, like size and direction
+      if (moved || selected.hasPosition()) {
+        selected.setPosition(x, y);
+      }
       if (direction != look.direction() || selected.hasDirection()) {
         selected.direction(direction);
       }
@@ -1542,15 +1567,44 @@ final class StageDesignerView extends BorderPane {
     if (selected == null || isReadOnly()) {
       return;
     }
-    SpriteRef copy = selected.copyAs(uniqueName(selected.isText() ? "text" : selected.type()));
+    double[] at = renderer.position(selected);
+    addCopy(selected, at[0] + 20, at[1] - 20);
+  }
+
+  /** Ctrl+C / Ctrl+X: keeps the selected sprite, where it stands, for Ctrl+V. */
+  private void copySelected(boolean cut) {
+    if (selected == null || (cut && isReadOnly())) {
+      return;
+    }
+    double[] at = renderer.position(selected);
+    clipboard = selected.copy();
+    clipboard.setPosition(at[0], at[1]);
+    clipboardRoot = project.root();
+    if (cut) {
+      deleteSelected();
+    }
+  }
+
+  /** Ctrl+V: the copied sprite beside where it stood; the next paste goes beside this one. */
+  private void paste() {
+    if (clipboard == null || isReadOnly() || !project.root().equals(clipboardRoot)) {
+      return;
+    }
+    SpriteRef pasted = addCopy(clipboard, clipboard.x() + 20, clipboard.y() - 20);
+    clipboard.setPosition(pasted.x(), pasted.y());
+  }
+
+  /** Adds a copy of {@code source} under a fresh name at (x, y), selected. */
+  private SpriteRef addCopy(SpriteRef source, double x, double y) {
+    SpriteRef copy = source.copyAs(uniqueName(source.isText() ? "text" : source.type()));
     copy.instantiated(true);
     copy.added(true);
-    copy.setPosition((selected.hasPosition() ? selected.x() : 0) + 20,
-        (selected.hasPosition() ? selected.y() : 0) - 20);
-    copy.visible(selected.isVisible());
+    copy.setPosition(x, y);
+    copy.visible(source.isVisible());
     model.addSprite(copy);
     selected = copy;
     writeRegions();
+    return copy;
   }
 
   private void deleteSelected() {

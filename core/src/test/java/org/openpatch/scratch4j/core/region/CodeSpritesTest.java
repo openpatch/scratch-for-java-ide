@@ -40,6 +40,30 @@ class CodeSpritesTest {
   }
 
   @Test
+  void aSpriteStartsWhereItsOwnConstructorPutsIt() throws Exception {
+    Path root = BundledTemplates.create("red-light-green-light-100", tmp, "race", null);
+    // Referee() calls this.setPosition(-250, 110) after its setup region
+    assertThat(CodeSprites.start(root, "Referee")).containsExactly(-250, 110);
+    java.nio.file.Files.writeString(root.resolve("Flag.java"), """
+        public class Flag extends Pole {
+          public Flag() {
+            super(40);
+            this.setY(-20);
+          }
+        }
+        """);
+    java.nio.file.Files.writeString(root.resolve("Pole.java"), """
+        public class Pole extends Sprite {
+          public Pole(int x) {
+            this.setX(x);
+          }
+        }
+        """);
+    assertThat(CodeSprites.start(root, "Flag")).containsExactly(40, -20);
+    assertThat(CodeSprites.start(root, "Missing")).containsExactly(0, 0);
+  }
+
+  @Test
   void aClassWhoseCostumesComeFromItsParametersListsThemPerCreation() throws Exception {
     Path root = BundledTemplates.create("red-light-green-light-100", tmp, "race", null);
     assertThat(SpriteLook.variants(root, "Racer")).containsExactly(

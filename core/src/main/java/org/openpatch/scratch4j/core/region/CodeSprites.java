@@ -115,15 +115,35 @@ public final class CodeSprites {
 
   /** The ghosts of {@code stageClass} in the project at {@code root}. */
   public static List<Ghost> of(Path root, String stageClass) {
+    List<String> sources = sources(root);
+    return sources == null ? List.of() : new CodeSprites(root, sources).ghosts(stageClass);
+  }
+
+  /**
+   * Where {@code new className()} stands once its own constructor has run
+   * ({@code setPosition(-250, 110)}, {@code setX(x)}, through {@code super(...)}):
+   * the designer draws a sprite there while the stage gives it no position.
+   */
+  public static double[] start(Path root, String className) {
+    List<String> sources = sources(root);
+    if (sources == null) return new double[] {0, 0};
+    CodeSprites code = new CodeSprites(root, sources);
+    Made made = new Made(className, 0, 0, 0);
+    code.construct(code.classes.get(className), List.of(), made, 0);
+    return new double[] {made.x, made.y};
+  }
+
+  /** The project's Java sources, in file order (null: unreadable). */
+  private static List<String> sources(Path root) {
     List<String> sources = new ArrayList<>();
     try (Stream<Path> files = Files.list(root)) {
       for (Path f : files.filter(p -> p.toString().endsWith(".java")).sorted().toList()) {
         sources.add(Files.readString(f, StandardCharsets.UTF_8));
       }
     } catch (IOException e) {
-      return List.of();
+      return null;
     }
-    return new CodeSprites(root, sources).ghosts(stageClass);
+    return sources;
   }
 
   private List<Ghost> ghosts(String stageClass) {
