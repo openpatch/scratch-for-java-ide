@@ -83,14 +83,18 @@ JUnit, leaving their source unchanged. Scratch imports have a Scratch migration
 tab linking timing/unsupported-block tasks to the original block and Java source;
 the original .sb3 remains in the project.
 
-Maintainer checks after `mvn verify`:
+Run all checks locally with `scripts/test.sh`, or pick stages:
 
 ```sh
-python3 scripts/check-course-pack.py --library /path/to/scratch-for-java \
-  --curriculum /path/to/hyperbook-informatik
-python3 scripts/sync-templates.py --artifact /path/to/scratch-catalogs.zip --check
+scripts/test.sh unit          # mvn verify (CI runs this on Linux, Windows and macOS)
+scripts/test.sh smoke         # OpenGL, UI and export smoke (CI runs this on Linux)
+scripts/test.sh integration   # release catalogs, course pack, browser transfer
 ```
 
+Integration is local only: it uses sibling checkouts of `scratch-for-java` (at
+the bundled release tag, via a temporary worktree), `hyperbook-informatik` and
+`online-ide`; set `SCRATCH_LIBRARY`, `CURRICULUM` or `ONLINE_IDE` to use other
+paths. Run it before a release or after changing templates, export or import.
 The course check imports and compiles all 18 projects and runs the score tests.
 Use `--libraries /path/to/bundled/library` for a fully offline check. The native
 packaging workflow runs `scripts/smoke-packaged.py` on each supported OS. Local

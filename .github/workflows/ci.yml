@@ -1,5 +1,9 @@
 name: CI
 
+# Only checks that depend on this repository alone. The cross-repository
+# checks (release catalogs, course pack, browser transfer) follow other
+# repositories' main branches; run them locally with scripts/test.sh.
+
 on:
   push:
     branches: [main]
@@ -15,104 +19,23 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v6
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 25
-
       - name: Build and test
         run: mvn --batch-mode --no-transfer-progress verify
 
-      - name: Identify the bundled library release
-        if: runner.os == 'Linux'
-        id: library-release
-        run: |
-          python3 - <<'PY'
-          import os
-          import xml.etree.ElementTree as ET
-          namespace = '{http://maven.apache.org/POM/4.0.0}'
-          version = ET.parse('pom.xml').findtext(f'{namespace}properties/{namespace}scratch.version')
-          if not version:
-              raise SystemExit('Missing bundled library version')
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              print('ref=v' + version, file=output)
-          PY
-      - name: Check shared release metadata
-        if: runner.os == 'Linux'
-        uses: actions/checkout@v7
+  smoke:
+    name: smoke (Linux, Xvfb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
-          repository: openpatch/scratch-for-java
-          ref: ${{ steps.library-release.outputs.ref }}
-          path: .validation/library
-      - name: Set up the catalog toolchain
-        if: runner.os == 'Linux'
-        uses: ./.validation/library/.github/actions/setup-maven
-      - name: Generate reference metadata for the catalog check
-        if: runner.os == 'Linux'
-        working-directory: .validation/library
-        run: mvn --batch-mode --no-transfer-progress -DskipTests prepare-package
-      - name: Require current offline catalogs
-        if: runner.os == 'Linux'
-        run: |
-          python3 .validation/library/scripts/release-catalogs.py --check --studio .
-          python3 .validation/library/scripts/release-catalogs.py --archive .validation/examples.zip
-          python3 scripts/sync-templates.py --artifact .validation/examples.zip --check
-
-      - name: Checkout course activities
-        if: runner.os == 'Linux'
-        uses: actions/checkout@v7
-        with:
-          repository: openpatch/hyperbook-informatik
-          path: .validation/curriculum
-      - name: Import and validate the complete offline course
-        if: runner.os == 'Linux'
-        run: python3 scripts/check-course-pack.py --library .validation/library --curriculum .validation/curriculum
-
-      - name: Checkout the embedded project adapter
-        if: runner.os == 'Linux'
-        uses: actions/checkout@v7
-        with:
-          repository: openpatch/online-ide
-          path: .validation/online-ide
-      - name: Prepare the browser transfer check
-        if: runner.os == 'Linux'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Continue an edited curriculum project across environments
-        if: runner.os == 'Linux'
-        run: |
-          npm --prefix .validation/online-ide ci
-          npm --prefix .validation/online-ide run browser:install -- --with-deps
-          cd .validation/online-ide
-          node scripts/test-curriculum-transfer.mjs ../curriculum/book/projekte/spielwerkstatt/checkpoints/spielwerkstatt-q-07-testen.json ../..
-
-      - name: OpenGL run smoke (Linux, Xvfb)
-        # A real stage opens a window in a separate JVM and exits via the smoke switch.
-        if: runner.os == 'Linux'
-        env:
-          SCRATCH4J_ALL_JAR_CACHE: target/bundled
-        run: |
-          sudo apt-get install -y xvfb mesa-utils libgl1-mesa-dri >/dev/null 2>&1 || true
-          xvfb-run -a mvn --batch-mode --no-transfer-progress -pl runner -am test \
-            -Dtest=ScratchStageRunIT -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dscratch4j.gltest=true
-
-      - name: UI smoke (Linux, Xvfb)
-        if: runner.os == 'Linux'
-        run: |
-          xvfb-run -a mvn --batch-mode --no-transfer-progress -pl ui -am test \
-            -Dtest=UiSmokeIT -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dscratch4j.uismoke=true
-
-      - name: Export smoke (Linux, Xvfb)
-        # The exported app runs the student program in its own JVM.
-        # Temurin 25 ships no jmods (JEP 493), so this exercises the
-        # bundled-runtime fallback on the runners.
-        if: runner.os == 'Linux'
-        run: |
-          xvfb-run -a mvn --batch-mode --no-transfer-progress -pl export -am test \
-            -Dtest=StudentExportIT -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dscratch4j.exporttest=true
+          distribution: temurin
+          java-version: 25
+      - name: Install Xvfb
+        run: sudo apt-get install -y xvfb mesa-utils libgl1-mesa-dri >/dev/null
+      - name: OpenGL, UI and export smoke
+        run: scripts/test.sh smoke
