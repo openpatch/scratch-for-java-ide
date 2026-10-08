@@ -111,6 +111,8 @@ public class StudioApp extends javafx.application.Application {
   private final javafx.animation.PauseTransition stuckDelay =
       new javafx.animation.PauseTransition(javafx.util.Duration.seconds(60));
   private final AtomicBoolean checkRunning = new AtomicBoolean(false);
+  /** The open project's check state: only what changed is compiled and linted again. */
+  private volatile ProjectCheck.Cache checkCache;
   private final AtomicBoolean checkAgain = new AtomicBoolean(false);
   private final javafx.animation.PauseTransition checkDelay =
       new javafx.animation.PauseTransition(javafx.util.Duration.millis(250));
@@ -920,6 +922,11 @@ public class StudioApp extends javafx.application.Application {
     saveAll();
     stopProgram();
     project.set(p);
+    ProjectCheck.Cache oldCache = checkCache;
+    checkCache = new ProjectCheck.Cache(p.root());
+    if (oldCache != null && !checkRunning.get()) {
+      closeQuietly(oldCache); // a running check closes its own when it ends
+    }
     try { apiIndex.useProject(p); palette.refresh(); }
     catch (IOException e) { console.err(e.getMessage()); }
     Prefs.addRecentProject(p.root());
@@ -2519,16 +2526,21 @@ public class StudioApp extends javafx.application.Application {
       return;
     }
     DiagnosticsExplanations.Language language = explanationLanguage();
+    ProjectCheck.Cache cache = checkCache;
     Thread worker = new Thread(() -> {
       List<Problem> found;
       try {
-        found = ProjectCheck.check(p, language).stream()
+        found = ProjectCheck.check(p, language, cache).stream()
             .map(pr -> new Problem(pr.file(), pr.line(), pr.column(), pr.message(),
                 pr.explanation(), pr.suggestions(), pr.error(), pr.fix(), pr.original(),
                 pr.followUp(), pr.fixData()))
             .toList();
       } catch (RuntimeException e) {
         found = List.of(new Problem(null, 0, 0, e.toString(), null, List.of(), true));
+      } finally {
+        if (cache != checkCache) {
+          closeQuietly(cache); // the project changed while this check ran
+        }
       }
       List<Problem> result = found;
       Platform.runLater(() -> {
@@ -2594,6 +2606,14 @@ public class StudioApp extends javafx.application.Application {
     } else {
       stuckDelay.stop();
       problems.hideStuck();
+    }
+  }
+
+  private static void closeQuietly(ProjectCheck.Cache cache) {
+    try {
+      cache.close();
+    } catch (IOException ignored) {
+      // only the compiler's open jars
     }
   }
 

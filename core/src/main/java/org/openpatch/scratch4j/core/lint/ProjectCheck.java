@@ -2,7 +2,7 @@ package org.openpatch.scratch4j.core.lint;
 
 import org.openpatch.scratch4j.core.api.ApiIndex;
 import org.openpatch.scratch4j.core.compile.CompileResult;
-import org.openpatch.scratch4j.core.compile.CompilerService;
+import org.openpatch.scratch4j.core.compile.IncrementalCompiler;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 
 import java.io.IOException;
@@ -64,17 +64,82 @@ public final class ProjectCheck {
 
   private ProjectCheck() {}
 
+  /**
+   * What one project's checks keep between runs: the incremental compiler
+   * and each file's lint findings, keyed on the file's text (and the asset
+   * files, which the asset and map lints read). One per open project; the
+   * check runs one at a time, so it needs no locking.
+   */
+  public static final class Cache implements AutoCloseable {
+    private final IncrementalCompiler compiler;
+    private final java.util.Map<Path, Keyed<List<AssetLinter.Finding>>> assets =
+        new java.util.HashMap<>();
+    private final java.util.Map<Path, Keyed<List<org.openpatch.scratch4j.core.tiled.MapLinter.Finding>>>
+        maps = new java.util.HashMap<>();
+    private final java.util.Map<Path, Keyed<List<TransitionLinter.Finding>>> transitions =
+        new java.util.HashMap<>();
+
+    private record Keyed<T>(Object key, T value) {}
+
+    public Cache(Path projectRoot) {
+      this.compiler = new IncrementalCompiler(projectRoot.resolve(".scratch4j/build/check"));
+    }
+
+    /** What the last compile did (how many files it compiled). */
+    public IncrementalCompiler.Stats lastCompile() {
+      return compiler.lastStats();
+    }
+
+    private static <T> T cached(java.util.Map<Path, Keyed<T>> map, Path file, Object key,
+        java.util.function.Supplier<T> compute) {
+      Keyed<T> hit = map.get(file);
+      if (hit != null && hit.key().equals(key)) {
+        return hit.value();
+      }
+      T value = compute.get();
+      map.put(file, new Keyed<>(key, value));
+      return value;
+    }
+
+    private void retain(java.util.Collection<Path> sources) {
+      assets.keySet().retainAll(sources);
+      maps.keySet().retainAll(sources);
+      transitions.keySet().retainAll(sources);
+    }
+
+    @Override
+    public void close() throws IOException {
+      compiler.close();
+    }
+  }
+
+  /** A full check, compiling everything (tests, one-off callers). */
   public static List<Problem> check(ScratchProject project,
       DiagnosticsExplanations.Language language) {
+    try (Cache cache = new Cache(project.root())) {
+      return check(project, language, cache);
+    } catch (IOException e) {
+      return List.of(new Problem(null, 0, 0, "Could not check the project: " + e.getMessage(),
+          null, List.of(), true));
+    }
+  }
+
+  /** A check that reuses {@code cache}: only what changed is compiled and linted again. */
+  public static List<Problem> check(ScratchProject project,
+      DiagnosticsExplanations.Language language, Cache cache) {
     List<Problem> problems = new ArrayList<>();
     try {
       List<Path> sources = project.javaSources();
       List<Path> classpath = new ArrayList<>(project.libs());
       classpath.add(project.root());
-      Path outDir = project.root().resolve(".scratch4j/build/check");
       java.util.Locale messages = language == DiagnosticsExplanations.Language.DE
           ? java.util.Locale.GERMAN : java.util.Locale.ROOT;
-      CompileResult result = new CompilerService().compile(sources, classpath, outDir, messages);
+      java.util.Map<Path, String> texts = new java.util.LinkedHashMap<>();
+      for (Path source : sources) {
+        texts.put(source, Files.readString(source, StandardCharsets.UTF_8));
+      }
+      cache.retain(sources);
+      CompileResult result = cache.compiler.compile(texts, classpath, messages);
 
       Set<String> knownNames = null;
       FriendlyErrors friendly = new FriendlyErrors(language);
@@ -130,12 +195,11 @@ public final class ProjectCheck {
       }
 
       AssetLinter linter = new AssetLinter();
-      java.util.Map<Path, String> texts = new java.util.LinkedHashMap<>();
+      String assetFiles = assetFingerprint(project.root());
       for (Path source : sources) {
-        texts.put(source, Files.readString(source, StandardCharsets.UTF_8));
-      }
-      for (Path source : sources) {
-        for (AssetLinter.Finding f : linter.lint(project.root(), source, texts.get(source))) {
+        String text = texts.get(source);
+        for (AssetLinter.Finding f : Cache.cached(cache.assets, source,
+            List.of(text, assetFiles), () -> linter.lint(project.root(), source, text))) {
           problems.add(new Problem(f.file(), f.line(), 0, f.message(), null,
               f.suggestions(), false));
         }
@@ -145,7 +209,11 @@ public final class ProjectCheck {
           .withLibraryVersion(org.openpatch.scratch4j.core.project.LibraryCheck
               .projectVersion(project));
       for (Path source : sources) {
-        for (var f : maps.lint(project.root(), source, texts.get(source))) {
+        String text = texts.get(source);
+        for (var f : Cache.cached(cache.maps, source,
+            List.of(text, assetFiles, language, String.valueOf(
+                org.openpatch.scratch4j.core.project.LibraryCheck.projectVersion(project))),
+            () -> maps.lint(project.root(), source, text))) {
           problems.add(new Problem(f.file(), f.line(), 0, f.message(), f.explanation(),
               f.suggestions(), false));
         }
@@ -188,8 +256,11 @@ public final class ProjectCheck {
       TransitionLinter transitions = new TransitionLinter(language)
           .withCallbacks(LibraryCallbacks.of(project.libs()));
       TransitionLinter.Facts facts = TransitionLinter.facts(texts);
+      List<Path> libs = project.libs();
       for (Path source : sources) {
-        for (TransitionLinter.Finding f : transitions.lint(source, texts.get(source), facts)) {
+        String text = texts.get(source);
+        for (TransitionLinter.Finding f : Cache.cached(cache.transitions, source,
+            List.of(text, facts, language, libs), () -> transitions.lint(source, text, facts))) {
           // a plain while (true) { ... } wrapper: the bulb unwraps it
           boolean unwrap = "forever".equals(f.kind())
               && QuickFixes.canRemoveForever(texts.get(source), f.line());
@@ -205,6 +276,28 @@ public final class ProjectCheck {
         .comparing((Problem p) -> p.file() == null ? "" : p.file().toString())
         .thenComparingLong(Problem::line));
     return problems;
+  }
+
+  /**
+   * The project's files other than Java sources (images, sounds, maps), by
+   * path, size and change time: the asset lints depend on them.
+   */
+  static String assetFingerprint(Path root) throws IOException {
+    StringBuilder sb = new StringBuilder();
+    try (var walk = Files.walk(root)) {
+      for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) {
+        Path rel = root.relativize(p);
+        String first = rel.getName(0).toString();
+        String name = p.getFileName().toString();
+        if (first.startsWith(".") || first.equals("build") || first.equals("target")
+            || first.equals("export") || name.endsWith(".java") || name.endsWith(".class")) {
+          continue;
+        }
+        sb.append(rel).append('|').append(Files.size(p)).append('|')
+            .append(Files.getLastModifiedTime(p).toMillis()).append('\n');
+      }
+    }
+    return sb.toString();
   }
 
   private static List<String> readLines(Path file) {
