@@ -104,7 +104,7 @@ final class CostumeView {
     }
   }
 
-  /** Cropped, pre-rotated to face right (atlas direction honoured). */
+  /** Cropped and turned to face right like the library does (atlas direction honoured). */
   static Image crop(Image sheet, BuiltinImage entry) {
     if (entry.direction() == 90) {
       javafx.scene.image.WritableImage out =
@@ -113,30 +113,19 @@ final class CostumeView {
           sheet.getPixelReader(), entry.x(), entry.y());
       return out;
     }
-    // rotate by (90 - drawn direction) clockwise around the crop centre,
-    // sampling from the sheet pixel reader
-    double rad = Math.toRadians(-(90 - entry.direction()));
-    double w = entry.width();
-    double h = entry.height();
-    int outW = (int) Math.ceil(Math.abs(w * Math.cos(rad)) + Math.abs(h * Math.sin(rad)));
-    int outH = (int) Math.ceil(Math.abs(w * Math.sin(rad)) + Math.abs(h * Math.cos(rad)));
+    // face right like the library: a quarter turn, or mirrored when drawn facing left
+    int w = entry.width();
+    int h = entry.height();
+    int[] argb = new int[w * h];
+    sheet.getPixelReader().getPixels(entry.x(), entry.y(), w, h,
+        javafx.scene.image.PixelFormat.getIntArgbInstance(), argb, 0, w);
+    var turned = org.openpatch.scratch4j.core.assets.FacingRight.turn(
+        new org.openpatch.scratch4j.core.assets.FacingRight.Pixels(w, h, argb),
+        entry.direction());
     javafx.scene.image.WritableImage out =
-        new javafx.scene.image.WritableImage(outW, outH);
-    double cx = entry.x() + w / 2.0;
-    double cy = entry.y() + h / 2.0;
-    javafx.scene.image.PixelReader reader = sheet.getPixelReader();
-    for (int y = 0; y < outH; y++) {
-      for (int x = 0; x < outW; x++) {
-        double dx = x - outW / 2.0;
-        double dy = y - outH / 2.0;
-        int sx = (int) Math.round(cx + dx * Math.cos(rad) - dy * Math.sin(rad));
-        int sy = (int) Math.round(cy + dx * Math.sin(rad) + dy * Math.cos(rad));
-        if (sx >= 0 && sy >= 0 && sx < (int) sheet.getWidth()
-            && sy < (int) sheet.getHeight()) {
-          out.getPixelWriter().setColor(x, y, reader.getColor(sx, sy));
-        }
-      }
-    }
+        new javafx.scene.image.WritableImage(turned.width(), turned.height());
+    out.getPixelWriter().setPixels(0, 0, turned.width(), turned.height(),
+        javafx.scene.image.PixelFormat.getIntArgbInstance(), turned.argb(), 0, turned.width());
     return out;
   }
 }

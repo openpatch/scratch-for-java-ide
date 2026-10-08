@@ -39,13 +39,35 @@ class AssetCopierTest {
   void preRotatesCostumesDrawnFacingAnotherWay() throws Exception {
     Path root = projectRoot();
     BuiltinImage rotated = BuiltinAssetIndex.get().images().stream()
-        .filter(m -> m.direction() != 90)
+        .filter(m -> m.direction() == 0 || m.direction() == 180)
         .findFirst().orElseThrow();
     Path file = AssetCopier.copyBuiltinImage(rotated, root);
     BufferedImage image = ImageIO.read(file.toFile());
-    // a 90-degree pre-rotation swaps width and height
+    // a quarter turn swaps width and height
     assertThat(image.getWidth()).isEqualTo(rotated.height());
     assertThat(image.getHeight()).isEqualTo(rotated.width());
+  }
+
+  @Test
+  void aCostumeDrawnFacingLeftIsMirroredNotTurnedUpsideDown() throws Exception {
+    Path root = projectRoot();
+    BuiltinImage bee = BuiltinAssetIndex.get().images().stream()
+        .filter(m -> m.name().equals("bee")).findFirst().orElseThrow();
+    assertThat(bee.direction()).isEqualTo(-90);
+    BufferedImage copied = ImageIO.read(AssetCopier.copyBuiltinImage(bee, root).toFile());
+    BufferedImage sheet;
+    try (var in = AssetCopier.class.getResourceAsStream("/" + bee.sheetPath())) {
+      sheet = ImageIO.read(in);
+    }
+    assertThat(copied.getWidth()).isEqualTo(bee.width());
+    assertThat(copied.getHeight()).isEqualTo(bee.height());
+    // pixel (x, y) of the copy is pixel (w - 1 - x, y) of the sheet: a mirror, rows stay
+    for (int y = 0; y < bee.height(); y += 7) {
+      for (int x = 0; x < bee.width(); x += 5) {
+        assertThat(copied.getRGB(x, y))
+            .isEqualTo(sheet.getRGB(bee.x() + bee.width() - 1 - x, bee.y() + y));
+      }
+    }
   }
 
   @Test

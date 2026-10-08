@@ -1,9 +1,6 @@
 package org.openpatch.scratch4j.core.assets;
 
 import javax.imageio.ImageIO;
-import java.awt.Graphics2D;
-import java.awt.geom.AffineTransform;
-import java.awt.image.AffineTransformOp;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,7 +32,13 @@ public final class AssetCopier {
     BufferedImage crop = sheet.getSubimage(entry.x(), entry.y(),
         entry.width(), entry.height());
     if (entry.direction() != 90) {
-      crop = rotateClockwise(crop, 90 - entry.direction());
+      // face right like the library does: a quarter turn, or mirrored when drawn facing left
+      int[] argb = crop.getRGB(0, 0, crop.getWidth(), crop.getHeight(), null, 0,
+          crop.getWidth());
+      FacingRight.Pixels turned = FacingRight.turn(
+          new FacingRight.Pixels(crop.getWidth(), crop.getHeight(), argb), entry.direction());
+      crop = new BufferedImage(turned.width(), turned.height(), BufferedImage.TYPE_INT_ARGB);
+      crop.setRGB(0, 0, turned.width(), turned.height(), turned.argb(), 0, turned.width());
     }
     Path target = uniqueTarget(projectRoot.resolve("assets/images"),
         entry.name() + ".png");
@@ -60,26 +63,6 @@ public final class AssetCopier {
       Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
     }
     return target;
-  }
-
-  private static BufferedImage rotateClockwise(BufferedImage image, double degrees) {
-    double rad = Math.toRadians(degrees);
-    double w = image.getWidth();
-    double h = image.getHeight();
-    double sin = Math.abs(Math.sin(rad));
-    double cos = Math.abs(Math.cos(rad));
-    int newW = (int) Math.floor(w * cos + h * sin);
-    int newH = (int) Math.floor(w * sin + h * cos);
-    BufferedImage out = new BufferedImage(newW, newH, BufferedImage.TYPE_INT_ARGB);
-    AffineTransform transform = new AffineTransform();
-    transform.translate(newW / 2.0, newH / 2.0);
-    transform.rotate(rad);
-    transform.translate(-w / 2.0, -h / 2.0);
-    Graphics2D g = out.createGraphics();
-    g.drawImage(image, new AffineTransformOp(transform,
-        AffineTransformOp.TYPE_NEAREST_NEIGHBOR), 0, 0);
-    g.dispose();
-    return out;
   }
 
   private static Path uniqueTarget(Path dir, String fileName) throws IOException {
