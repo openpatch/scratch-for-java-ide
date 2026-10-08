@@ -3,11 +3,9 @@ package org.openpatch.scratch4j.ui;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.MenuItem;
@@ -16,13 +14,14 @@ import javafx.scene.control.TreeView;
 
 /**
  * The project file tree with file-type icons. Generated/build folders are
- * hidden; expansion state survives a refresh. A click opens the file in the
+ * hidden, and so are folders in {@code assets} with nothing in them (and
+ * {@code assets} itself when all of them are empty), so a new project shows
+ * only its code; expansion state survives a refresh. A click opens the file in the
  * matching editor (code, paint, sound). Files and folders move by drag and
  * drop or "Move to...", and F2 renames what is selected.
  */
 final class FileTreeView extends TreeView<Path> {
 
-  private static final Set<String> HIDDEN = Set.of(".scratch4j", "target", ".git", "build", "export");
 
   private Consumer<Path> onOpen = p -> { };
   private Consumer<Path> onRenameClass = p -> { };
@@ -38,6 +37,8 @@ final class FileTreeView extends TreeView<Path> {
   private Consumer<Path> onDuplicate = file -> { };
   private java.util.function.BiConsumer<Path, Path> onMove = (path, folder) -> { };
   private Path root;
+  /** Folders made in the IDE this session: shown even while still empty. */
+  private final Set<Path> keepVisible = new HashSet<>();
 
   /** What a drag inside the tree carries: the dragged file or folder. */
   static final javafx.scene.input.DataFormat PROJECT_PATH =
@@ -263,6 +264,11 @@ final class FileTreeView extends TreeView<Path> {
     reload();
   }
 
+  /** Shows {@code folder} even while it is empty (the student just made it). */
+  void keepVisible(Path folder) {
+    keepVisible.add(folder.toAbsolutePath().normalize());
+  }
+
   /** Rebuilds from disk, keeping which folders were open. */
   void reload() {
     if (root == null) {
@@ -272,7 +278,8 @@ final class FileTreeView extends TreeView<Path> {
     if (getRoot() != null) {
       collectExpanded(getRoot(), expanded);
     }
-    setRoot(build(root, expanded, true));
+    TreeItem<Path> built = ProjectTree.build(root, expanded, keepVisible);
+    setRoot(built != null ? built : new TreeItem<>(root));
   }
 
   void selectPath(Path path) {
@@ -302,24 +309,6 @@ final class FileTreeView extends TreeView<Path> {
     for (TreeItem<Path> child : item.getChildren()) {
       collectExpanded(child, expanded);
     }
-  }
-
-  private static TreeItem<Path> build(Path dir, Set<Path> expanded, boolean isRoot) {
-    TreeItem<Path> item = new TreeItem<>(dir);
-    String name = dir.getFileName() == null ? "" : dir.getFileName().toString();
-    // libraries collapsed by default; everything else open on first show
-    item.setExpanded(isRoot || expanded.contains(dir)
-        || expanded.isEmpty() && !name.equals("+libs"));
-    try (Stream<Path> children = Files.list(dir)) {
-      children.filter(p -> !HIDDEN.contains(p.getFileName().toString()))
-          .sorted(Comparator.comparing((Path p) -> !Files.isDirectory(p))
-              .thenComparing(p -> p.getFileName().toString().toLowerCase()))
-          .forEach(p -> item.getChildren().add(Files.isDirectory(p)
-              ? build(p, expanded, false) : new TreeItem<>(p)));
-    } catch (IOException e) {
-      // unreadable folder: show it empty
-    }
-    return item;
   }
 
   private void reveal() {

@@ -30,6 +30,8 @@ class UiSmokeIT {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "uismoke",
         NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
     Path stage = tmp.resolve("uismoke/MyStage.java");
+    // the Files tree hides empty asset folders: give images something to show
+    java.nio.file.Files.writeString(tmp.resolve("uismoke/assets/images/cat.png"), "");
 
     CountDownLatch done = new CountDownLatch(1);
     AtomicReference<Throwable> failure = new AtomicReference<>();

@@ -2464,6 +2464,7 @@ public class StudioApp extends javafx.application.Application {
     dialog.showAndWait().ifPresent(name -> {
       try {
         Path created = ProjectFolderManagement.create(p, parent, name.trim());
+        fileTree.keepVisible(created);
         fileTree.reload();
         fileTree.selectPath(created);
         setStatus(I18n.t("folder.created", created.getFileName()));
