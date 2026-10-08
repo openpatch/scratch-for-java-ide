@@ -4026,7 +4026,10 @@ public class StudioApp extends javafx.application.Application {
   private void showApiHelp() {
     CodeEditor active = editor.activeEditor();
     String word = active == null ? "" : active.wordAtCaret();
-    if (!word.isEmpty()) {
+    if (word.isEmpty()) {
+      // no word at the caret (or no editor): the whole reference
+      browse("https://scratch4j.openpatch.org/reference/");
+    } else {
       ApiHelpDialog.showForWord(apiIndex, word, this::browse);
     }
   }
