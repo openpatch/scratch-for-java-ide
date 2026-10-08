@@ -140,4 +140,32 @@ class CompletionsTest {
         """, "getInstance().|");
     assertThat(names(result)).contains("setStage", "transitionToStage");
   }
+
+  @Test
+  void binaryMethodsWithoutParameterNamesShowOnlyTypes() throws Exception {
+    var result = complete("""
+        public class MyStage {
+          public void run() {
+            String value = "";
+            value.subst|
+          }
+        }
+        """, "value.subst|");
+    assertThat(result.items()).extracting(Completions.Item::signature)
+        .containsExactly("substring(int)", "substring(int, int)");
+  }
+
+  @Test
+  void sourceParametersNamedArg0KeepTheirDeclaredName() throws Exception {
+    var result = complete("""
+        public class MyStage {
+          void custom(int arg0) {}
+          public void run() {
+            this.cust|
+          }
+        }
+        """, "this.cust|");
+    assertThat(result.items()).extracting(Completions.Item::signature)
+        .containsExactly("custom(int arg0)");
+  }
 }

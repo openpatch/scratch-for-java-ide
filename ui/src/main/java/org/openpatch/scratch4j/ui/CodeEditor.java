@@ -67,14 +67,16 @@ final class CodeEditor extends BorderPane {
       boolean error) {}
 
   /**
-   * One completion entry. {@code noArgs} is known for semantic methods (the
-   * caret then lands after "()"), {@code docsUrl} links the reference page.
+   * One completion entry. {@code text} is the name to insert; {@code label}
+   * includes the parameters for methods. {@code noArgs} tells whether the caret
+   * lands after "()", {@code docsUrl} links the reference page.
    */
-  record Completion(String text, String detail, Kind kind, Boolean noArgs, String docsUrl) {
+  record Completion(String text, String detail, Kind kind, Boolean noArgs, String docsUrl,
+      String label) {
     enum Kind { METHOD, FIELD, VARIABLE, CLASS, KEYWORD, WORD, IMAGE, SOUND, FILE }
 
     Completion(String text, String detail, Kind kind) {
-      this(text, detail, kind, null, null);
+      this(text, detail, kind, null, null, text);
     }
   }
 
@@ -1439,7 +1441,7 @@ final class CodeEditor extends BorderPane {
           setGraphic(null);
           return;
         }
-        setText(item.text());
+        setText(item.label());
         setGraphic(completionIcon(item));
       }
     });
@@ -1715,17 +1717,21 @@ final class CodeEditor extends BorderPane {
         : item.owner().substring(item.owner().lastIndexOf('.') + 1);
     ApiMethod doc = null;
     if (item.kind() == org.openpatch.scratch4j.core.compile.Completions.Kind.METHOD
-        && ownerSimple != null) {
+        && item.owner() != null && item.owner().startsWith("org.openpatch.scratch.")) {
       doc = apiIndex.byName(item.name()).stream()
           .filter(m -> m.className().equals(ownerSimple)
-              && m.params().size() == item.parameterTypes().size())
+              && m.methodName().equals(item.name())
+              && m.params().stream().map(p -> parameterType(p.replaceFirst("\\s+\\w+$", "")))
+                  .toList().equals(item.parameterTypes().stream()
+                      .map(CodeEditor::parameterType).toList()))
           .findFirst().orElse(null);
     }
+    String signature = doc == null ? item.signature() : methodLabel(doc);
     StringBuilder detail = new StringBuilder();
     if (ownerSimple != null) {
       detail.append(ownerSimple).append(" \u00b7 ");
     }
-    detail.append(item.type()).append(' ').append(item.signature());
+    detail.append(item.type()).append(' ').append(signature);
     if (doc != null) {
       detail.append(javadoc(doc));
     }
@@ -1738,7 +1744,17 @@ final class CodeEditor extends BorderPane {
     return new Completion(item.name(), detail.toString(), kind,
         item.kind() == org.openpatch.scratch4j.core.compile.Completions.Kind.METHOD
             ? item.parameterTypes().isEmpty() : null,
-        doc == null ? null : doc.docsUrl());
+        doc == null ? null : doc.docsUrl(), signature);
+  }
+
+  /** Compare catalog and javac types without packages, formatting, or varargs syntax. */
+  private static String parameterType(String type) {
+    return type.replace("...", "[]").replaceAll("\\b[a-z][\\w]*\\.", "")
+        .replaceAll("\\s+", "");
+  }
+
+  private static String methodLabel(ApiMethod method) {
+    return method.methodName() + "(" + String.join(", ", method.params()) + ")";
   }
 
   /** The Javadoc part of a detail: Scratch block, description, parameters, return value. */
@@ -1778,7 +1794,7 @@ final class CodeEditor extends BorderPane {
         continue;
       }
       found.putIfAbsent(m.methodName(), new Completion(m.methodName(), detailOf(m),
-          Completion.Kind.METHOD));
+          Completion.Kind.METHOD, m.params().isEmpty(), m.docsUrl(), methodLabel(m)));
     }
     if (!afterDot) {
       for (String k : JAVA_KEYWORDS) {

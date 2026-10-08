@@ -252,7 +252,7 @@ public final class Completions {
       List<String> parameterTypes = method.getParameters().stream()
           .map(p -> simple(p.asType())).toList();
       String params = method.getParameters().stream()
-          .map(p -> simple(p.asType()) + " " + p.getSimpleName())
+          .map(p -> parameter(p, trees))
           .collect(Collectors.joining(", "));
       item = new Item(name, Kind.METHOD, name + "(" + params + ")",
           simple(method.getReturnType()), owner, isStatic, parameterTypes);
@@ -274,6 +274,14 @@ public final class Completions {
       return;
     }
     items.putIfAbsent(name, item);
+  }
+
+  /** Binary methods without parameter metadata get synthetic names such as arg0. */
+  private static String parameter(VariableElement parameter, Trees trees) {
+    String type = simple(parameter.asType());
+    String name = parameter.getSimpleName().toString();
+    return trees.getPath(parameter) == null && name.matches("arg\\d+")
+        ? type : type + " " + name;
   }
 
   /** Type names without packages: {@code java.lang.String} reads as {@code String}. */
