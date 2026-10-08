@@ -281,6 +281,8 @@ public class StudioApp extends javafx.application.Application {
     editor.getSelectionModel().selectedItemProperty().addListener((o, old, tab) -> {
       // leaving a code tab saves it, entering a designer catches up with the code
       saveAll();
+      Path shown = EditorTabs.fileOf(tab);
+      if (shown != null) fileTree.selectPath(shown); // the tree follows the tab
       if (tab != null && tab.getContent() instanceof CodeEditor code
           && code.sidePanel() instanceof StageDesignerView designer) {
         designer.reload();
@@ -397,6 +399,10 @@ public class StudioApp extends javafx.application.Application {
     cat.setSmooth(false);
     StackPane logo = new StackPane(cat);
     logo.getStyleClass().add("app-logo");
+    // the cat leads back to the start page
+    logo.setCursor(javafx.scene.Cursor.HAND);
+    Tooltip.install(logo, new Tooltip(I18n.t("home.tooltip")));
+    logo.setOnMouseClicked(e -> closeProject());
     MenuBar menus = menuBar();
     menus.getStyleClass().add("header-menus");
     projectTitle = new Label("Scratch for Java Studio");
@@ -572,9 +578,55 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
+  /** Saves and closes the open project, once the student agrees, and shows the start page. */
+  private void closeProject() {
+    ScratchProject p = project.get();
+    if (p == null) {
+      return; // the start page already shows
+    }
+    Alert ask = new Alert(Alert.AlertType.CONFIRMATION,
+        I18n.t("home.confirm", p.name()), I18n.ok(), I18n.cancel());
+    ask.setHeaderText(null);
+    Theme.style(ask);
+    if (ask.showAndWait().orElse(null) != I18n.ok() || !editor.confirmUnsavedHitboxes()) {
+      return;
+    }
+    saveAll();
+    stopProgram();
+    checkDelay.stop();
+    hotSwapDelay.stop();
+    stuckDelay.stop();
+    editor.getTabs().clear();
+    project.set(null);
+    hasProject.set(false);
+    stage.setTitle("Scratch for Java Studio");
+    projectTitle.setText("Scratch for Java Studio");
+    setStatus(I18n.t("status.no.project"));
+    showWelcome();
+  }
+
   private void showWelcome() {
     root.setCenter(new WelcomeView(this::createProject, this::openProject,
         this::openProjectAt, this::browse));
+  }
+
+  /** The projects the start page lists, filled each time the File menu opens. */
+  private Menu recentProjectsMenu(Menu file) {
+    Menu recent = new Menu(I18n.t("welcome.recent"), Icons.of("fth-clock"));
+    file.setOnShowing(e -> {
+      Path current = project.get() == null ? null : project.get().root().toAbsolutePath().normalize();
+      recent.getItems().clear();
+      for (Path dir : Prefs.recentProjects()) {
+        if (dir.equals(current)) continue;
+        MenuItem entry = new MenuItem(dir.getFileName() + (dir.getParent() == null ? ""
+            : "  \u2013  " + dir.getParent()), Icons.of("fth-folder"));
+        entry.setMnemonicParsing(false);
+        entry.setOnAction(a -> openProjectAt(dir));
+        recent.getItems().add(entry);
+      }
+      recent.setDisable(recent.getItems().isEmpty());
+    });
+    return recent;
   }
 
   private MenuBar menuBar() {
@@ -584,6 +636,7 @@ public class StudioApp extends javafx.application.Application {
     file.getItems().addAll(
         item("menu.file.new", "fth-plus-square", shortcut(KeyCode.N), this::createProject),
         item("menu.file.open", "fth-folder", shortcut(KeyCode.O), this::openProject),
+        recentProjectsMenu(file),
         item("menu.file.sb3", "fth-download", null, this::importScratchProject),
         new SeparatorMenuItem(),
         item("menu.file.add", "fth-plus",

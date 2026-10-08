@@ -182,6 +182,7 @@ final class EditorTabs extends TabPane {
       save(editor);
     });
     tab.setOnClosed(e -> openTabs.remove(file, created));
+    tab.setContextMenu(tabMenu(tab));
     openTabs.put(file, tab);
     getTabs().add(tab);
     getSelectionModel().select(tab);
@@ -209,6 +210,7 @@ final class EditorTabs extends TabPane {
         });
       }
       tab.setOnClosed(e -> toolTabs.remove(key, created));
+      tab.setContextMenu(tabMenu(tab));
       toolTabs.put(key, tab);
       getTabs().add(tab);
     }
@@ -391,30 +393,62 @@ final class EditorTabs extends TabPane {
   void closeSelected() {
     Tab tab = getSelectionModel().getSelectedItem();
     if (tab != null) {
-      if (tab.getOnCloseRequest() != null) {
-        javafx.event.Event request = new javafx.event.Event(tab, tab,
-            Tab.TAB_CLOSE_REQUEST_EVENT);
-        tab.getOnCloseRequest().handle(request);
-        if (request.isConsumed()) return;
-      }
-      getTabs().remove(tab);
-      if (tab.getOnClosed() != null) {
-        tab.getOnClosed().handle(null);
-      }
+      close(tab);
     }
+  }
+
+  /** Closes {@code tab} as its close button does; false when it asked to stay open. */
+  boolean close(Tab tab) {
+    if (tab.getOnCloseRequest() != null) {
+      javafx.event.Event request = new javafx.event.Event(tab, tab,
+          Tab.TAB_CLOSE_REQUEST_EVENT);
+      tab.getOnCloseRequest().handle(request);
+      if (request.isConsumed()) return false;
+    }
+    getTabs().remove(tab);
+    if (tab.getOnClosed() != null) {
+      tab.getOnClosed().handle(null);
+    }
+    return true;
+  }
+
+  /** Right-click on a tab: close it, the others, or all. */
+  private javafx.scene.control.ContextMenu tabMenu(Tab tab) {
+    javafx.scene.control.MenuItem close = new javafx.scene.control.MenuItem(
+        I18n.t("tabs.close"), Icons.of("fth-x"));
+    close.setOnAction(e -> close(tab));
+    javafx.scene.control.MenuItem others = new javafx.scene.control.MenuItem(
+        I18n.t("tabs.close.others"));
+    others.setOnAction(e -> {
+      for (Tab other : List.copyOf(getTabs())) {
+        if (other != tab) close(other);
+      }
+    });
+    javafx.scene.control.MenuItem all = new javafx.scene.control.MenuItem(
+        I18n.t("tabs.close.all"));
+    all.setOnAction(e -> List.copyOf(getTabs()).forEach(this::close));
+    javafx.scene.control.ContextMenu menu =
+        new javafx.scene.control.ContextMenu(close, others, all);
+    menu.setOnShowing(e -> others.setDisable(getTabs().size() < 2));
+    return menu;
+  }
+
+  /** The file a tab shows (code, designer, sprite, image, sound, map, font), or null. */
+  static Path fileOf(Tab tab) {
+    Node content = tab == null ? null : tab.getContent();
+    return content instanceof CodeEditor code ? code.file()
+        : content instanceof StageDesignerView designer ? designer.file()
+        : content instanceof SpriteAssetsView assets ? assets.file()
+        : content instanceof ImageEditorView image ? image.file()
+        : content instanceof SoundEditorView sound ? sound.file()
+        : content instanceof MapEditorView map ? map.file()
+        : content instanceof FontPreviewView font ? font.file() : null;
   }
 
   /** Close all code/designer tabs backed by a source file after a stage move. */
   void closeForFile(Path file) {
     for (Tab tab : List.copyOf(getTabs())) {
-      Node content = tab.getContent();
-      Path tabFile = content instanceof CodeEditor code ? code.file()
-          : content instanceof StageDesignerView designer ? designer.file()
-          : content instanceof SpriteAssetsView assets ? assets.file()
-          : content instanceof ImageEditorView image ? image.file()
-          : content instanceof SoundEditorView sound ? sound.file()
-          : content instanceof MapEditorView map ? map.file()
-          : content instanceof FontPreviewView font ? font.file() : null;
+      Path tabFile = fileOf(tab);
       if (file.equals(tabFile)) {
         getTabs().remove(tab);
         if (tab.getOnClosed() != null) {
