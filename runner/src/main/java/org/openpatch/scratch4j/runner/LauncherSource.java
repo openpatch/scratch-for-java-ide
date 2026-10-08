@@ -486,8 +486,7 @@ public final class LauncherSource {
               if (stage != null) {
                 sb.append(',').append(str("stage")).append(':');
                 object(sb, stage, "stage", classes);
-                java.util.List<org.openpatch.scratch.Sprite> all =
-                    new java.util.ArrayList<>(stage.getAll());
+                java.util.List<?> all = sprites(stage);
                 sb.append(',').append(str("total")).append(':').append(all.size());
                 sb.append(',').append(str("sprites")).append(":[");
                 for (int i = 0; i < Math.min(all.size(), MAX_SPRITES); i++) {
@@ -515,6 +514,32 @@ public final class LauncherSource {
                     .append(str("fields")).append(":[").append(fields).append("]}");
               }
               return sb.append("]}").toString();
+            }
+
+            /** Copies the standard collection or the NRW API's newly created Abitur List. */
+            static java.util.List<?> sprites(org.openpatch.scratch.Stage stage) {
+              // The NRW return type is inferred by the caller. Keep it as Object
+              // so javac does not insert a cast to java.util.Collection.
+              Object list = stage.getAll();
+              if (list instanceof java.util.Collection<?>) {
+                return new java.util.ArrayList<>((java.util.Collection<?>) list);
+              }
+              java.util.List<Object> all = new java.util.ArrayList<>();
+              try {
+                Class<?> type = list.getClass();
+                java.lang.reflect.Method first = type.getMethod("toFirst");
+                java.lang.reflect.Method access = type.getMethod("hasAccess");
+                java.lang.reflect.Method content = type.getMethod("getContent");
+                java.lang.reflect.Method next = type.getMethod("next");
+                first.invoke(list);
+                while (Boolean.TRUE.equals(access.invoke(list))) {
+                  all.add(content.invoke(list));
+                  next.invoke(list);
+                }
+              } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Could not read the stage's sprite list", e);
+              }
+              return all;
             }
 
             static String id(Object o) {
