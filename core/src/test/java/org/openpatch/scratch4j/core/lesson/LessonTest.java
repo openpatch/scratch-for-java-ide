@@ -1,0 +1,114 @@
+package org.openpatch.scratch4j.core.lesson;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.openpatch.scratch4j.core.lint.DiagnosticsExplanations;
+import org.openpatch.scratch4j.core.lint.ProjectCheck;
+import org.openpatch.scratch4j.core.project.BundledTemplates;
+import org.openpatch.scratch4j.core.project.NewProject;
+import org.openpatch.scratch4j.core.project.ScratchProject;
+
+class LessonTest {
+
+  @TempDir
+  Path tmp;
+
+  private Path root;
+
+  private Map<String, String> files() throws IOException {
+    Map<String, String> files = new LinkedHashMap<>();
+    for (Path source : ScratchProject.open(root).javaSources()) {
+      files.put(source.getFileName().toString(), Files.readString(source));
+    }
+    return files;
+  }
+
+  /** What the IDE knows after a check: the files and whether the real compiler accepts them. */
+  private boolean compiles() throws IOException {
+    return ProjectCheck.check(ScratchProject.open(root), DiagnosticsExplanations.Language.EN)
+        .stream().noneMatch(ProjectCheck.Problem::error);
+  }
+
+  private List<String> afterCheck(LessonProgress progress) throws IOException {
+    return progress.update(files(), compiles()).stream().map(Lesson.Step::id).toList();
+  }
+
+  private List<String> afterRun(LessonProgress progress) throws IOException {
+    return progress.ran(files(), compiles()).stream().map(Lesson.Step::id).toList();
+  }
+
+  private void edit(String from, String to) throws IOException {
+    Path bunny = root.resolve("Bunny.java");
+    String text = Files.readString(bunny);
+    assertThat(text).contains(from);
+    Files.writeString(bunny, text.replace(from, to));
+  }
+
+  @Test
+  void theFirstLessonWalksThroughItsTemplateStepByStep() throws IOException {
+    Lesson lesson = Lesson.bundled("first-steps");
+    assertThat(lesson.steps()).extracting(Lesson.Step::id)
+        .containsExactly("run", "faster", "try", "up", "costume", "say", "play");
+    for (Lesson.Step step : lesson.steps()) {
+      assertThat(step.title(Locale.GERMAN)).isNotBlank().isNotEqualTo(step.title(Locale.ENGLISH));
+      assertThat(step.text(Locale.GERMAN)).isNotBlank().isNotEqualTo(step.text(Locale.ENGLISH));
+    }
+    BundledTemplates.create(lesson.template(), tmp, "lesson",
+        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+    root = tmp.resolve("lesson");
+    Lesson.install(root, lesson.id());
+    assertThat(Lesson.load(root).steps()).extracting(Lesson.Step::id)
+        .containsExactlyElementsOf(lesson.steps().stream().map(Lesson.Step::id).toList());
+
+    LessonProgress progress = LessonProgress.load(lesson, root);
+    assertThat(afterCheck(progress)).as("nothing done before the first run").isEmpty();
+    assertThat(afterRun(progress)).containsExactly("run");
+
+    // a half-typed number does not count; the finished one does
+    edit("this.move(4);\n    }\n    if", "this.move(8\n    }\n    if");
+    assertThat(afterCheck(progress)).isEmpty();
+    edit("this.move(8\n", "this.move(8);\n");
+    assertThat(afterCheck(progress)).containsExactly("faster");
+    assertThat(afterCheck(progress)).as("a run is needed, not a check").isEmpty();
+    assertThat(afterRun(progress)).containsExactly("try");
+
+    // the step's own code, pasted where the text says, compiles and completes it
+    Lesson.Step up = lesson.steps().get(3);
+    edit("    this.ifOnEdgeBounce();", up.code() + "\n    this.ifOnEdgeBounce();");
+    assertThat(afterCheck(progress)).containsExactly("up");
+
+    // the costume step's two lines go to two places; a commented line does not count
+    edit("    this.setSize(50);", "    this.setSize(50);\n    // this.addCostume(\"bunny1_jump\");");
+    edit("      this.changeY(5);", "      this.changeY(5);\n      this.switchCostume(\"bunny1_jump\");");
+    assertThat(afterCheck(progress)).isEmpty();
+    edit("    // this.addCostume(\"bunny1_jump\");", "    this.addCostume(\"bunny1_jump\");");
+    assertThat(afterCheck(progress)).containsExactly("costume");
+
+    // ahead of the text: progress survives a reload and the say step ticks off at once
+    Lesson.Step say = lesson.steps().get(5);
+    edit("    this.setRotationStyle(RotationStyle.LEFT_RIGHT);\n",
+        "    this.setRotationStyle(RotationStyle.LEFT_RIGHT);\n" + say.code() + "\n");
+    LessonProgress reloaded = LessonProgress.load(lesson, root);
+    assertThat(reloaded.current()).isEqualTo(5);
+    assertThat(afterCheck(reloaded)).containsExactly("say");
+    assertThat(afterRun(reloaded)).containsExactly("play");
+    assertThat(reloaded.finished()).isTrue();
+
+    reloaded.restart();
+    assertThat(LessonProgress.load(lesson, root).current()).isZero();
+  }
+
+  @Test
+  void aProjectWithoutALessonHasNone() throws IOException {
+    assertThat(Lesson.load(tmp)).isNull();
+  }
+}

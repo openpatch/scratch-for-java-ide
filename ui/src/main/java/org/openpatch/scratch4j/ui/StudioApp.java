@@ -134,6 +134,18 @@ public class StudioApp extends javafx.application.Application {
   private Tab consoleTab;
   private ScratchMigrationPane migrationPane;
   private Tab migrationTab;
+  /** The project's lesson in the sidebar (only when the project has one). */
+  private Tab lessonTab;
+  private LessonPanel lessonPanel;
+  /** Lesson checks read files and write progress: off the FX thread, one at a time. */
+  private final java.util.concurrent.ExecutorService lessonWorker =
+      java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "scratch4j-lesson");
+        t.setDaemon(true);
+        return t;
+      });
+  /** This run's first frame was counted for the lesson. */
+  private boolean lessonRunCounted;
   private Tab debuggerTab;
   private Tab searchTab;
   private SearchResultsView searchResults;
@@ -310,6 +322,10 @@ public class StudioApp extends javafx.application.Application {
     Tab filesTab = new Tab(I18n.t("files.title"), fileTabContent);
     filesTab.setGraphic(Icons.of("fth-folder"));
     sidebar.getTabs().addAll(stagesTab, filesTab);
+    lessonPanel = new LessonPanel();
+    lessonPanel.setOnRestart(this::restartLesson);
+    lessonTab = new Tab(I18n.t("lesson.tab"), lessonPanel);
+    lessonTab.setGraphic(Icons.of("fth-compass"));
     sidebar.setMinWidth(200);
 
     Label emptyHint = new Label(I18n.t("editor.empty"), Icons.of("fth-mouse-pointer", 22));
@@ -845,7 +861,12 @@ public class StudioApp extends javafx.application.Application {
     NewProjectDialog.show(stage).ifPresent(result -> {
       try {
         Path allJar = LibraryJarSource.allJar(bundledLibraryDir());
-        if (result.example() != null) {
+        if (result.lesson() != null) {
+          var lesson = org.openpatch.scratch4j.core.lesson.Lesson.bundled(result.lesson());
+          Path created = BundledTemplates.create(lesson.template(), result.parentDir(),
+              result.name(), allJar);
+          org.openpatch.scratch4j.core.lesson.Lesson.install(created, lesson.id());
+        } else if (result.example() != null) {
           BundledTemplates.create(result.example(), result.parentDir(), result.name(), allJar);
         } else {
           NewProject.create(result.template(), result.parentDir(), result.name(), allJar);
@@ -1029,6 +1050,7 @@ public class StudioApp extends javafx.application.Application {
       ranBefore = false;
     }
     hasRun.set(ranBefore);
+    openLesson(p);
     stuckDelay.stop();
     problems.hideStuck();
     updateProblemsPlaceholder();
@@ -1462,6 +1484,10 @@ public class StudioApp extends javafx.application.Application {
       }
       watchFrames = frames;
       watchChanged = now;
+      if (frames > 0 && !lessonRunCounted && running.get()) {
+        lessonRunCounted = true;
+        lessonRan();
+      }
       // drawn for a few seconds without a crash: this code works
       if (frames > 0 && now - Math.max(watchStarted, lastSwap) >= 4000 && !runCrashed
           && !runKept && running.get()) {
@@ -2619,6 +2645,7 @@ public class StudioApp extends javafx.application.Application {
       setStatus(found.isEmpty() ? I18n.t("problems.none")
           : I18n.t("status.problems", found.size()));
     }
+    updateLesson(checked.stream().noneMatch(Problem::error));
     if (errors > 0) {
       // a minute without getting back to green: offer the version that ran
       if (!problems.stuckShowing() && stuckDelay.getStatus()
@@ -2637,6 +2664,94 @@ public class StudioApp extends javafx.application.Application {
     } catch (IOException ignored) {
       // only the compiler's open jars
     }
+  }
+
+  // --- lesson ------------------------------------------------------------------------
+
+  /** The project's lesson, if it has one: a sidebar tab, shown first. */
+  private void openLesson(ScratchProject p) {
+    org.openpatch.scratch4j.core.lesson.LessonProgress progress = null;
+    try {
+      var lesson = org.openpatch.scratch4j.core.lesson.Lesson.load(p.root());
+      if (lesson != null) {
+        progress = org.openpatch.scratch4j.core.lesson.LessonProgress.load(lesson, p.root());
+      }
+    } catch (IOException e) {
+      console.err(e.getMessage());
+    }
+    lessonPanel.show(progress);
+    if (progress == null) {
+      sidebar.getTabs().remove(lessonTab);
+    } else {
+      if (!sidebar.getTabs().contains(lessonTab)) {
+        sidebar.getTabs().add(0, lessonTab);
+      }
+      sidebar.getSelectionModel().select(lessonTab);
+    }
+    // three tabs and the step texts need more room than the stages alone
+    sidebar.setMinWidth(progress == null ? 200 : LESSON_SIDEBAR_WIDTH);
+  }
+
+  private static final double LESSON_SIDEBAR_WIDTH = 320;
+
+  /** After a project check: the lesson looks whether the current step is done. */
+  private void updateLesson(boolean compiles) {
+    var progress = lessonPanel.progress();
+    ScratchProject p = project.get();
+    if (progress == null || p == null) return;
+    lessonWorker.execute(() -> lessonStep(p, progress, false, compiles));
+  }
+
+  /** A run drew its first frame: "run it" steps are done. */
+  private void lessonRan() {
+    var progress = lessonPanel.progress();
+    ScratchProject p = project.get();
+    if (progress == null || p == null) return;
+    boolean compiles = checkedProblems.stream().noneMatch(Problem::error);
+    lessonWorker.execute(() -> lessonStep(p, progress, true, compiles));
+  }
+
+  private void lessonStep(ScratchProject p,
+      org.openpatch.scratch4j.core.lesson.LessonProgress progress, boolean ran,
+      boolean compiles) {
+    List<org.openpatch.scratch4j.core.lesson.Lesson.Step> completed;
+    try {
+      Map<String, String> files = new HashMap<>();
+      for (Path source : p.javaSources()) {
+        files.put(source.getFileName().toString(), Files.readString(source));
+      }
+      completed = ran ? progress.ran(files, compiles) : progress.update(files, compiles);
+    } catch (IOException e) {
+      return;
+    }
+    if (completed.isEmpty()) return;
+    Platform.runLater(() -> {
+      if (lessonPanel.progress() != progress) return; // another project by now
+      lessonPanel.refresh();
+      java.util.Locale locale = I18n.current() == I18n.Language.DE
+          ? java.util.Locale.GERMAN : java.util.Locale.ENGLISH;
+      var last = completed.get(completed.size() - 1);
+      setStatus("\u2714 " + I18n.t("lesson.stepdone", last.title(locale)));
+      if (progress.finished()) {
+        notice(I18n.t("lesson.finished", progress.lesson().title(locale)));
+      }
+      if (sidebar.getTabs().contains(lessonTab)) {
+        sidebar.getSelectionModel().select(lessonTab);
+      }
+    });
+  }
+
+  private void restartLesson() {
+    var progress = lessonPanel.progress();
+    if (progress == null) return;
+    lessonWorker.execute(() -> {
+      try {
+        progress.restart();
+      } catch (IOException ignored) {
+        // progress is a convenience
+      }
+      Platform.runLater(lessonPanel::refresh);
+    });
   }
 
   /** The empty problems list says what to do next. */
@@ -2808,6 +2923,7 @@ public class StudioApp extends javafx.application.Application {
     showProblems(checkedProblems);
     runCrashed = false;
     runKept = false;
+    lessonRunCounted = false;
     bottomTabs.getSelectionModel().select(consoleTab);
     console.info("▶ " + I18n.t("status.compiling", startStage));
     setStatus(I18n.t("status.compiling", startStage));

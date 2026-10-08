@@ -1,0 +1,111 @@
+{
+  "id": "first-steps",
+  "template": "getting-started-100",
+  "title": {
+    "en": "Your first program",
+    "de": "Dein erstes Programm"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start your program",
+        "de": "Starte dein Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). A window opens with a bunny. Click into it and move the bunny with the left and right arrow keys.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Ein Fenster mit einem Hasen öffnet sich. Klicke hinein und bewege den Hasen mit den Pfeiltasten nach links und rechts."
+      },
+      "check": { "ran": true }
+    },
+    {
+      "id": "faster",
+      "title": {
+        "en": "Make the bunny faster",
+        "de": "Mach den Hasen schneller"
+      },
+      "text": {
+        "en": "Open Bunny.java in the Files tab. In run() the bunny moves 4 steps: this.move(4). The library calls run() about 60 times a second, just like a forever block in Scratch. Change both 4s to 8.",
+        "de": "Öffne Bunny.java im Tab Dateien. In run() bewegt sich der Hase 4 Schritte: this.move(4). Die Bibliothek ruft run() etwa 60-mal pro Sekunde auf, genau wie einen Wiederhole-fortlaufend-Block in Scratch. Ändere beide 4 in 8."
+      },
+      "check": {
+        "changed": { "file": "Bunny.java", "pattern": "move\\(\\s*(\\d+)\\s*\\)", "from": "4" }
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program again. Is the bunny faster now? Your code is saved automatically, you never have to save by hand.",
+        "de": "Starte das Programm noch einmal. Ist der Hase jetzt schneller? Dein Code wird automatisch gespeichert, du musst nie selbst speichern."
+      },
+      "check": { "ran": true }
+    },
+    {
+      "id": "up",
+      "title": {
+        "en": "Fly up",
+        "de": "Flieg nach oben"
+      },
+      "text": {
+        "en": "Copy this into run(), below the two ifs. Now the up arrow moves the bunny up: changeY works like \"change y by\" in Scratch. Can you add the down arrow yourself?",
+        "de": "Kopiere das in run(), unter die beiden ifs. Jetzt bewegt die Pfeiltaste nach oben den Hasen nach oben: changeY funktioniert wie \"ändere y um\" in Scratch. Schaffst du die Pfeiltaste nach unten selbst?"
+      },
+      "code": "    if (this.isKeyPressed(KeyCode.UP)) {\n      this.changeY(5);\n    }",
+      "check": {
+        "all": [
+          { "contains": { "file": "Bunny.java", "pattern": "isKeyPressed\\(\\s*KeyCode\\.UP\\s*\\)" } },
+          { "contains": { "file": "Bunny.java", "pattern": "changeY\\(" } }
+        ]
+      }
+    },
+    {
+      "id": "costume",
+      "title": {
+        "en": "Change the costume",
+        "de": "Wechsle das Kostüm"
+      },
+      "text": {
+        "en": "A sprite can have several costumes. Add the jump costume in the constructor, below this.setSize(50);, and switch to it inside the if for the up arrow.",
+        "de": "Eine Figur kann mehrere Kostüme haben. Füge im Konstruktor unter this.setSize(50); das Sprung-Kostüm hinzu und wechsle im if für die Pfeiltaste nach oben zu ihm."
+      },
+      "code": "    // in the constructor, below this.setSize(50);\n    this.addCostume(\"bunny1_jump\");\n\n    // inside the if for KeyCode.UP\n    this.switchCostume(\"bunny1_jump\");",
+      "check": {
+        "all": [
+          { "contains": { "file": "Bunny.java", "pattern": "addCostume\\(\\s*\"bunny1_jump\"\\s*\\)" } },
+          { "contains": { "file": "Bunny.java", "pattern": "switchCostume\\(\\s*\"bunny1_jump\"\\s*\\)" } }
+        ]
+      }
+    },
+    {
+      "id": "say",
+      "title": {
+        "en": "Say hello",
+        "de": "Sag hallo"
+      },
+      "text": {
+        "en": "Add this at the end of the constructor. When the program starts, the bunny says hello for 2 seconds (2000 milliseconds), like \"say for seconds\" in Scratch.",
+        "de": "Füge das am Ende des Konstruktors ein. Wenn das Programm startet, sagt der Hase 2 Sekunden lang (2000 Millisekunden) hallo, wie \"sage für Sekunden\" in Scratch."
+      },
+      "code": "    this.say(\"Hello!\", 2000);",
+      "check": {
+        "contains": { "file": "Bunny.java", "pattern": "this\\.say\\(" }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time: read what the bunny says, fly up and watch the costume change.",
+        "de": "Starte es ein letztes Mal: Lies, was der Hase sagt, flieg nach oben und sieh, wie das Kostüm wechselt."
+      },
+      "check": { "ran": true }
+    }
+  ]
+}

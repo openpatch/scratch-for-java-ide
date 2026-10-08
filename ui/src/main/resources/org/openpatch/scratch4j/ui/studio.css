@@ -1248,3 +1248,73 @@
 .console-empty .ikonli-font-icon {
   -fx-icon-color: -s-run;
 }
+
+/* ---------- guided lesson ---------- */
+
+.lesson-content {
+  -fx-padding: 12;
+}
+
+.lesson-title {
+  -fx-font-size: 16px;
+  -fx-font-weight: bold;
+}
+
+.lesson-where {
+  -fx-text-fill: -color-fg-muted;
+  -fx-font-size: 12px;
+}
+
+.lesson-step {
+  -fx-background-color: -s-card-bg;
+  -fx-border-color: -s-card-border;
+  -fx-border-width: 1;
+  -fx-border-radius: 10;
+  -fx-background-radius: 10;
+  -fx-padding: 8 10 8 10;
+}
+
+.lesson-step.current {
+  -fx-border-color: -color-accent-emphasis;
+  -fx-border-width: 2;
+}
+
+.lesson-step.later .lesson-step-title {
+  -fx-text-fill: -color-fg-subtle;
+}
+
+.lesson-step.done .lesson-step-title {
+  -fx-text-fill: -color-fg-muted;
+}
+
+.lesson-step-title {
+  -fx-font-weight: bold;
+}
+
+.lesson-number {
+  -fx-min-width: 22;
+  -fx-min-height: 22;
+  -fx-alignment: center;
+  -fx-background-color: -color-accent-subtle;
+  -fx-background-radius: 11;
+  -fx-font-size: 11px;
+  -fx-font-weight: bold;
+}
+
+.lesson-step.done .lesson-number {
+  -fx-background-color: -s-run;
+}
+
+.lesson-step.done .lesson-number .ikonli-font-icon {
+  -fx-icon-color: white;
+}
+
+.lesson-code {
+  -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+  -fx-font-size: 12px;
+}
+
+.lesson-finished {
+  -fx-text-fill: -s-run;
+  -fx-font-weight: bold;
+}

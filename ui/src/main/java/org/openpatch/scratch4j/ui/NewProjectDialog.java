@@ -33,8 +33,20 @@ import java.util.Optional;
  */
 final class NewProjectDialog {
 
-  /** {@code example} is a bundled tutorial/demo id; when set it wins over {@code template}. */
-  record Result(Path parentDir, String name, ProjectTemplate template, String example) {}
+  /**
+   * {@code example} is a bundled tutorial/demo id; when set it wins over
+   * {@code template}. {@code lesson} is a bundled lesson id: its template plus
+   * the lesson; it wins over both.
+   */
+  record Result(Path parentDir, String name, ProjectTemplate template, String example,
+      String lesson) {
+
+    Result(Path parentDir, String name, ProjectTemplate template, String example) {
+      this(parentDir, name, template, example, null);
+    }
+  }
+
+  private static final String LESSON = "lesson:";
 
   private static final String EXAMPLE = "example";
 
@@ -54,6 +66,27 @@ final class NewProjectDialog {
     GridPane cards = new GridPane();
     cards.setHgap(10);
     cards.setVgap(10);
+    // first and preselected: the guided lesson, for a student's first project
+    String lessonId = org.openpatch.scratch4j.core.lesson.Lesson.bundledIds().get(0);
+    Label lessonTitle = new Label(I18n.t("template.lesson"));
+    lessonTitle.getStyleClass().add("card-button-title");
+    Label lessonHint = new Label(I18n.t("template.lesson.hint"));
+    lessonHint.getStyleClass().add("card-button-hint");
+    lessonHint.setWrapText(true);
+    VBox lessonContent = new VBox(4, Icons.of("fth-compass", 22), lessonTitle, lessonHint);
+    ToggleButton lessonCard = new ToggleButton(null, lessonContent);
+    lessonCard.getStyleClass().add("template-card");
+    lessonCard.setToggleGroup(templates);
+    lessonCard.setUserData(LESSON + lessonId);
+    lessonCard.setPrefSize(510, 96);
+    lessonCard.setMaxWidth(Double.MAX_VALUE);
+    lessonCard.setSelected(true);
+    cards.add(lessonCard, 0, 0, 2, 1);
+    lessonCard.setOnAction(e -> {
+      if (nameField(dialog) != null) {
+        nameField(dialog).setText(freeName(I18n.t("template.lesson.name")));
+      }
+    });
     int i = 0;
     for (ProjectTemplate template : ProjectTemplate.values()) {
       String key = "template." + template.name().toLowerCase(Locale.ROOT);
@@ -70,10 +103,7 @@ final class NewProjectDialog {
       card.setUserData(template);
       card.setPrefSize(250, 118);
       card.setMaxWidth(Double.MAX_VALUE);
-      cards.add(card, i % 2, i / 2);
-      if (template == ProjectTemplate.CLASSES_FIRST) {
-        card.setSelected(true);
-      }
+      cards.add(card, i % 2, i / 2 + 1);
       i++;
     }
     // the fifth card: a finished tutorial project or a library demo (bundled, offline)
@@ -105,8 +135,8 @@ final class NewProjectDialog {
     exampleCard.setUserData(EXAMPLE);
     exampleCard.setPrefSize(250, 118);
     exampleCard.setMaxWidth(Double.MAX_VALUE);
-    cards.add(exampleCard, i % 2, i / 2);
-    cards.add(examples, (i + 1) % 2, i / 2);
+    cards.add(exampleCard, i % 2, i / 2 + 1);
+    cards.add(examples, (i + 1) % 2, i / 2 + 1);
     GridPane.setValignment(examples, javafx.geometry.VPos.CENTER);
     examples.disableProperty().bind(exampleCard.selectedProperty().not());
     exampleCard.setOnAction(e -> examples.getOnAction().handle(null));
@@ -121,10 +151,14 @@ final class NewProjectDialog {
     templates.selectedToggleProperty().addListener((o, old, toggle) -> {
       if (toggle == null) {
         old.setSelected(true);
+      } else if (!(toggle.getUserData() instanceof String s && s.startsWith(LESSON))
+          && nameField(dialog) != null
+          && nameField(dialog).getText().startsWith(I18n.t("template.lesson.name"))) {
+        nameField(dialog).setText(freeName("MyGame"));
       }
     });
 
-    TextField nameField = new TextField(freeName("MyGame"));
+    TextField nameField = new TextField(freeName(I18n.t("template.lesson.name")));
     nameField.setId("project-name");
     TextField folderField = new TextField(lastDir.toAbsolutePath().toString());
     folderField.setEditable(false);
@@ -174,6 +208,10 @@ final class NewProjectDialog {
   }
 
   private static Result result(Object choice, String name, BundledTemplates.Template example) {
+    if (choice instanceof String s && s.startsWith(LESSON)) {
+      return new Result(lastDir, name, ProjectTemplate.CLASSES_FIRST, null,
+          s.substring(LESSON.length()));
+    }
     if (EXAMPLE.equals(choice)) {
       return new Result(lastDir, name, ProjectTemplate.CLASSES_FIRST,
           example == null ? null : example.id());
