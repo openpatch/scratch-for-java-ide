@@ -30,11 +30,20 @@ public final class ProjectCheck {
    * errors (the program cannot run) from asset lints (it runs, but fails).
    * {@code original} is javac's own message when {@code message} is the
    * friendly headline (null otherwise); a {@code followUp} error comes after a
-   * syntax error in the same file and may go away with it.
+   * syntax error in the same file and may go away with it. {@code fix} is the
+   * id of a one-click fix (the region fixes here, or one of {@link QuickFixes})
+   * and {@code fixData} what it needs (an import line, a replacement name).
    */
   public record Problem(Path file, long line, long column, String message,
       String explanation, List<String> suggestions, boolean error, String fix,
-      String original, boolean followUp) {
+      String original, boolean followUp, String fixData) {
+
+    public Problem(Path file, long line, long column, String message, String explanation,
+        List<String> suggestions, boolean error, String fix, String original,
+        boolean followUp) {
+      this(file, line, column, message, explanation, suggestions, error, fix, original,
+          followUp, null);
+    }
 
     public Problem(Path file, long line, long column, String message, String explanation,
         List<String> suggestions, boolean error, String fix) {
@@ -79,12 +88,13 @@ public final class ProjectCheck {
             .filter(s -> s.getFileName().toString().equals(fileNameOf(d.path())))
             .findFirst().orElse(null);
         List<String> suggestions = new ArrayList<>();
+        String unknownName = null;
         if (file != null && d.code() != null && d.code().startsWith("compiler.err.cant.resolve")) {
           if (knownNames == null) {
             knownNames = knownNames(sources);
           }
-          String name = identifierAt(file, d.line(), d.column());
-          suggestions.addAll(DidYouMean.suggest(name, knownNames, 3));
+          unknownName = identifierAt(file, d.line(), d.column());
+          suggestions.addAll(DidYouMean.suggest(unknownName, knownNames, 3));
         }
         List<String> source = file == null ? List.of()
             : lines.computeIfAbsent(file, ProjectCheck::readLines);
@@ -104,9 +114,19 @@ public final class ProjectCheck {
           brokenSyntax.add(file);
         }
         String title = described.title();
+        String fix = described.fix();
+        String fixData = described.fixData();
+        if (fix == null && unknownName != null) {
+          // one clear candidate (or the same name in another case): the bulb renames
+          String pick = QuickFixes.pickRename(unknownName, suggestions);
+          if (pick != null) {
+            fix = QuickFixes.RENAME;
+            fixData = pick;
+          }
+        }
         problems.add(new Problem(file, d.line(), d.column(), title, described.explanation(),
-            List.copyOf(suggestions), true, null,
-            title.equals(d.message()) ? null : d.message(), followUp));
+            List.copyOf(suggestions), true, fix,
+            title.equals(d.message()) ? null : d.message(), followUp, fixData));
       }
 
       AssetLinter linter = new AssetLinter();
@@ -170,8 +190,11 @@ public final class ProjectCheck {
       TransitionLinter.Facts facts = TransitionLinter.facts(texts);
       for (Path source : sources) {
         for (TransitionLinter.Finding f : transitions.lint(source, texts.get(source), facts)) {
+          // a plain while (true) { ... } wrapper: the bulb unwraps it
+          boolean unwrap = "forever".equals(f.kind())
+              && QuickFixes.canRemoveForever(texts.get(source), f.line());
           problems.add(new Problem(f.file(), f.line(), 0, f.message(), f.explanation(),
-              List.of(), false));
+              List.of(), false, unwrap ? QuickFixes.FOREVER : null));
         }
       }
     } catch (IOException e) {

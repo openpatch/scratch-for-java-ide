@@ -28,8 +28,21 @@ import java.util.regex.Pattern;
  */
 public final class FriendlyErrors {
 
-  /** The headline, the explanation (null if none) and extra "did you mean" names. */
-  public record Friendly(String title, String explanation, List<String> suggestions) {}
+  /**
+   * The headline, the explanation (null if none), extra "did you mean" names,
+   * and the {@link QuickFixes one-click fix} with its data (null if none).
+   */
+  public record Friendly(String title, String explanation, List<String> suggestions,
+      String fix, String fixData) {
+
+    public Friendly(String title, String explanation, List<String> suggestions) {
+      this(title, explanation, suggestions, null, null);
+    }
+
+    Friendly withFix(String fix, String fixData) {
+      return new Friendly(title, explanation, suggestions, fix, fixData);
+    }
+  }
 
   /**
    * Where the error is. {@code lines} is the whole source file, {@code className}
@@ -118,7 +131,9 @@ public final class FriendlyErrors {
       case "compiler.err.expected" -> {
         m = EXPECTED.matcher(english);
         if (m.matches() && TOKENS.containsKey(m.group(1))) {
-          yield of("expected", text("token." + TOKENS.get(m.group(1))));
+          Friendly expected = of("expected", text("token." + TOKENS.get(m.group(1))));
+          yield m.group(1).equals(";") ? expected.withFix(QuickFixes.SEMICOLON, null)
+              : expected;
         }
         yield english.startsWith("<identifier>") ? of("expected.name") : null;
       }
@@ -132,7 +147,7 @@ public final class FriendlyErrors {
         String name = m.group(2);
         String importLine = kind.equals("class") ? context.importFor().apply(name) : null;
         if (importLine != null) {
-          yield of("import", name, importLine);
+          yield of("import", name, importLine).withFix(QuickFixes.IMPORT, importLine);
         }
         yield of("unknown." + kind, name);
       }
@@ -251,7 +266,7 @@ public final class FriendlyErrors {
     if (friendly.explanation() == null) {
       friendly = new Friendly(friendly.title(),
           DiagnosticsExplanations.explain(code, languageOf()).orElse(null),
-          friendly.suggestions());
+          friendly.suggestions(), friendly.fix(), friendly.fixData());
     }
     return friendly;
   }

@@ -1215,3 +1215,36 @@
   -fx-underline: true;
   -fx-fill: -color-accent-fg;
 }
+
+/* ---------- what shows up when the project needs it ---------- */
+
+.running-bar {
+  -fx-padding: 0;
+}
+
+.add-card {
+  -fx-padding: 10 14 10 14;
+}
+
+.export-other {
+  -fx-padding: 4 0 0 0;
+}
+
+.problems-stuck {
+  -fx-background-color: -color-warning-subtle;
+  -fx-border-color: transparent transparent -color-border-default transparent;
+  -fx-padding: 6 10 6 10;
+}
+
+.console-empty {
+  -fx-text-fill: -color-fg-muted;
+  -fx-font-size: 13px;
+  -fx-max-width: 420;
+  -fx-text-alignment: center;
+  -fx-graphic-text-gap: 10;
+  -fx-content-display: top;
+}
+
+.console-empty .ikonli-font-icon {
+  -fx-icon-color: -s-run;
+}

@@ -3,10 +3,12 @@ package org.openpatch.scratch4j.ui;
 import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Cursor;
+import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import org.fxmisc.flowless.VirtualizedScrollPane;
 import org.fxmisc.richtext.StyleClassedTextArea;
 
@@ -55,7 +57,15 @@ final class ConsoleView extends BorderPane {
         Icons.button("fth-trash-2", I18n.t("console.clear"), this::clear));
     bar.setAlignment(Pos.CENTER_RIGHT);
     bar.getStyleClass().add("console-bar");
-    setCenter(new VirtualizedScrollPane<>(text));
+    // while nothing ran yet, the empty console says what the green flag does
+    Label empty = new Label(I18n.t("console.empty"), Icons.of("fth-flag", 18));
+    empty.getStyleClass().add("console-empty");
+    empty.setWrapText(true);
+    empty.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+    empty.setMouseTransparent(true);
+    empty.visibleProperty().bind(javafx.beans.binding.Bindings.createBooleanBinding(
+        () -> text.getLength() == 0, text.lengthProperty()));
+    setCenter(new StackPane(new VirtualizedScrollPane<>(text), empty));
     setTop(bar);
   }
 

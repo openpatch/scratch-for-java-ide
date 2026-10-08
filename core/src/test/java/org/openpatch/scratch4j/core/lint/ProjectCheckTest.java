@@ -104,6 +104,58 @@ class ProjectCheckTest {
   }
 
   @Test
+  void commonErrorsComeWithOneClickFixes() throws IOException {
+    NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "fixes", libraryJar());
+    Files.writeString(tmp.resolve("fixes/Other.java"), """
+        public class Other extends Sprite {
+        }
+        """);
+    Files.writeString(tmp.resolve("fixes/Player.java"), """
+        import org.openpatch.scratch.*;
+
+        public class Player extends Sprite {
+          private int number = 1;
+
+          public void run() {
+            while (true) {
+              this.mvoe(numer);
+            }
+          }
+        }
+        """);
+    var problems = new java.util.ArrayList<>(ProjectCheck.check(
+        ScratchProject.open(tmp.resolve("fixes")), DiagnosticsExplanations.Language.EN));
+    // a syntax error stops javac before it resolves names: check it on its own
+    Files.writeString(tmp.resolve("fixes/Semi.java"), """
+        public class Semi {
+          void go() {
+            int x = 1
+          }
+        }
+        """);
+    problems.addAll(ProjectCheck.check(ScratchProject.open(tmp.resolve("fixes")),
+        DiagnosticsExplanations.Language.EN));
+    var byFix = new java.util.HashMap<String, ProjectCheck.Problem>();
+    for (var p : problems) {
+      if (p.fix() != null) byFix.putIfAbsent(p.fix(), p);
+    }
+    assertThat(byFix).containsKeys(QuickFixes.SEMICOLON, QuickFixes.IMPORT, QuickFixes.RENAME,
+        QuickFixes.FOREVER);
+    assertThat(byFix.get(QuickFixes.IMPORT).fixData())
+        .isEqualTo("import org.openpatch.scratch.Sprite;");
+    assertThat(byFix.get(QuickFixes.RENAME).fixData()).isEqualTo("number");
+    // every offered fix applies to the file as it is
+    for (var p : byFix.values()) {
+      String fixed = QuickFixes.apply(Files.readString(p.file()), p.fix(), p.line(), p.column(),
+          p.fixData());
+      assertThat(fixed).as(p.fix()).isNotNull().isNotEqualTo(Files.readString(p.file()));
+    }
+    var semi = byFix.get(QuickFixes.SEMICOLON);
+    assertThat(QuickFixes.apply(Files.readString(semi.file()), semi.fix(), semi.line(),
+        semi.column(), null)).contains("int x = 1;");
+  }
+
+  @Test
   void callbacksAreReadFromTheLibraryJar() throws IOException {
     var callbacks = LibraryCallbacks.of(java.util.List.of(libraryJar()));
     assertThat(callbacks.sprite()).containsKeys("run", "whenClicked", "whenKeyPressed");

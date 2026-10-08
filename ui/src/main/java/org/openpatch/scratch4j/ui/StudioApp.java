@@ -42,6 +42,7 @@ import org.openpatch.scratch4j.core.api.ApiMethod;
 import org.openpatch.scratch4j.core.io.LocalHistory;
 import org.openpatch.scratch4j.core.compile.CompileResult;
 import org.openpatch.scratch4j.core.lint.DiagnosticsExplanations;
+import org.openpatch.scratch4j.core.lint.QuickFixes;
 import org.openpatch.scratch4j.core.lint.ProjectCheck;
 import org.openpatch.scratch4j.core.project.NewClass;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
@@ -104,6 +105,11 @@ public class StudioApp extends javafx.application.Application {
   private long watchStarted;
   private boolean watchWarned;
   private final BooleanProperty hasProject = new SimpleBooleanProperty(false);
+  /** The project ran once (now or in an earlier session): export makes sense. */
+  private final BooleanProperty hasRun = new SimpleBooleanProperty(false);
+  /** Errors for a minute without a fix: the problems pane offers the last version that ran. */
+  private final javafx.animation.PauseTransition stuckDelay =
+      new javafx.animation.PauseTransition(javafx.util.Duration.seconds(60));
   private final AtomicBoolean checkRunning = new AtomicBoolean(false);
   private final AtomicBoolean checkAgain = new AtomicBoolean(false);
   private final javafx.animation.PauseTransition checkDelay =
@@ -125,6 +131,7 @@ public class StudioApp extends javafx.application.Application {
   private Tab problemsTab;
   private Tab consoleTab;
   private ScratchMigrationPane migrationPane;
+  private Tab migrationTab;
   private Tab debuggerTab;
   private Tab searchTab;
   private SearchResultsView searchResults;
@@ -155,6 +162,16 @@ public class StudioApp extends javafx.application.Application {
   public void start(Stage stage) {
     this.stage = stage;
     I18n.set(Prefs.language());
+    // once, not per language switch: the UI they touch is looked up when they fire
+    running.addListener((o, was, isRunning) -> {
+      if (isRunning) {
+        showTab(variablesTab, false); // the Variables tab while a program runs
+      } else if (bottomTabs.getSelectionModel().getSelectedItem() != variablesTab) {
+        hideTab(variablesTab);
+      }
+    });
+    hasRun.addListener((o, was, ran) -> updateProblemsPlaceholder());
+    stuckDelay.setOnFinished(e -> offerLastWorking());
     buildUi();
     // Sizes are in logical pixels: with display scaling (150% on a 1080p screen
     // leaves about 1280x690) a fixed size would push the window off the screen.
@@ -164,6 +181,7 @@ public class StudioApp extends javafx.application.Application {
     double height = Math.min(840, screen.getHeight() - frame);
     scene = new Scene(root, width, height);
     Theme.apply(scene);
+    installEditorShortcuts();
     checkDelay.setOnFinished(e -> checkProject());
     stage.setTitle("Scratch for Java Studio");
     stage.getIcons().add(Branding.icon());
@@ -211,6 +229,9 @@ public class StudioApp extends javafx.application.Application {
     editor.setOnSideChanged(this::updatePaletteContext);
     editor.setOnOpenFile(this::openByType);
     editor.setOnBreakpointsChanged((file, lines) -> {
+      if (!lines.isEmpty()) {
+        showTab(debuggerTab, false); // a first breakpoint: the debugger has a reason to show
+      }
       var session = debugger;
       if (session != null && file.getFileName().toString().endsWith(".java")) {
         String className = file.getFileName().toString().replaceFirst("\\.java$", "");
@@ -254,20 +275,13 @@ public class StudioApp extends javafx.application.Application {
     sidebar.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
     Tab stagesTab = new Tab(I18n.t("stages.title"));
     stagesTab.setGraphic(Icons.of("fth-monitor"));
-    Button newImage = Icons.labeled("fth-image", I18n.t("asset.new.image"),
-        () -> createAsset(ProjectAssetCreator.Kind.IMAGE));
-    Button newSound = Icons.labeled("fth-music", I18n.t("asset.new.sound"),
-        () -> createAsset(ProjectAssetCreator.Kind.SOUND));
-    Button newShader = Icons.labeled("fth-zap", I18n.t("asset.new.shader"),
-        this::createShader);
+    // one Add button instead of a row of new-something buttons
+    Button add = Icons.labeled("fth-plus", I18n.t("menu.file.add.short"), this::addToProject);
     Button spriteEditor = Icons.labeled("fth-user", I18n.t("spriteassets.button"),
         this::chooseSpriteAssets);
-    Button newFolder = Icons.labeled("fth-folder-plus", I18n.t("folder.new"),
-        () -> createFolder(fileTree.folderForCreation()));
-    FlowPane assetButtons = new FlowPane(4, 4,
-        spriteEditor, newFolder, newImage, newSound, newShader);
+    FlowPane assetButtons = new FlowPane(4, 4, add, spriteEditor);
     assetButtons.getStyleClass().add("asset-create-bar");
-    for (Button button : List.of(spriteEditor, newFolder, newImage, newSound, newShader)) {
+    for (Button button : List.of(add, spriteEditor)) {
       button.disableProperty().bind(hasProject.not());
     }
     VBox fileTabContent = new VBox(assetButtons, fileTree);
@@ -305,9 +319,11 @@ public class StudioApp extends javafx.application.Application {
     variablesTab = new Tab(I18n.t("variables.title"), variablesView);
     variablesTab.setGraphic(Icons.of("fth-eye"));
     migrationPane = new ScratchMigrationPane((file, line) -> editor.openAt(file, line), this::browse);
-    Tab migrationTab = new Tab(I18n.t("migration.title"), migrationPane);
-    bottomTabs = new TabPane(problemsTab, consoleTab, variablesTab, searchTab, debuggerTab, migrationTab);
+    migrationTab = new Tab(I18n.t("migration.title"), migrationPane);
+    // Problems and Console from the start; the other tabs appear when the project needs them
+    bottomTabs = new TabPane(problemsTab, consoleTab);
     bottomTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+    problems.setPlaceholder(I18n.t("problems.empty.noproject"));
     bottomTabs.getStyleClass().add("bottom-tabs");
     bottomTabs.setMinHeight(90);
 
@@ -425,10 +441,15 @@ public class StudioApp extends javafx.application.Application {
     run.setMinWidth(Region.USE_PREF_SIZE);
     menus.setMinWidth(Region.USE_PREF_SIZE);
     projectTitle.setMinWidth(0);
+    // the game-loop and capture controls only while a program runs
+    HBox runningBar = new HBox(6, pauseToggle, stepButton, speedButton,
+        new javafx.scene.control.Separator(Orientation.VERTICAL), screenshot, recordToggle);
+    runningBar.setAlignment(Pos.CENTER_LEFT);
+    runningBar.getStyleClass().add("running-bar");
+    runningBar.visibleProperty().bind(running);
+    runningBar.managedProperty().bind(running);
     HBox bar = new HBox(6, logo, menus, compactMenu, left, projectTitle, right, run, stop,
-        pauseToggle, stepButton, speedButton,
-        new javafx.scene.control.Separator(Orientation.VERTICAL),
-        debugToggle, screenshot, recordToggle,
+        debugToggle, runningBar,
         new javafx.scene.control.Separator(Orientation.VERTICAL), paletteToggle, theme);
     bar.setAlignment(Pos.CENTER_LEFT);
     bar.getStyleClass().add("header");
@@ -466,6 +487,20 @@ public class StudioApp extends javafx.application.Application {
       }
     });
     return bar;
+  }
+
+  /** Shows a bottom tab the project needs now (only Problems and Console are always there). */
+  private void showTab(Tab tab, boolean select) {
+    if (!bottomTabs.getTabs().contains(tab)) {
+      bottomTabs.getTabs().add(tab);
+    }
+    if (select) {
+      bottomTabs.getSelectionModel().select(tab);
+    }
+  }
+
+  private void hideTab(Tab tab) {
+    bottomTabs.getTabs().remove(tab);
   }
 
   private void setPaletteVisible(boolean visible) {
@@ -507,32 +542,22 @@ public class StudioApp extends javafx.application.Application {
 
   private MenuBar menuBar() {
     Menu file = new Menu(I18n.t("menu.file"));
+    MenuItem export = item("menu.file.export", "fth-package", null, this::showExport);
+    export.visibleProperty().bind(hasRun);
     file.getItems().addAll(
         item("menu.file.new", "fth-plus-square", shortcut(KeyCode.N), this::createProject),
         item("menu.file.open", "fth-folder", shortcut(KeyCode.O), this::openProject),
         item("menu.file.sb3", "fth-download", null, this::importScratchProject),
         new SeparatorMenuItem(),
-        item("menu.file.newclass", "fth-file-plus",
+        item("menu.file.add", "fth-plus",
             new KeyCodeCombination(KeyCode.N, KeyCombination.SHORTCUT_DOWN,
-                KeyCombination.SHIFT_DOWN), () -> createClass(null)),
-        item("spriteassets.button", "fth-user", null, this::chooseSpriteAssets),
-        item("folder.new", "fth-folder-plus", null,
-            () -> createFolder(fileTree.folderForCreation())),
-        item("asset.new.image", "fth-image", null,
-            () -> createAsset(ProjectAssetCreator.Kind.IMAGE)),
-        item("asset.new.sound", "fth-music", null,
-            () -> createAsset(ProjectAssetCreator.Kind.SOUND)),
-        item("asset.new.shader", "fth-zap", null, this::createShader),
-        item("map.new", "fth-map", null, this::createMap),
+                KeyCombination.SHIFT_DOWN), this::addToProject),
         item("menu.file.library", "fth-image", shortcut(KeyCode.L), this::openAssetLibrary),
         new SeparatorMenuItem(),
         item("menu.file.save", "fth-save", shortcut(KeyCode.S), this::saveAndCheck),
         item("menu.file.close", "fth-x", shortcut(KeyCode.W), () -> editor.closeSelected()),
-        item("file.delete", "fth-trash-2", null,
-            () -> deleteFile(fileTree.selectedFile())),
-        item("tree.rename", "fth-edit-2", null, () -> fileTree.renameSelected()),
-        item("folder.delete", "fth-trash-2", null,
-            () -> deleteFolder(fileTree.selectedDirectory())),
+        new SeparatorMenuItem(),
+        export,
         new SeparatorMenuItem(),
         item("menu.file.exit", "fth-log-out", null, this::exitApp));
 
@@ -562,32 +587,11 @@ public class StudioApp extends javafx.application.Application {
         new SeparatorMenuItem(),
         item("menu.edit.history", "fth-clock", null, this::showHistory));
 
-    Menu refactor = new Menu(I18n.t("menu.refactor"));
-    refactor.getItems().addAll(
-        item("menu.edit.definition", "fth-corner-down-right",
-            new KeyCodeCombination(KeyCode.F12),
-            () -> withEditor(e -> goToDefinition(e, e.area().getCaretPosition()))),
-        item("menu.refactor.usages", "fth-list", new KeyCodeCombination(KeyCode.F12,
-            KeyCombination.SHIFT_DOWN),
-            () -> withEditor(e -> findUsages(e, e.area().getCaretPosition()))),
-        new SeparatorMenuItem(),
-        item("menu.refactor.rename", "fth-edit-3", new KeyCodeCombination(KeyCode.F2),
-            () -> withEditor(e -> renameSymbol(e, e.area().getCaretPosition()))),
-        item("class.rename", "fth-edit-3", new KeyCodeCombination(KeyCode.F2,
-            KeyCombination.SHIFT_DOWN), () -> withEditor(e -> renameClass(e.file()))),
-        item("menu.refactor.move", "fth-corner-up-right", null,
-            () -> moveTo(fileTree.selectedPath() != null ? fileTree.selectedPath()
-                : editor.activeEditor() == null ? null : editor.activeEditor().file())),
-        item("tree.duplicate", "fth-copy", null,
-            () -> duplicateFile(fileTree.selectedFile() != null ? fileTree.selectedFile()
-                : editor.activeEditor() == null ? null : editor.activeEditor().file())));
-
     Menu runMenu = new Menu(I18n.t("menu.run"));
     runMenu.getItems().addAll(
         item("menu.run.run", "fth-flag", new KeyCodeCombination(KeyCode.F5), this::runProgram),
         item("menu.run.debug", "fth-crosshair", new KeyCodeCombination(KeyCode.F6),
             this::debugProgram),
-        item("hotswap.enhanced.menu", "fth-zap", null, this::enhancedHotReload),
         item("menu.run.stop", "fth-octagon",
             new KeyCodeCombination(KeyCode.F5, KeyCombination.SHIFT_DOWN), this::stopProgram),
         item("menu.run.pause", "fth-pause", new KeyCodeCombination(KeyCode.F7), () -> {
@@ -595,17 +599,9 @@ public class StudioApp extends javafx.application.Application {
         }),
         item("menu.run.step", "fth-skip-forward", new KeyCodeCombination(KeyCode.F8),
             this::stepFrame),
+        new SeparatorMenuItem(),
         item("menu.run.check", "fth-check-circle", null, this::checkProject),
         item("menu.run.tests", "fth-check-square", null, this::runTeachingTests));
-
-    Menu exportMenu = new Menu(I18n.t("menu.export"));
-    exportMenu.getItems().addAll(
-        item("menu.export.app", "fth-package", null, () -> export("app")),
-        item("menu.export.appinfo", "fth-tag", null, this::editAppInfo),
-        crossExportMenu(),
-        item("menu.export.jar", "fth-coffee", null, () -> export("jar")),
-        item("menu.export.bluej", "fth-archive", null, () -> export("bluej")),
-        item("menu.export.vscode", "fth-archive", null, () -> export("vscode")));
 
     Menu view = new Menu(I18n.t("menu.view"));
     view.getItems().addAll(
@@ -642,9 +638,38 @@ public class StudioApp extends javafx.application.Application {
         item("welcome.tutorials", "fth-external-link", null,
             () -> browse("https://scratch4j.openpatch.org")),
         new SeparatorMenuItem(),
+        teachersMenu(),
+        new SeparatorMenuItem(),
         item("menu.help.about", "fth-info", null, this::showAbout));
 
-    return new MenuBar(file, edit, refactor, projectMenu(), runMenu, exportMenu, view, help);
+    return new MenuBar(file, edit, projectMenu(), runMenu, view, help);
+  }
+
+  /**
+   * Go to definition, find usages and rename live in the editor's right-click
+   * menu; their keys keep working everywhere through the scene (a context
+   * menu's accelerators are only live while it shows).
+   */
+  private void installEditorShortcuts() {
+    scene.addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+      CodeEditor active = editor == null ? null : editor.activeEditor();
+      if (active == null || !active.area().isFocused()) {
+        return;
+      }
+      int caret = active.area().getCaretPosition();
+      if (e.getCode() == KeyCode.F12 && !e.isShiftDown()) {
+        goToDefinition(active, caret);
+      } else if (e.getCode() == KeyCode.F12) {
+        findUsages(active, caret);
+      } else if (e.getCode() == KeyCode.F2 && !e.isShiftDown()) {
+        renameSymbol(active, caret);
+      } else if (e.getCode() == KeyCode.F2) {
+        renameClass(active.file());
+      } else {
+        return;
+      }
+      e.consume();
+    });
   }
 
   private static KeyCombination shortcut(KeyCode code) {
@@ -953,8 +978,33 @@ public class StudioApp extends javafx.application.Application {
     updatePaletteContext();
     console.clear();
     problems.setProblems(List.of());
-    try { migrationPane.setTasks(p.root(), org.openpatch.scratch4j.core.project.ScratchMigration.load(p.root())); }
-    catch (IOException e) { migrationPane.setTasks(p.root(), List.of()); console.err(e.getMessage()); }
+    List<org.openpatch.scratch4j.core.project.ScratchMigration.Task> migration;
+    try {
+      migration = org.openpatch.scratch4j.core.project.ScratchMigration.load(p.root());
+    } catch (IOException e) {
+      migration = List.of();
+      console.err(e.getMessage());
+    }
+    migrationPane.setTasks(p.root(), migration);
+    // the Scratch migration tab only for a project that came from an .sb3
+    if (migration.isEmpty()) {
+      hideTab(migrationTab);
+    } else {
+      showTab(migrationTab, false);
+    }
+    hideTab(searchTab);
+    hideTab(debuggerTab);
+    hideTab(variablesTab);
+    boolean ranBefore;
+    try {
+      ranBefore = org.openpatch.scratch4j.core.io.ProjectSnapshots.lastWorking(p.root()) != null;
+    } catch (IOException e) {
+      ranBefore = false;
+    }
+    hasRun.set(ranBefore);
+    stuckDelay.stop();
+    problems.hideStuck();
+    updateProblemsPlaceholder();
     setStatus(I18n.t("status.opened", p.name()));
     try {
       String start = p.firstStage();
@@ -1143,13 +1193,41 @@ public class StudioApp extends javafx.application.Application {
     });
   }
 
-  /** A problem's fix: a statement the designer does not manage goes below its region. */
+  /**
+   * A problem's fix (the button under it, the light bulb in the gutter): the
+   * designer's region fixes, or one of the {@link QuickFixes} for common errors.
+   */
   private void fixProblem(Problem problem) {
     if (problem.file() == null) return;
     if (ProjectCheck.FIX_MOVE_OUT_OF_REGION.equals(problem.fix())) {
       moveOutOfRegion(problem.file(), (int) problem.line());
     } else if (ProjectCheck.FIX_PROMOTE.equals(problem.fix())) {
       promoteSprite(problem.file(), (int) problem.line());
+    } else if (problem.fix() != null) {
+      applyQuickFix(problem);
+    }
+  }
+
+  /** One-click edit of the saved file; the local history keeps the version before. */
+  void applyQuickFix(Problem problem) {
+    try {
+      saveAll();
+      String source = Files.readString(problem.file());
+      String fixed = QuickFixes.apply(source, problem.fix(), problem.line(), problem.column(),
+          problem.fixData());
+      if (fixed == null) {
+        // the code changed since the check: the next check says what is left
+        setStatus(I18n.t("problems.fix.stale"));
+        scheduleCheck();
+        return;
+      }
+      org.openpatch.scratch4j.core.io.LocalHistory.writeString(project.get().root(),
+          problem.file(), fixed);
+      editor.reloadIfOpen(problem.file());
+      scheduleCheck();
+      setStatus(I18n.t("problems.fixed.quick"));
+    } catch (IOException | RuntimeException e) {
+      alert(e.getMessage());
     }
   }
 
@@ -1361,6 +1439,7 @@ public class StudioApp extends javafx.application.Application {
       if (frames > 0 && now - Math.max(watchStarted, lastSwap) >= 4000 && !runCrashed
           && !runKept && running.get()) {
         runKept = true;
+        hasRun.set(true);
         keepWorkingVersion();
       }
       return;
@@ -1568,6 +1647,40 @@ public class StudioApp extends javafx.application.Application {
         scheduleCheck();
       } catch (IOException | RuntimeException e) {
         alert(e.getMessage());
+      }
+    });
+  }
+
+  /** File > Add to project: one dialog for everything a project can get. */
+  private void addToProject() {
+    if (project.get() == null) {
+      alert(I18n.t("status.no.project"));
+      return;
+    }
+    AddToProjectDialog.show(stage).ifPresent(choice -> {
+      switch (choice) {
+        case CLASS -> createClass(null);
+        case IMAGE -> createAsset(ProjectAssetCreator.Kind.IMAGE);
+        case SOUND -> createAsset(ProjectAssetCreator.Kind.SOUND);
+        case LIBRARY -> openAssetLibrary();
+        case FOLDER -> createFolder(fileTree.folderForCreation());
+        case SHADER -> createShader();
+        case MAP -> createMap();
+      }
+    });
+  }
+
+  /** File > Export: the targets as cards, then the export itself. */
+  private void showExport() {
+    if (project.get() == null) {
+      alert(I18n.t("status.no.project"));
+      return;
+    }
+    ExportDialog.show(stage).ifPresent(format -> {
+      if (ExportDialog.APP_INFO.equals(format)) {
+        editAppInfo();
+      } else {
+        export(format);
       }
     });
   }
@@ -2097,7 +2210,7 @@ public class StudioApp extends javafx.application.Application {
           }
           searchResults.show(p.root(), I18n.t("usages.title", symbol.name(), matches.size(),
               symbol.byFile().size()), matches);
-          bottomTabs.getSelectionModel().select(searchTab);
+          showTab(searchTab, true);
           setStatus(I18n.t("usages.status", symbol.name(), matches.size()));
         });
       } catch (IOException | RuntimeException e) {
@@ -2139,7 +2252,7 @@ public class StudioApp extends javafx.application.Application {
                 ? I18n.t("search.title.limit", query, hits.size())
                 : I18n.t("search.title.found", query, hits.size(), files);
             searchResults.show(p.root(), heading, matches);
-            bottomTabs.getSelectionModel().select(searchTab);
+            showTab(searchTab, true);
           });
         } catch (IOException e) {
           Platform.runLater(() -> alert(e.getMessage()));
@@ -2254,7 +2367,7 @@ public class StudioApp extends javafx.application.Application {
           u.from(), u.to(), false));
     }
     searchResults.show(p.root(), heading, matches);
-    bottomTabs.getSelectionModel().select(searchTab);
+    showTab(searchTab, true);
   }
 
   private void deleteFile(Path file) {
@@ -2411,7 +2524,7 @@ public class StudioApp extends javafx.application.Application {
         found = ProjectCheck.check(p, language).stream()
             .map(pr -> new Problem(pr.file(), pr.line(), pr.column(), pr.message(),
                 pr.explanation(), pr.suggestions(), pr.error(), pr.fix(), pr.original(),
-                pr.followUp()))
+                pr.followUp(), pr.fixData()))
             .toList();
       } catch (RuntimeException e) {
         found = List.of(new Problem(null, 0, 0, e.toString(), null, List.of(), true));
@@ -2450,7 +2563,7 @@ public class StudioApp extends javafx.application.Application {
       if (problem.file() == null) continue;
       if (problem.fix() != null) {
         fixes.computeIfAbsent(problem.file(), f -> new HashMap<>())
-            .put((int) problem.line(), I18n.t("problems.fix." + problem.fix()));
+            .put((int) problem.line(), problem.fixLabel());
       }
       // hints are no squiggles: their light bulb is enough
       if (!problem.isHint()) {
@@ -2470,6 +2583,43 @@ public class StudioApp extends javafx.application.Application {
     if (!running.get()) {
       setStatus(found.isEmpty() ? I18n.t("problems.none")
           : I18n.t("status.problems", found.size()));
+    }
+    if (errors > 0) {
+      // a minute without getting back to green: offer the version that ran
+      if (!problems.stuckShowing() && stuckDelay.getStatus()
+          != javafx.animation.Animation.Status.RUNNING) {
+        stuckDelay.playFromStart();
+      }
+    } else {
+      stuckDelay.stop();
+      problems.hideStuck();
+    }
+  }
+
+  /** The empty problems list says what to do next. */
+  private void updateProblemsPlaceholder() {
+    problems.setPlaceholder(I18n.t(project.get() == null ? "problems.empty.noproject"
+        : hasRun.get() ? "problems.none" : "problems.empty.notrun"));
+  }
+
+  /** Errors for a minute and a version that ran: the problems pane offers it. */
+  private void offerLastWorking() {
+    ScratchProject p = project.get();
+    if (p == null || problems.errorCount() == 0) {
+      return;
+    }
+    try {
+      var version = org.openpatch.scratch4j.core.io.ProjectSnapshots.lastWorking(p.root());
+      if (version == null
+          || org.openpatch.scratch4j.core.io.ProjectSnapshots.changes(p.root(), version)
+              .isEmpty()) {
+        return;
+      }
+      String when = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+          .withZone(java.time.ZoneId.systemDefault()).format(version.time());
+      problems.showStuck(when, this::restoreLastWorking);
+    } catch (IOException ignored) {
+      // versions are a convenience
     }
   }
 
@@ -2556,7 +2706,7 @@ public class StudioApp extends javafx.application.Application {
           debugPaused = true;
           Platform.runLater(() -> {
             debuggerView.paused(pause);
-            bottomTabs.getSelectionModel().select(debuggerTab);
+            showTab(debuggerTab, true);
             showDebugLine(-1);
             ScratchProject p = project.get();
             if (p == null) return;
@@ -2655,7 +2805,7 @@ public class StudioApp extends javafx.application.Application {
         if (debug) {
           Platform.runLater(() -> {
             debuggerView.attach(session);
-            bottomTabs.getSelectionModel().select(debuggerTab);
+            showTab(debuggerTab, true);
           });
         }
         CrashWatcher crashes = new CrashWatcher(p, explanationLanguage(), this::showCrash);
@@ -2674,7 +2824,7 @@ public class StudioApp extends javafx.application.Application {
               setStatus(I18n.t("run.paused", String.valueOf(frame)));
               // a pause is for looking: show the variables (unless debugging)
               if (bottomTabs.getSelectionModel().getSelectedItem() != debuggerTab) {
-                bottomTabs.getSelectionModel().select(variablesTab);
+                showTab(variablesTab, true);
               }
             });
           }
@@ -3095,6 +3245,22 @@ public class StudioApp extends javafx.application.Application {
 
   private Menu projectMenu() {
     Menu menu = new Menu(I18n.t("menu.project"));
+    menu.getItems().addAll(
+        item("versions.menu", "fth-clock", null, this::showVersions),
+        item("versions.lastworking", "fth-rotate-ccw", null, this::restoreLastWorking),
+        new SeparatorMenuItem(),
+        item("menu.project.sharezip", "fth-share-2", null, this::shareZip),
+        item("menu.project.openzip", "fth-archive", null, this::openSharedZip));
+    return menu;
+  }
+
+  /**
+   * Help > For teachers: the library flavour and updates, course packs, the
+   * browser and Online IDE exchange formats, and the hot-reload runtime. A
+   * student never needs these, so they stay out of the main menus.
+   */
+  private Menu teachersMenu() {
+    Menu menu = new Menu(I18n.t("menu.help.teachers"), Icons.of("fth-users"));
     Menu library = new Menu(I18n.t("menu.project.library"), Icons.of("fth-package"));
     standardFlavour = new RadioMenuItem(I18n.t("library.standard"));
     nrwFlavour = new RadioMenuItem(I18n.t("library.nrw"));
@@ -3107,17 +3273,14 @@ public class StudioApp extends javafx.application.Application {
         item("library.update", "fth-refresh-cw", null, this::checkLibraryUpdate));
     library.setOnShowing(e -> syncFlavourItems());
     menu.getItems().addAll(
-        item("versions.menu", "fth-clock", null, this::showVersions),
-        item("versions.lastworking", "fth-rotate-ccw", null, this::restoreLastWorking),
-        new SeparatorMenuItem(),
-        library, new SeparatorMenuItem(),
-        item("menu.project.sharezip", "fth-share-2", null, this::shareZip),
-        item("menu.project.browserzip", "fth-share-2", null, this::shareBrowserZip),
-        item("menu.project.openzip", "fth-archive", null, this::openSharedZip),
+        library,
         item("menu.project.course", "fth-book-open", null, this::importCoursePack),
         new SeparatorMenuItem(),
+        item("menu.project.browserzip", "fth-share-2", null, this::shareBrowserZip),
         item("menu.project.snippet.import", "fth-clipboard", null, this::importSnippet),
-        item("menu.project.snippet.export", "fth-copy", null, this::exportCompact));
+        item("menu.project.snippet.export", "fth-copy", null, this::exportCompact),
+        new SeparatorMenuItem(),
+        item("hotswap.enhanced.menu", "fth-zap", null, this::enhancedHotReload));
     return menu;
   }
 
@@ -3571,18 +3734,6 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /** Apps for the other computers in a class: Windows, macOS (both chips), Linux. */
-  private Menu crossExportMenu() {
-    Menu menu = new Menu(I18n.t("menu.export.other"), Icons.of("fth-globe"));
-    menu.getItems().addAll(
-        item("menu.export.windows", "fth-monitor", null, () -> export("windows-x64")),
-        item("menu.export.mac.arm", "fth-monitor", null, () -> export("mac-aarch64")),
-        item("menu.export.mac.intel", "fth-monitor", null, () -> export("mac-x64")),
-        item("menu.export.linux", "fth-monitor", null, () -> export("linux-x64")),
-        item("menu.export.windows.arm", "fth-monitor", null, () -> export("windows-aarch64")),
-        item("menu.export.linux.arm", "fth-monitor", null, () -> export("linux-aarch64")));
-    return menu;
-  }
-
   /**
    * Where downloaded target runtimes are kept (school admins can pre-seed it
    * with the Temurin JRE archives): {@code SCRATCH4J_RUNTIME_CACHE} or

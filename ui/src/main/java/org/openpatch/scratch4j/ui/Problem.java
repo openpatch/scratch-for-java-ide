@@ -9,7 +9,14 @@ import java.util.List;
  * none); a {@code followUp} may go away once the error above it is fixed.
  */
 record Problem(Path file, long line, long column, String message, String explanation,
-    List<String> suggestions, boolean error, String fix, String original, boolean followUp) {
+    List<String> suggestions, boolean error, String fix, String original, boolean followUp,
+    String fixData) {
+
+  Problem(Path file, long line, long column, String message, String explanation,
+      List<String> suggestions, boolean error, String fix, String original, boolean followUp) {
+    this(file, line, column, message, explanation, suggestions, error, fix, original, followUp,
+        null);
+  }
 
   Problem(Path file, long line, long column, String message, String explanation,
       List<String> suggestions, boolean error, String fix) {
@@ -24,6 +31,15 @@ record Problem(Path file, long line, long column, String message, String explana
   /** A hint (not a problem): something that can be made better, with its fix. */
   boolean isHint() {
     return "region.promote".equals(fix);
+  }
+
+  /** The label of the fix button and light bulb ({@code null} without a fix). */
+  String fixLabel() {
+    if (fix == null) {
+      return null;
+    }
+    String key = "problems.fix." + fix;
+    return fixData == null ? I18n.t(key) : I18n.t(key, fixData);
   }
 
   String location() {
