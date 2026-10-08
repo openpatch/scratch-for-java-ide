@@ -198,7 +198,8 @@ public class StudioApp extends javafx.application.Application {
       stopProgram();
     });
     stage.show();
-    List<String> startupArgs = getParameters().getRaw();
+    // null when started without Application.launch (layout tests)
+    List<String> startupArgs = getParameters() == null ? List.of() : getParameters().getRaw();
     if (startupArgs.size() == 2 && startupArgs.get(0).equals("--smoke")) {
       PackagedSmoke.start(this, stage, Path.of(startupArgs.get(1)).toAbsolutePath());
     } else openFromArguments();
