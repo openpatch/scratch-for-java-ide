@@ -63,6 +63,9 @@
         <configuration>
           <mainClass>org.openpatch.scratch4j.app.Main</mainClass>
           <skip>false</skip>
+          <!-- java.util.prefs starts a daemon sync timer that ignores interruption;
+               the JVM ends daemon threads itself, so do not wait 15 s for it -->
+          <cleanupDaemonThreads>false</cleanupDaemonThreads>
         </configuration>
       </plugin>
     </plugins>
