@@ -160,9 +160,27 @@ public class StudioApp extends javafx.application.Application {
   private Label projectTitle;
   private boolean paletteVisible = true;
 
+  /**
+   * Called by the launcher before JavaFX starts: with compatibility graphics
+   * the IDE draws with JavaFX's software pipeline (old or broken graphics
+   * drivers), and the programs it starts use Mesa's software renderer.
+   */
+  public static void prepareGraphics() {
+    if (Prefs.compatibilityGraphics()) {
+      System.setProperty("prism.order", "sw");
+    }
+    org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(
+        Prefs.compatibilityGraphics());
+  }
+
+  /** A run whose OpenGL failed was already restarted with compatibility graphics. */
+  private final AtomicBoolean graphicsFallback = new AtomicBoolean(false);
+
   @Override
   public void start(Stage stage) {
     this.stage = stage;
+    org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(
+        Prefs.compatibilityGraphics());
     I18n.set(Prefs.language());
     // once, not per language switch: the UI they touch is looked up when they fire
     running.addListener((o, was, isRunning) -> {
@@ -621,7 +639,8 @@ public class StudioApp extends javafx.application.Application {
           root.setTop(header());
         }),
         textSizeMenu(),
-        highContrastItem());
+        highContrastItem(),
+        compatibilityGraphicsItem());
     Menu language = new Menu(I18n.t("menu.language"), Icons.of("fth-globe"));
     ToggleGroup group = new ToggleGroup();
     for (I18n.Language l : I18n.Language.values()) {
@@ -1462,6 +1481,9 @@ public class StudioApp extends javafx.application.Application {
       watchWarned = true;
       console.err("\u26A0 " + I18n.t(stalled ? "run.frozen" : "run.nowindow"));
       console.info(I18n.t("run.frozen.explain"));
+      if (noWindow && !org.openpatch.scratch4j.runner.GraphicsCompatibility.isSoftware()) {
+        console.hint("\u2139 " + I18n.t("graphics.nowindow.hint"));
+      }
       setStatus(I18n.t(stalled ? "run.frozen" : "run.nowindow"));
       checkProject();
     }
@@ -2886,6 +2908,12 @@ public class StudioApp extends javafx.application.Application {
           @Override public void onStderr(String line) {
             console.err(line);
             crashes.feed(line);
+            // the graphics driver cannot run OpenGL: once, start again in software
+            if (!org.openpatch.scratch4j.runner.GraphicsCompatibility.isSoftware()
+                && org.openpatch.scratch4j.runner.GraphicsCompatibility.isGraphicsFailure(line)
+                && graphicsFallback.compareAndSet(false, true)) {
+              Platform.runLater(() -> rerunWithCompatibilityGraphics(startStage, debug));
+            }
           }
 
           @Override public void onCompileFailed(CompileResult r) {
@@ -3720,6 +3748,42 @@ public class StudioApp extends javafx.application.Application {
       menu.getItems().add(item);
     }
     return menu;
+  }
+
+  /** View > Compatibility graphics: for graphics drivers that cannot run OpenGL. */
+  private javafx.scene.control.CheckMenuItem compatibilityGraphicsItem() {
+    javafx.scene.control.CheckMenuItem item = new javafx.scene.control.CheckMenuItem(
+        I18n.t("menu.view.compatgraphics"), Icons.of("fth-cpu"));
+    item.setSelected(Prefs.compatibilityGraphics());
+    item.setOnAction(e -> setCompatibilityGraphics(item.isSelected()));
+    return item;
+  }
+
+  private void setCompatibilityGraphics(boolean on) {
+    Prefs.compatibilityGraphics(on);
+    org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(on);
+    String message = I18n.t(on ? "graphics.on" : "graphics.off");
+    if (on && org.openpatch.scratch4j.runner.GraphicsCompatibility.onWindows()) {
+      message += " " + I18n.t("graphics.windows");
+    }
+    setStatus(message);
+    console.info("\u2139 " + message);
+  }
+
+  /**
+   * A program's OpenGL could not start: switch compatibility graphics on (it
+   * stays on, the student hears where to switch it off) and run again.
+   */
+  private void rerunWithCompatibilityGraphics(String startStage, boolean debug) {
+    Prefs.compatibilityGraphics(true);
+    org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(true);
+    runStage(startStage, debug);
+    String message = I18n.t("graphics.fallback");
+    if (org.openpatch.scratch4j.runner.GraphicsCompatibility.onWindows()) {
+      message += " " + I18n.t("graphics.windows");
+    }
+    console.hint("\u26A0 " + message);
+    notice(message);
   }
 
   private javafx.scene.control.CheckMenuItem highContrastItem() {

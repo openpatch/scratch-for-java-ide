@@ -70,7 +70,7 @@ public final class ProjectRunner {
     command.add("Scratch4JLauncher");
     command.add(config.stageClass());
 
-    ProcessBuilder builder = new ProcessBuilder(command);
+    ProcessBuilder builder = GraphicsCompatibility.apply(new ProcessBuilder(command));
     builder.directory(project.root().toFile());
     Process process;
     try {

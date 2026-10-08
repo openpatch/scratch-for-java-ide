@@ -136,7 +136,8 @@ public final class ShaderRenderer {
     /** The answer's lines (null: the helper hung and was stopped). */
     synchronized List<String> request(String line) throws IOException {
       if (process == null || !process.isAlive()) {
-        process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        process = GraphicsCompatibility.apply(new ProcessBuilder(command))
+            .redirectErrorStream(true).start();
         output = new java.io.BufferedReader(new java.io.InputStreamReader(
             process.getInputStream(), StandardCharsets.UTF_8));
         input = new java.io.OutputStreamWriter(process.getOutputStream(),

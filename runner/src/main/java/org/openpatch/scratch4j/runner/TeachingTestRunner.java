@@ -48,7 +48,8 @@ public final class TeachingTestRunner {
     command.addAll(List.of("-jar", TeachingTests.junitJar().toString(), "execute", "--disable-banner", "--fail-if-no-tests",
         "--class-path", String.join(java.io.File.pathSeparator, classpath.stream().map(Path::toString).toList())));
     classes.forEach(name -> command.addAll(List.of("--select-class", name)));
-    Process process = new ProcessBuilder(command).directory(project.root().toFile()).start();
+    Process process = GraphicsCompatibility.apply(new ProcessBuilder(command))
+        .directory(project.root().toFile()).start();
     CompletableFuture<Integer> exit = new CompletableFuture<>();
     RunHandle handle = new RunHandle(process, exit);
     RunHandle.pump(process, listener, exit);

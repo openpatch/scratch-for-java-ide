@@ -155,6 +155,15 @@ final class Prefs {
     NODE.putBoolean("ui.highContrast", on);
   }
 
+  /** Programs draw with Mesa's software renderer; the IDE with JavaFX's software pipeline. */
+  static boolean compatibilityGraphics() {
+    return NODE.getBoolean("graphics.compatibility", false);
+  }
+
+  static void compatibilityGraphics(boolean on) {
+    NODE.putBoolean("graphics.compatibility", on);
+  }
+
   static int editorFontSize() {
     return NODE.getInt("editor.fontSize", 14);
   }
