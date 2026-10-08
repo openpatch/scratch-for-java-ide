@@ -42,9 +42,13 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * A beginner debugger over JDI: breakpoints on lines of the project's
  * classes, and while paused the current place, the local variables and the
- * fields of {@code this}; continue and step over/into/out. The student program
- * connects to the IDE on start ({@code -agentlib:jdwp=...,server=n}) and waits
- * until the breakpoints are set.
+ * fields of {@code this}; continue and step over/into/out. For a debug run the
+ * student program connects to the IDE on start ({@code -agentlib:jdwp=...,server=n})
+ * and waits until the breakpoints are set.
+ *
+ * <p>A plain run uses {@link #onDemand}: the program starts at once and only
+ * listens; the IDE connects the first time it needs to (hot reload, the
+ * object diagram), so a run that never needs it never pays for the handshake.
  */
 public final class Debugger {
 
@@ -67,6 +71,10 @@ public final class Debugger {
   private final ListeningConnector connector;
   private final Map<String, Connector.Argument> arguments;
   private final String address;
+  /** Plain run: the program listens, the IDE connects when it first needs to. */
+  private final boolean onDemand;
+  /** The port the program listens on (from its first output line), on demand. */
+  private volatile String programPort;
   /** Breakpoints as "SimpleClassName" -> lines. */
   private final Map<String, Set<Integer>> breakpoints = new ConcurrentHashMap<>();
   private final Listener listener;
@@ -77,6 +85,7 @@ public final class Debugger {
 
   /** Starts listening on a free local port; pass {@link #jvmArgument()} to the program. */
   public Debugger(Map<String, Set<Integer>> breakpoints, Listener listener) throws IOException {
+    this.onDemand = false;
     this.listener = listener;
     breakpoints.forEach((name, lines) -> this.breakpoints.put(name, Set.copyOf(lines)));
     this.connector = Bootstrap.virtualMachineManager().listeningConnectors().stream()
@@ -92,13 +101,91 @@ public final class Debugger {
     }
   }
 
+  private Debugger(Listener listener) {
+    this.onDemand = true;
+    this.listener = listener;
+    this.connector = null;
+    this.arguments = null;
+    this.address = null;
+  }
+
+  /**
+   * A session for a plain run: the program starts without waiting and listens
+   * on a free port; {@link #connect()} attaches when something needs it.
+   */
+  public static Debugger onDemand(Listener listener) {
+    return new Debugger(listener);
+  }
+
   /** The JVM flag that makes the program connect here and wait for the breakpoints. */
   public String jvmArgument() {
+    if (onDemand) {
+      // the agent picks a free port and prints it: see offer()
+      return "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=127.0.0.1:0";
+    }
     return "-agentlib:jdwp=transport=dt_socket,server=n,suspend=y,address=" + address;
+  }
+
+  private static final java.util.regex.Pattern LISTENING = java.util.regex.Pattern.compile(
+      "^Listening for transport dt_socket at address: (\\d+)\\s*$");
+
+  /**
+   * A line of the program's standard output: true when it is the agent's
+   * "Listening for transport ..." line (which the student need not see) and
+   * the port was taken from it.
+   */
+  public boolean offer(String stdoutLine) {
+    if (!onDemand || programPort != null || stdoutLine == null) {
+      return false;
+    }
+    java.util.regex.Matcher m = LISTENING.matcher(stdoutLine);
+    if (!m.matches()) {
+      return false;
+    }
+    programPort = m.group(1);
+    return true;
+  }
+
+  /** Connected, or a plain run that can connect now. */
+  public boolean isConnectable() {
+    return vm != null || (onDemand && programPort != null);
+  }
+
+  /**
+   * Connects to a plain run's program if not yet connected (blocking, a local
+   * socket): true when connected. A debug run's session is connected by
+   * {@link #attach()}, so this only reports it.
+   */
+  public synchronized boolean connect() {
+    if (vm != null) {
+      return true;
+    }
+    if (!onDemand || programPort == null) {
+      return false;
+    }
+    try {
+      var attaching = Bootstrap.virtualMachineManager().attachingConnectors().stream()
+          .filter(c -> c.name().equals("com.sun.jdi.SocketAttach")).findFirst()
+          .orElseThrow(() -> new IOException("No JDI socket connector"));
+      Map<String, Connector.Argument> args = attaching.defaultArguments();
+      args.get("hostname").setValue("127.0.0.1");
+      args.get("port").setValue(programPort);
+      VirtualMachine machine = attaching.attach(args);
+      vm = machine;
+    } catch (IOException | IllegalConnectorArgumentsException | RuntimeException e) {
+      return false;
+    }
+    Thread loop = new Thread(this::eventLoop, "scratch4j-debugger");
+    loop.setDaemon(true);
+    loop.start();
+    return true;
   }
 
   /** Accepts the program's connection (blocking) and starts the event loop. */
   public void attach() throws IOException {
+    if (onDemand) {
+      throw new IllegalStateException("An on-demand session connects with connect()");
+    }
     try {
       vm = connector.accept(arguments);
     } catch (IllegalConnectorArgumentsException e) {
@@ -603,6 +690,9 @@ public final class Debugger {
       }
     } catch (com.sun.jdi.VMDisconnectedException ignored) {
       // already gone
+    }
+    if (connector == null) {
+      return; // on demand: nothing listens on this side
     }
     try {
       connector.stopListening(arguments);

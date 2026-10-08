@@ -29,6 +29,57 @@ class HotSwapTest {
   }
 
   @Test
+  void aPlainRunStartsWithoutWaitingAndConnectsForItsFirstSwap() throws Exception {
+    Path source = root.resolve("Game.java");
+    String game = """
+        public class Game {
+          int speed() {
+            return 5;
+          }
+
+          public static void main(String[] args) throws Exception {
+            Game game = new Game();
+            for (int i = 0; i < 300; i++) {
+              System.out.println("speed " + game.speed());
+              Thread.sleep(100);
+            }
+          }
+        }
+        """;
+    Files.writeString(source, game);
+    Files.createDirectories(root.resolve("+libs"));
+    Path jar = org.openpatch.scratch4j.core.project.NewProject.classpathJar(
+        org.openpatch.scratch.internal.BuiltinAssets.class);
+    Files.copy(jar, root.resolve("+libs").resolve(jar.getFileName()));
+    ScratchProject project = ScratchProject.open(root);
+    Debugger session = Debugger.onDemand(pause -> { });
+    LinkedBlockingQueue<String> out = new LinkedBlockingQueue<>();
+    RunHandle handle = new ProjectRunner().run(project,
+        RunConfig.of("Game").withDebugger(session), new RunListener() {
+          @Override public void onStdout(String line) {
+            if (!session.offer(line)) out.add(line);
+          }
+        });
+    try {
+      // nobody accepted a connection, yet the program runs
+      assertThat(poll(out, "speed 5")).isNotNull();
+      assertThat(out).noneMatch(line -> line.startsWith("Listening for transport"));
+      assertThat(session.isAttached()).isFalse();
+      assertThat(session.isConnectable()).isTrue();
+
+      Files.writeString(source, game.replace("return 5;", "return 8;"));
+      assertThat(session.connect()).isTrue();
+      assertThat(session.connect()).as("once connected, stays connected").isTrue();
+      HotSwap.Result swapped = HotSwap.apply(project, session);
+      assertThat(swapped.status()).isEqualTo(HotSwap.Status.SWAPPED);
+      assertThat(poll(out, "speed 8")).isNotNull();
+    } finally {
+      handle.stop();
+      session.close();
+    }
+  }
+
+  @Test
   void methodBodiesSwapAndNewFieldsAskForARestart() throws Exception {
     Path source = root.resolve("Game.java");
     String game = """

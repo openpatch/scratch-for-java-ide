@@ -2804,25 +2804,29 @@ public class StudioApp extends javafx.application.Application {
         // a JetBrains Runtime (bundled or downloaded) also hot-reloads new attributes/methods
         RunConfig config = RunConfig.of(startStage).withControl()
             .withJava(org.openpatch.scratch4j.runner.ProgramRuntime.java());
-        // every run is connected: saved code changes go into the running program
-        // (hot reload); a debug run also stops at the breakpoints
-        var session = new org.openpatch.scratch4j.runner.Debugger(debug
-            ? org.openpatch.scratch4j.runner.Debugger.byClass(breakpointsNow()) : Map.of(),
-            debug ? debugListener : pause -> { });
+        // every run can take saved code changes (hot reload). A debug run connects
+        // at once and stops at the breakpoints; a plain run starts without waiting
+        // and is connected only when hot reload or the object diagram needs it.
+        var session = debug
+            ? new org.openpatch.scratch4j.runner.Debugger(
+                org.openpatch.scratch4j.runner.Debugger.byClass(breakpointsNow()), debugListener)
+            : org.openpatch.scratch4j.runner.Debugger.onDemand(pause -> { });
         liveSession = session;
         if (debug) {
           debugger = session;
         }
         config = config.withDebugger(session);
-        Thread attach = new Thread(() -> {
-          try {
-            session.attach();
-          } catch (IOException e) {
-            console.err(e.getMessage());
-          }
-        }, "debugger-attach");
-        attach.setDaemon(true);
-        attach.start();
+        if (debug) {
+          Thread attach = new Thread(() -> {
+            try {
+              session.attach();
+            } catch (IOException e) {
+              console.err(e.getMessage());
+            }
+          }, "debugger-attach");
+          attach.setDaemon(true);
+          attach.start();
+        }
         if (debug) {
           Platform.runLater(() -> {
             debuggerView.attach(session);
@@ -2873,6 +2877,9 @@ public class StudioApp extends javafx.application.Application {
           }
 
           @Override public void onStdout(String line) {
+            if (session.offer(line)) {
+              return; // the debug agent's port, not the student's output
+            }
             console.out(line);
           }
 
@@ -3102,9 +3109,11 @@ public class StudioApp extends javafx.application.Application {
     ScratchProject p = project.get();
     if (session == null || swap == null || p == null || !running.get()) return;
     hotSwapDelay.setOnFinished(e -> {
-      if (!session.isAttached() || liveSession != session) return;
+      if (!session.isConnectable() || liveSession != session) return;
       Thread worker = new Thread(() -> {
         org.openpatch.scratch4j.runner.HotSwap.Result result;
+        // a plain run is connected the first time a change goes in
+        if (!session.connect()) return;
         try {
           synchronized (hotSwapLock) {
             result = swap.apply();

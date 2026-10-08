@@ -225,7 +225,7 @@ final class DiagramView extends BorderPane {
 
   void readObjects() {
     Debugger connection = session.get();
-    if (connection == null || !connection.isAttached()) {
+    if (connection == null || !connection.isConnectable()) {
       canvas.show(List.of(), List.of());
       message.setText(I18n.t("diagram.notrunning"));
       message.setVisible(true);
@@ -246,6 +246,9 @@ final class DiagramView extends BorderPane {
       List<Debugger.ObjectNode> objects;
       String error = null;
       try {
+        if (!connection.connect()) {
+          throw new IllegalStateException(I18n.t("diagram.notrunning"));
+        }
         objects = connection.objects(names, 60);
       } catch (RuntimeException e) {
         objects = List.of();
