@@ -108,7 +108,8 @@ final class ProjectsFolder {
         String rest = value.substring("$HOME".length()).replaceFirst("^/", "");
         return rest.isEmpty() ? home : home.resolve(rest);
       }
-      return value.startsWith("/") ? Path.of(value) : null;
+      Path path = Path.of(value);
+      return path.isAbsolute() ? path : null;
     } catch (IOException | RuntimeException e) {
       return null;
     }

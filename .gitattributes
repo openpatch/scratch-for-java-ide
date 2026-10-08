@@ -1,3 +1,6 @@
 # Templates and lessons are copied byte for byte and matched against
 # multi-line text: keep LF on every platform, including Windows checkouts.
 * text=auto eol=lf
+# Generated from the library's examples and checked byte for byte against
+# them (scripts/sync-templates.py --check): never convert.
+core/src/main/resources/org/openpatch/scratch4j/core/templates/** -text
