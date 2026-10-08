@@ -2741,6 +2741,63 @@ public class StudioApp extends javafx.application.Application {
     });
   }
 
+  /** Help > For teachers > Lesson for this project: create, edit or remove it. */
+  private void editLesson() {
+    ScratchProject p = project.get();
+    if (p == null) {
+      alert(I18n.t("status.no.project"));
+      return;
+    }
+    saveAll();
+    org.openpatch.scratch4j.core.lesson.Lesson lesson;
+    List<String> javaFiles = new ArrayList<>();
+    try {
+      lesson = org.openpatch.scratch4j.core.lesson.Lesson.load(p.root());
+      for (Path source : p.javaSources()) {
+        javaFiles.add(source.getFileName().toString());
+      }
+    } catch (IOException e) {
+      alert(e.getMessage());
+      return;
+    }
+    String newId = "lesson-" + p.root().getFileName().toString().toLowerCase(java.util.Locale.ROOT)
+        .replaceAll("[^a-z0-9]+", "-");
+    var outcome = LessonEditorDialog.show(stage, lesson, newId, javaFiles, () -> {
+      Map<String, String> files = new HashMap<>();
+      try {
+        for (Path source : p.javaSources()) {
+          files.put(source.getFileName().toString(), Files.readString(source));
+        }
+      } catch (IOException ignored) {
+        // the test shows "not yet"
+      }
+      return new org.openpatch.scratch4j.core.lesson.Lesson.Facts(files,
+          checkedProblems.stream().noneMatch(Problem::error), false);
+    });
+    if (outcome.isEmpty()) return;
+    try {
+      if (outcome.get() instanceof LessonEditorDialog.Saved saved) {
+        saved.lesson().write(p.root());
+        setStatus(I18n.t("lessoneditor.saved"));
+      } else {
+        Alert ask = new Alert(Alert.AlertType.CONFIRMATION, I18n.t("lessoneditor.remove.confirm"),
+            I18n.ok(), I18n.cancel());
+        ask.setHeaderText(null);
+        Theme.style(ask);
+        if (ask.showAndWait().orElse(null) != I18n.ok()) return;
+        Files.deleteIfExists(p.root().resolve(org.openpatch.scratch4j.core.lesson.Lesson.FILE));
+        Files.deleteIfExists(p.root().resolve(
+            org.openpatch.scratch4j.core.lesson.LessonProgress.FILE));
+        setStatus(I18n.t("lessoneditor.removed"));
+      }
+    } catch (IOException e) {
+      alert(e.getMessage());
+      return;
+    }
+    openLesson(p);
+    updateLesson(checkedProblems.stream().noneMatch(Problem::error));
+  }
+
   private void restartLesson() {
     var progress = lessonPanel.progress();
     if (progress == null) return;
@@ -3449,6 +3506,7 @@ public class StudioApp extends javafx.application.Application {
     menu.getItems().addAll(
         library,
         item("menu.project.course", "fth-book-open", null, this::importCoursePack),
+        item("lessoneditor.menu", "fth-compass", null, this::editLesson),
         new SeparatorMenuItem(),
         item("menu.project.browserzip", "fth-share-2", null, this::shareBrowserZip),
         item("menu.project.snippet.import", "fth-clipboard", null, this::importSnippet),

@@ -66,8 +66,9 @@ class LessonTest {
         NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
     root = tmp.resolve("lesson");
     Lesson.install(root, lesson.id());
-    assertThat(Lesson.load(root).steps()).extracting(Lesson.Step::id)
-        .containsExactlyElementsOf(lesson.steps().stream().map(Lesson.Step::id).toList());
+    assertThat(Lesson.load(root)).isEqualTo(lesson);
+    // what the editor writes reads back the same
+    assertThat(Lesson.parse(lesson.toJson())).isEqualTo(lesson);
 
     LessonProgress progress = LessonProgress.load(lesson, root);
     assertThat(afterCheck(progress)).as("nothing done before the first run").isEmpty();
@@ -105,6 +106,35 @@ class LessonTest {
 
     reloaded.restart();
     assertThat(LessonProgress.load(lesson, root).current()).isZero();
+  }
+
+  @Test
+  void plainCodeChecksIgnoreSpacingButNotWords() throws IOException {
+    var check = new Lesson.Contains("A.java", "this.say(\"Hi\", 2000);", true);
+    var facts = (java.util.function.Function<String, Lesson.Facts>) text ->
+        new Lesson.Facts(Map.of("A.java", text), true, false);
+    assertThat(check.met(facts.apply("    this.say( \"Hi\" ,2000 ) ;"))).isTrue();
+    assertThat(check.met(facts.apply("    this . say(\"Hi\", 2000);"))).isTrue();
+    assertThat(check.met(facts.apply("    this.say(\"Hi\", 20000);"))).isFalse();
+    assertThat(check.met(facts.apply("    // this.say(\"Hi\", 2000);"))).isFalse();
+    var words = new Lesson.Contains("A.java", "int count", true);
+    assertThat(words.met(facts.apply("int  count = 0;"))).isTrue();
+    assertThat(words.met(facts.apply("intcount = 0;"))).isFalse();
+    // regex characters in plain code are plain
+    assertThat(new Lesson.Contains("A.java", "a[0] = b.c();", true)
+        .met(facts.apply("a[0]=b.c();"))).isTrue();
+    String json = new Lesson("x", "", Map.of("en", "X"), List.of(new Lesson.Step("s",
+        Map.of("en", "S"), Map.of("en", "T"), null, check))).toJson();
+    assertThat(json).contains("\"text\" : \"this.say(\\\"Hi\\\", 2000);\"");
+    assertThat(Lesson.parse(json).steps().get(0).check()).isEqualTo(check);
+  }
+
+  @Test
+  void aBrokenPatternIsReportedWhenTheLessonLoads() {
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> Lesson.parse(
+        "{\"id\":\"x\",\"steps\":[{\"id\":\"s\",\"check\":{\"contains\":"
+            + "{\"file\":\"A.java\",\"pattern\":\"say(\"}}}]}"))
+        .isInstanceOf(IOException.class).hasMessageContaining("say(");
   }
 
   @Test
