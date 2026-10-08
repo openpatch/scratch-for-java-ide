@@ -374,12 +374,14 @@ final class SpriteAssetsView extends BorderPane {
         node.visibleProperty().bind(listShown);
         node.managedProperty().bind(listShown);
       }
-      listShown.addListener((o, was, shown) -> {
+      java.util.function.Consumer<Boolean> layout = shown -> {
         VBox.setVgrow(scroll, shown ? javafx.scene.layout.Priority.NEVER
             : javafx.scene.layout.Priority.ALWAYS);
         scroll.setMaxHeight(shown ? 220 : Double.MAX_VALUE);
-      });
-      scroll.setMaxHeight(220);
+      };
+      // also now: a class whose costumes all come from the code never changes it
+      layout.accept(listShown.get());
+      listShown.addListener((o, was, shown) -> layout.accept(shown));
     }
     VBox.setVgrow(list, javafx.scene.layout.Priority.ALWAYS);
     pane.setPadding(new Insets(8));
