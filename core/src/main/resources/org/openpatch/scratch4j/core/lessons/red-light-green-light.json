@@ -1,0 +1,125 @@
+{
+  "id": "red-light-green-light",
+  "template": "red-light-green-light-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Red light, green light",
+    "de": "Rot, Grün"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). The referee says Go! and Stop!, and the racers run only on Go!.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Der Schiedsrichter sagt Go! und Stop!, und die Läufer laufen nur bei Go!."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "lights",
+      "title": {
+        "en": "Faster lights",
+        "de": "Schnellere Ampel"
+      },
+      "text": {
+        "en": "In Referee.java the light switches every 2200 milliseconds: everyMillis(2200). Make it switch faster, for example 1500.",
+        "de": "In Referee.java wechselt die Ampel alle 2200 Millisekunden: everyMillis(2200). Lass sie schneller wechseln, zum Beispiel 1500."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "Referee.java",
+          "line": "if (this.getTimer().everyMillis(2200)) {"
+        }
+      }
+    },
+    {
+      "id": "snail",
+      "title": {
+        "en": "Help the snail",
+        "de": "Hilf der Schnecke"
+      },
+      "text": {
+        "en": "In RaceStage.java each racer gets a creature, a height and a speed: new Racer(\"snail\", -60, 1.0). Make the snail faster.",
+        "de": "In RaceStage.java bekommt jeder Läufer ein Tier, eine Höhe und ein Tempo: new Racer(\"snail\", -60, 1.0). Mach die Schnecke schneller."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "RaceStage.java",
+          "line": "this.add(new Racer(\"snail\", -60, 1.0));"
+        }
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program again. Who wins now?",
+        "de": "Starte das Programm noch einmal. Wer gewinnt jetzt?"
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "racer",
+      "title": {
+        "en": "A fourth racer",
+        "de": "Ein vierter Läufer"
+      },
+      "text": {
+        "en": "Copy this into the RaceStage constructor, below the snail. Other creatures with a moving costume: mouse, fly, wormGreen, slimeGreen.",
+        "de": "Kopiere das in den Konstruktor von RaceStage, unter die Schnecke. Andere Tiere mit Lauf-Kostüm: mouse, fly, wormGreen, slimeGreen."
+      },
+      "code": "    this.add(new Racer(\"frog\", -120, 1.8));",
+      "check": {
+        "contains": {
+          "file": "RaceStage.java",
+          "pattern": "new\\s+Racer\\(\\s*\"(?!bee\"|ladybug\"|snail\")\\w+\""
+        }
+      }
+    },
+    {
+      "id": "words",
+      "title": {
+        "en": "The referee's words",
+        "de": "Die Worte des Schiedsrichters"
+      },
+      "text": {
+        "en": "In Referee.java the referee says this.say(\"Go!\");. Change it to your own word.",
+        "de": "In Referee.java sagt der Schiedsrichter this.say(\"Go!\");. Ändere es in dein eigenes Wort."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "Referee.java",
+          "line": "this.say(\"Go!\");"
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time. Watch the race with your four racers.",
+        "de": "Starte es ein letztes Mal. Sieh dir das Rennen mit deinen vier Läufern an."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

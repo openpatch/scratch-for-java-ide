@@ -1,0 +1,143 @@
+{
+  "id": "dodge-the-rocks",
+  "template": "dodge-the-rocks-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Dodge the rocks",
+    "de": "Weich den Steinen aus"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). Press SPACE to start, then dodge the falling rocks with the arrow keys.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Drücke die LEERTASTE zum Start und weich dann den fallenden Steinen mit den Pfeiltasten aus."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "faster",
+      "title": {
+        "en": "Faster rocks",
+        "de": "Schnellere Steine"
+      },
+      "text": {
+        "en": "In Rock.java each rock falls 3 steps per frame: this.changeY(-3). Make it fall faster.",
+        "de": "In Rock.java fällt jeder Stein 3 Schritte pro Bild: this.changeY(-3). Lass ihn schneller fallen."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "Rock.java",
+          "line": "this.changeY(-3);"
+        }
+      }
+    },
+    {
+      "id": "more",
+      "title": {
+        "en": "More rocks",
+        "de": "Mehr Steine"
+      },
+      "text": {
+        "en": "In GameStage.java the loop for (int i = 0; i < 3; i++) adds 3 rocks. Add more.",
+        "de": "In GameStage.java fügt die Schleife for (int i = 0; i < 3; i++) 3 Steine hinzu. Füge mehr hinzu."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "GameStage.java",
+          "line": "for (int i = 0; i < 3; i++) {"
+        }
+      }
+    },
+    {
+      "id": "title",
+      "title": {
+        "en": "Your own title screen",
+        "de": "Dein eigener Startbildschirm"
+      },
+      "text": {
+        "en": "In TitleStage.java the hint says hint.showText(\"Press SPACE to play\");. Write your own text.",
+        "de": "In TitleStage.java steht als Hinweis hint.showText(\"Press SPACE to play\");. Schreib deinen eigenen Text."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "TitleStage.java",
+          "line": "hint.showText(\"Press SPACE to play\");"
+        }
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program again. How many rocks can you dodge now?",
+        "de": "Starte das Programm noch einmal. Wie vielen Steinen kannst du jetzt ausweichen?"
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "bomb",
+      "title": {
+        "en": "A new obstacle class",
+        "de": "Eine neue Hindernis-Klasse"
+      },
+      "text": {
+        "en": "Make a new class: File > Add to project > Class, name it Bomb, kind Sprite. Replace its code with this. A bomb falls fast and ends the game too.",
+        "de": "Lege eine neue Klasse an: Datei > Zum Projekt hinzufügen > Klasse, Name Bomb, Art Sprite. Ersetze ihren Code durch diesen. Eine Bombe fällt schnell und beendet das Spiel ebenfalls."
+      },
+      "code": "import org.openpatch.scratch.*;\n\npublic class Bomb extends Sprite {\n  public Bomb() {\n    this.addCostume(\"bomb\");\n    this.setSize(40);\n    this.setY(500);\n  }\n\n  public void run() {\n    this.changeY(-6);\n    if (this.isTouchingSprite(Alien.class)) {\n      ((GameStage) this.getStage()).gameOver();\n    }\n    if (this.getY() < -200) {\n      this.setX(Random.randomInt(-280, 280));\n      this.setY(Random.randomInt(220, 420));\n    }\n  }\n}",
+      "check": {
+        "classExists": {
+          "extends": "Sprite",
+          "min": 2
+        }
+      }
+    },
+    {
+      "id": "place",
+      "title": {
+        "en": "Put the obstacle on the stage",
+        "de": "Setz das Hindernis auf die Bühne"
+      },
+      "text": {
+        "en": "In the GameStage constructor, below the for loop, create your obstacle and add it to the stage.",
+        "de": "Erzeuge im Konstruktor von GameStage unter der for-Schleife dein Hindernis und füge es der Bühne hinzu."
+      },
+      "code": "    this.add(new Bomb());",
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "add\\(\\s*new\\s+(?!Rock\\b|Alien\\b)\\w+\\s*\\("
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time. Dodge the rocks and the bomb.",
+        "de": "Starte es ein letztes Mal. Weich den Steinen und der Bombe aus."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

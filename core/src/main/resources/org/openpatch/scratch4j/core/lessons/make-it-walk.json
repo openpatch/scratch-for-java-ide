@@ -1,0 +1,146 @@
+{
+  "id": "make-it-walk",
+  "template": "make-it-walk-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Make it walk",
+    "de": "Lass es laufen"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). Walk with the left and right arrow keys and watch the legs move.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Lauf mit den Pfeiltasten nach links und rechts und sieh, wie sich die Beine bewegen."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "faster",
+      "title": {
+        "en": "Walk faster",
+        "de": "Lauf schneller"
+      },
+      "text": {
+        "en": "In Walker.java the alien moves 3 steps each way: this.move(3). Make both numbers bigger, for example 6.",
+        "de": "In Walker.java läuft das Alien in jede Richtung 3 Schritte: this.move(3). Mach beide Zahlen größer, zum Beispiel 6."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "Walker.java",
+          "line": "this.move(3);"
+        }
+      }
+    },
+    {
+      "id": "legs",
+      "title": {
+        "en": "Faster legs",
+        "de": "Schnellere Beine"
+      },
+      "text": {
+        "en": "Each walking costume shows for 150 milliseconds: this.setAnimationInterval(150). A smaller number moves the legs faster. Try 80.",
+        "de": "Jedes Lauf-Kostüm wird 150 Millisekunden gezeigt: this.setAnimationInterval(150). Eine kleinere Zahl bewegt die Beine schneller. Probier 80."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "Walker.java",
+          "line": "this.setAnimationInterval(150);"
+        }
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program again. Do the speed and the legs fit together now?",
+        "de": "Starte das Programm noch einmal. Passen Tempo und Beine jetzt zusammen?"
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "up",
+      "title": {
+        "en": "Fly up",
+        "de": "Flieg nach oben"
+      },
+      "text": {
+        "en": "Copy this into run(), below the if (walking) block. The up arrow now moves the alien up. Can you add the down arrow yourself?",
+        "de": "Kopiere das in run(), unter den Block if (walking). Die Pfeiltaste nach oben bewegt das Alien jetzt nach oben. Schaffst du die Pfeiltaste nach unten selbst?"
+      },
+      "code": "    if (this.isKeyPressed(KeyCode.UP)) {\n      this.changeY(4);\n    }",
+      "check": {
+        "all": [
+          {
+            "contains": {
+              "file": "Walker.java",
+              "text": "isKeyPressed(KeyCode.UP)"
+            }
+          },
+          {
+            "contains": {
+              "file": "Walker.java",
+              "text": "changeY("
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "jump",
+      "title": {
+        "en": "A jump costume",
+        "de": "Ein Sprung-Kostüm"
+      },
+      "text": {
+        "en": "Add the jump costume in the constructor, below this.setY(-50);, and switch to it in the if for the up arrow. It must come after the if (walking) block, or the standing costume wins.",
+        "de": "Füge im Konstruktor unter this.setY(-50); das Sprung-Kostüm hinzu und wechsle im if für die Pfeiltaste nach oben zu ihm. Es muss nach dem Block if (walking) stehen, sonst gewinnt das Steh-Kostüm."
+      },
+      "code": "    // in the constructor, below this.setY(-50);\n    this.addCostume(\"alienGreen_jump\");\n\n    // inside the if for KeyCode.UP\n    this.switchCostume(\"alienGreen_jump\");",
+      "check": {
+        "all": [
+          {
+            "contains": {
+              "file": "Walker.java",
+              "text": "addCostume(\"alienGreen_jump\")"
+            }
+          },
+          {
+            "contains": {
+              "file": "Walker.java",
+              "text": "switchCostume(\"alienGreen_jump\")"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time. Walk, fly up and watch the costumes change.",
+        "de": "Starte es ein letztes Mal. Lauf, flieg nach oben und sieh, wie die Kostüme wechseln."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

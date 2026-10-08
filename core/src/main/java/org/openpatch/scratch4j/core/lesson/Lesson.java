@@ -243,7 +243,8 @@ public record Lesson(String id, String template, List<String> languages,
 
   /** The ids of the lessons shipped with the IDE, in the order they are offered. */
   public static List<String> bundledIds() {
-    return List.of("first-steps");
+    return List.of("first-steps", "make-it-walk", "catch-the-coins", "red-light-green-light",
+        "guess-the-number", "bouncy-hedgehog", "dodge-the-rocks");
   }
 
   /** The project's lesson, or null when it has none. */

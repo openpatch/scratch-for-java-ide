@@ -66,8 +66,31 @@ final class NewProjectDialog {
     GridPane cards = new GridPane();
     cards.setHgap(10);
     cards.setVgap(10);
-    // first and preselected: the guided lesson, for a student's first project
-    String lessonId = org.openpatch.scratch4j.core.lesson.Lesson.bundledIds().get(0);
+    // first and preselected: a guided lesson, for a student's first projects
+    java.util.Locale locale = I18n.current() == I18n.Language.DE ? java.util.Locale.GERMAN
+        : java.util.Locale.ENGLISH;
+    ComboBox<org.openpatch.scratch4j.core.lesson.Lesson> lessons = new ComboBox<>();
+    for (String id : org.openpatch.scratch4j.core.lesson.Lesson.bundledIds()) {
+      try {
+        lessons.getItems().add(org.openpatch.scratch4j.core.lesson.Lesson.bundled(id));
+      } catch (java.io.IOException ignored) {
+        // a broken bundled lesson is left out; the tests keep them working
+      }
+    }
+    lessons.getSelectionModel().selectFirst();
+    lessons.setMaxWidth(Double.MAX_VALUE);
+    lessons.setConverter(new StringConverter<>() {
+      @Override
+      public String toString(org.openpatch.scratch4j.core.lesson.Lesson lesson) {
+        return lesson == null ? "" : I18n.t("template.lesson.item", lesson.title(locale),
+            lesson.steps().size());
+      }
+
+      @Override
+      public org.openpatch.scratch4j.core.lesson.Lesson fromString(String s) {
+        return null;
+      }
+    });
     Label lessonTitle = new Label(I18n.t("template.lesson"));
     lessonTitle.getStyleClass().add("card-button-title");
     Label lessonHint = new Label(I18n.t("template.lesson.hint"));
@@ -77,16 +100,27 @@ final class NewProjectDialog {
     ToggleButton lessonCard = new ToggleButton(null, lessonContent);
     lessonCard.getStyleClass().add("template-card");
     lessonCard.setToggleGroup(templates);
-    lessonCard.setUserData(LESSON + lessonId);
-    lessonCard.setPrefSize(510, 96);
+    lessonCard.setUserData(LESSON);
+    lessonCard.setPrefSize(250, 118);
     lessonCard.setMaxWidth(Double.MAX_VALUE);
-    lessonCard.setSelected(true);
-    cards.add(lessonCard, 0, 0, 2, 1);
-    lessonCard.setOnAction(e -> {
-      if (nameField(dialog) != null) {
-        nameField(dialog).setText(freeName(I18n.t("template.lesson.name")));
+    lessonCard.setSelected(!lessons.getItems().isEmpty());
+    lessonCard.setDisable(lessons.getItems().isEmpty());
+    cards.add(lessonCard, 0, 0);
+    cards.add(lessons, 1, 0);
+    GridPane.setValignment(lessons, javafx.geometry.VPos.CENTER);
+    lessons.disableProperty().bind(lessonCard.selectedProperty().not());
+    // the project is named after the lesson until the student types a name
+    String[] autoName = {""};
+    Runnable nameAfterLesson = () -> {
+      var lesson = lessons.getValue();
+      TextField field = nameField(dialog);
+      if (lesson != null && field != null) {
+        autoName[0] = freeName(projectName(lesson.title(locale)));
+        field.setText(autoName[0]);
       }
-    });
+    };
+    lessons.setOnAction(e -> nameAfterLesson.run());
+    lessonCard.setOnAction(e -> nameAfterLesson.run());
     int i = 0;
     for (ProjectTemplate template : ProjectTemplate.values()) {
       String key = "template." + template.name().toLowerCase(Locale.ROOT);
@@ -151,14 +185,15 @@ final class NewProjectDialog {
     templates.selectedToggleProperty().addListener((o, old, toggle) -> {
       if (toggle == null) {
         old.setSelected(true);
-      } else if (!(toggle.getUserData() instanceof String s && s.startsWith(LESSON))
-          && nameField(dialog) != null
-          && nameField(dialog).getText().startsWith(I18n.t("template.lesson.name"))) {
+      } else if (!LESSON.equals(toggle.getUserData()) && nameField(dialog) != null
+          && nameField(dialog).getText().equals(autoName[0])) {
         nameField(dialog).setText(freeName("MyGame"));
       }
     });
 
-    TextField nameField = new TextField(freeName(I18n.t("template.lesson.name")));
+    autoName[0] = lessons.getValue() == null ? freeName("MyGame")
+        : freeName(projectName(lessons.getValue().title(locale)));
+    TextField nameField = new TextField(autoName[0]);
     nameField.setId("project-name");
     TextField folderField = new TextField(lastDir.toAbsolutePath().toString());
     folderField.setEditable(false);
@@ -198,7 +233,7 @@ final class NewProjectDialog {
     dialog.getDialogPane().setContent(form);
     dialog.setResultConverter(bt -> bt == createType
         ? result(templates.getSelectedToggle().getUserData(), nameField.getText().trim(),
-            examples.getValue())
+            examples.getValue(), lessons.getValue())
         : null);
     javafx.application.Platform.runLater(() -> {
       nameField.requestFocus();
@@ -207,10 +242,10 @@ final class NewProjectDialog {
     return dialog.showAndWait();
   }
 
-  private static Result result(Object choice, String name, BundledTemplates.Template example) {
-    if (choice instanceof String s && s.startsWith(LESSON)) {
-      return new Result(lastDir, name, ProjectTemplate.CLASSES_FIRST, null,
-          s.substring(LESSON.length()));
+  private static Result result(Object choice, String name, BundledTemplates.Template example,
+      org.openpatch.scratch4j.core.lesson.Lesson lesson) {
+    if (LESSON.equals(choice) && lesson != null) {
+      return new Result(lastDir, name, ProjectTemplate.CLASSES_FIRST, null, lesson.id());
     }
     if (EXAMPLE.equals(choice)) {
       return new Result(lastDir, name, ProjectTemplate.CLASSES_FIRST,
@@ -236,6 +271,15 @@ final class NewProjectDialog {
     Label label = new Label(text);
     label.getStyleClass().add("form-label");
     return label;
+  }
+
+  /** A folder name from a lesson title: "Fang die Münzen" becomes "Fang-die-Muenzen". */
+  static String projectName(String title) {
+    String name = title.replace("\u00e4", "ae").replace("\u00f6", "oe").replace("\u00fc", "ue")
+        .replace("\u00c4", "Ae").replace("\u00d6", "Oe").replace("\u00dc", "Ue")
+        .replace("\u00df", "ss").replaceAll("[^A-Za-z0-9\\- ]", "").strip()
+        .replaceAll("\\s+", "-");
+    return name.isEmpty() ? "MyGame" : name;
   }
 
   private static String freeName(String base) {

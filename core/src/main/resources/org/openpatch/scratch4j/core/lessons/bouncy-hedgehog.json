@@ -1,0 +1,126 @@
+{
+  "id": "bouncy-hedgehog",
+  "template": "bouncy-hedgehog-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Bouncy hedgehog",
+    "de": "Hüpfender Igel"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). Keep the hedgehog bouncing: move the trampoline with the left and right arrow keys.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Lass den Igel hüpfen: Bewege das Trampolin mit den Pfeiltasten nach links und rechts."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "faster",
+      "title": {
+        "en": "A faster hedgehog",
+        "de": "Ein schnellerer Igel"
+      },
+      "text": {
+        "en": "In HedgehogSprite.java the hedgehog moves 1 step per frame: this.move(1). Make it 3.",
+        "de": "In HedgehogSprite.java bewegt sich der Igel 1 Schritt pro Bild: this.move(1). Mach 3 daraus."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "HedgehogSprite.java",
+          "line": "this.move(1);"
+        }
+      }
+    },
+    {
+      "id": "trampoline",
+      "title": {
+        "en": "A faster trampoline",
+        "de": "Ein schnelleres Trampolin"
+      },
+      "text": {
+        "en": "In TrampolineSprite.java each key press moves the trampoline 10 steps: this.changeX(-10) and this.changeX(10). Make both bigger, for example 20.",
+        "de": "In TrampolineSprite.java bewegt jeder Tastendruck das Trampolin 10 Schritte: this.changeX(-10) und this.changeX(10). Mach beide größer, zum Beispiel 20."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "TrampolineSprite.java",
+          "line": "this.changeX(-10);"
+        }
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program again. Can you still catch it?",
+        "de": "Starte das Programm noch einmal. Kannst du ihn noch fangen?"
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "boing",
+      "title": {
+        "en": "Boing!",
+        "de": "Boing!"
+      },
+      "text": {
+        "en": "Copy this into HedgehogSprite.java, inside the if for the trampoline, below pointInDirection. The hedgehog says Boing! for half a second.",
+        "de": "Kopiere das in HedgehogSprite.java, in das if für das Trampolin, unter pointInDirection. Der Igel sagt eine halbe Sekunde lang Boing!."
+      },
+      "code": "        this.say(\"Boing!\", 500);",
+      "check": {
+        "contains": {
+          "file": "HedgehogSprite.java",
+          "pattern": "say\\(\\s*\"(?!Ouch)"
+        }
+      }
+    },
+    {
+      "id": "again",
+      "title": {
+        "en": "Start again with SPACE",
+        "de": "Mit LEERTASTE neu starten"
+      },
+      "text": {
+        "en": "Copy this method into HedgehogSprite.java, below run(). KeyCode needs an import: click the light bulb on the line and the IDE adds it.",
+        "de": "Kopiere diese Methode in HedgehogSprite.java, unter run(). KeyCode braucht einen Import: Klick auf die Glühbirne an der Zeile, dann fügt die IDE ihn ein."
+      },
+      "code": "  public void whenKeyPressed(KeyCode keyCode) {\n    if (keyCode == KeyCode.SPACE) {\n      this.setPosition(-180, 140);\n      this.pointInDirection(15);\n    }\n  }",
+      "check": {
+        "methodExists": {
+          "name": "whenKeyPressed",
+          "file": "HedgehogSprite.java"
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time. When the hedgehog falls, press SPACE and play on.",
+        "de": "Starte es ein letztes Mal. Wenn der Igel fällt, drücke die LEERTASTE und spiel weiter."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

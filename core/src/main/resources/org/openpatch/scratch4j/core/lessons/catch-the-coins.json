@@ -1,0 +1,130 @@
+{
+  "id": "catch-the-coins",
+  "template": "catch-the-coins-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Catch the coins",
+    "de": "Fang die Münzen"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). Catch the falling coins with the arrow keys.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Fang die fallenden Münzen mit den Pfeiltasten."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "faster",
+      "title": {
+        "en": "Faster coins",
+        "de": "Schnellere Münzen"
+      },
+      "text": {
+        "en": "In Coin.java each coin falls 3 steps per frame: this.changeY(-3). Make it fall faster, for example -5.",
+        "de": "In Coin.java fällt jede Münze 3 Schritte pro Bild: this.changeY(-3). Lass sie schneller fallen, zum Beispiel -5."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "Coin.java",
+          "line": "this.changeY(-3);"
+        }
+      }
+    },
+    {
+      "id": "more",
+      "title": {
+        "en": "More coins",
+        "de": "Mehr Münzen"
+      },
+      "text": {
+        "en": "In CatchStage.java the loop for (int i = 0; i < 4; i++) adds 4 coins. Change the 4 to get more.",
+        "de": "In CatchStage.java fügt die Schleife for (int i = 0; i < 4; i++) 4 Münzen hinzu. Ändere die 4, um mehr zu bekommen."
+      },
+      "check": {
+        "lineChanged": {
+          "file": "CatchStage.java",
+          "line": "for (int i = 0; i < 4; i++) {"
+        }
+      }
+    },
+    {
+      "id": "win",
+      "title": {
+        "en": "You win!",
+        "de": "Gewonnen!"
+      },
+      "text": {
+        "en": "Copy this into addPoint() in CatchStage.java, below this.showScore();. At 10 coins the score text says you won.",
+        "de": "Kopiere das in addPoint() in CatchStage.java, unter this.showScore();. Bei 10 Münzen zeigt der Punktetext, dass du gewonnen hast."
+      },
+      "code": "    if (this.score >= 10) {\n      this.scoreText.showText(\"You win with \" + this.score + \" coins!\");\n    }",
+      "check": {
+        "contains": {
+          "file": "CatchStage.java",
+          "pattern": "score\\s*>=?\\s*\\d+"
+        }
+      }
+    },
+    {
+      "id": "diamond",
+      "title": {
+        "en": "A diamond class",
+        "de": "Eine Diamant-Klasse"
+      },
+      "text": {
+        "en": "Make a new class: File > Add to project > Class, name it Diamond, kind Sprite. Replace its code with this. A diamond falls faster and counts twice.",
+        "de": "Lege eine neue Klasse an: Datei > Zum Projekt hinzufügen > Klasse, Name Diamond, Art Sprite. Ersetze ihren Code durch diesen. Ein Diamant fällt schneller und zählt doppelt."
+      },
+      "code": "import org.openpatch.scratch.*;\n\npublic class Diamond extends Sprite {\n  public Diamond() {\n    this.addCostume(\"gemBlue\");\n    this.setSize(40);\n    this.setY(400);\n  }\n\n  public void run() {\n    this.changeY(-5);\n    if (this.isTouchingSprite(Basket.class)) {\n      ((CatchStage) this.getStage()).addPoint();\n      ((CatchStage) this.getStage()).addPoint();\n      this.setY(400);\n    }\n    if (this.getY() < -200) {\n      this.setY(400);\n    }\n  }\n}",
+      "check": {
+        "classExists": {
+          "name": "Diamond",
+          "extends": "Sprite"
+        }
+      }
+    },
+    {
+      "id": "place",
+      "title": {
+        "en": "Put the diamond on the stage",
+        "de": "Setz den Diamanten auf die Bühne"
+      },
+      "text": {
+        "en": "A class is only a plan. In the CatchStage constructor, below the for loop, create a diamond and add it to the stage.",
+        "de": "Eine Klasse ist nur ein Bauplan. Erzeuge im Konstruktor von CatchStage unter der for-Schleife einen Diamanten und füge ihn der Bühne hinzu."
+      },
+      "code": "    this.add(new Diamond());",
+      "check": {
+        "contains": {
+          "file": "CatchStage.java",
+          "text": "new Diamond("
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time. Catch coins and the diamond until you win.",
+        "de": "Starte es ein letztes Mal. Fang Münzen und den Diamanten, bis du gewinnst."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "id": "guess-the-number",
+  "template": "guess-the-number-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Guess the number",
+    "de": "Errate die Zahl"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag at the top (or F5). Type a number into the box and press Enter until you find the secret number.",
+        "de": "Drücke oben die grüne Flagge (oder F5). Tippe eine Zahl in das Feld und drücke Enter, bis du die geheime Zahl findest."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "range",
+      "title": {
+        "en": "From 1 to 100",
+        "de": "Von 1 bis 100"
+      },
+      "text": {
+        "en": "In GuessStage.java the secret number is Random.randomInt(1, 10). Make it a number up to 100, and change both questions \"Guess a number between 1 and 10\" to match.",
+        "de": "In GuessStage.java ist die geheime Zahl Random.randomInt(1, 10). Mach daraus eine Zahl bis 100 und passe beide Fragen \"Guess a number between 1 and 10\" an."
+      },
+      "check": {
+        "all": [
+          {
+            "lineChanged": {
+              "file": "GuessStage.java",
+              "line": "private int secret = Random.randomInt(1, 10);"
+            }
+          },
+          {
+            "lineChanged": {
+              "file": "GuessStage.java",
+              "line": "this.ask(\"Guess a number between 1 and 10\");"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program again. How many tries do you need now?",
+        "de": "Starte das Programm noch einmal. Wie viele Versuche brauchst du jetzt?"
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "limit",
+      "title": {
+        "en": "Only 7 tries",
+        "de": "Nur 7 Versuche"
+      },
+      "text": {
+        "en": "Copy this into run(), below this.tries = this.tries + 1;. After 7 tries the game tells you the number.",
+        "de": "Kopiere das in run(), unter this.tries = this.tries + 1;. Nach 7 Versuchen verrät das Spiel die Zahl."
+      },
+      "code": "    if (this.tries > 7) {\n      this.hint.showText(\"Too many tries! It was \" + this.secret + \".\");\n      this.solved = true;\n      return;\n    }",
+      "check": {
+        "contains": {
+          "file": "GuessStage.java",
+          "pattern": "tries\\s*>=?\\s*\\d+"
+        }
+      }
+    },
+    {
+      "id": "wizard",
+      "title": {
+        "en": "The wizard cheers",
+        "de": "Der Zauberer jubelt"
+      },
+      "text": {
+        "en": "Copy this into the last else, below the line that shows \"Yes! It was ...\". The wizard congratulates you for 3 seconds.",
+        "de": "Kopiere das in das letzte else, unter die Zeile mit \"Yes! It was ...\". Der Zauberer gratuliert dir 3 Sekunden lang."
+      },
+      "code": "      this.wizard.say(\"Well done!\", 3000);",
+      "check": {
+        "contains": {
+          "file": "GuessStage.java",
+          "text": "wizard.say("
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it one last time. Find the number in 7 tries.",
+        "de": "Starte es ein letztes Mal. Finde die Zahl in 7 Versuchen."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}
