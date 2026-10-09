@@ -6,7 +6,7 @@
 
   <groupId>org.openpatch.scratch4j</groupId>
   <artifactId>scratch4j-ide</artifactId>
-  <version>0.1.0-alpha.11</version>
+  <version>0.1.0-alpha.12</version>
   <packaging>pom</packaging>
 
   <name>Scratch for Java Studio</name>
