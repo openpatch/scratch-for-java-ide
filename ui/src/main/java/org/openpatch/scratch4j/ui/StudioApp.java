@@ -596,7 +596,7 @@ public class StudioApp extends javafx.application.Application {
     checkDelay.stop();
     hotSwapDelay.stop();
     stuckDelay.stop();
-    editor.getTabs().clear();
+    editor.clear();
     project.set(null);
     hasProject.set(false);
     stage.setTitle("Scratch for Java Studio");
@@ -1031,7 +1031,7 @@ public class StudioApp extends javafx.application.Application {
     projectTitle.setText(p.name());
     hasProject.set(true);
     fileTree.setRoot(p.root());
-    editor.getTabs().clear();
+    editor.clear();
     selector = new StageSelectorView(p, this::openDesigner,
         cls -> editor.open(p.root().resolve(cls + ".java")),
         () -> {

@@ -412,6 +412,13 @@ final class EditorTabs extends TabPane {
     return true;
   }
 
+  /** Drops every tab without asking (the project closes or another one opens). */
+  void clear() {
+    getTabs().clear();
+    openTabs.clear();
+    toolTabs.clear();
+  }
+
   /** Right-click on a tab: close it, the others, or all. */
   private javafx.scene.control.ContextMenu tabMenu(Tab tab) {
     javafx.scene.control.MenuItem close = new javafx.scene.control.MenuItem(
