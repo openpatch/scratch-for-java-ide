@@ -231,10 +231,14 @@ class IdeControlIT {
         + "      while (true) { }\n    }\n  }"));
     ScratchProject project = ScratchProject.open(tmp.resolve("frozen"));
     List<Long> beats = new CopyOnWriteArrayList<>();
+    List<Boolean> loading = new CopyOnWriteArrayList<>();
     RunHandle handle = new ProjectRunner().run(project,
         RunConfig.of(project.startStage()).withControl(),
         new RunListener() {
-          @Override public void onFrames(long f) { beats.add(f); }
+          @Override public void onFrames(long f, boolean l) {
+            beats.add(f);
+            loading.add(l);
+          }
         });
     try {
       waitFor(() -> beats.size() >= 8 && beats.get(beats.size() - 1) > 0, 20000);
@@ -243,6 +247,8 @@ class IdeControlIT {
       assertThat(beats.get(beats.size() - 1)).as("frozen: no new frames").isEqualTo(last);
       // run() starts a few frames after the first drawn frame
       assertThat(last).isBetween(55L, 200L);
+      // past the loading screen: the IDE's short freeze limit applies
+      assertThat(loading.get(loading.size() - 1)).as("loading flags %s", loading).isFalse();
     } finally {
       handle.stop();
     }

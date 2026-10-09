@@ -1531,8 +1531,10 @@ public class StudioApp extends javafx.application.Application {
    * A program whose frame count stops for 3 seconds (or that never shows a
    * window) is frozen - almost always a loop that never ends. The console
    * explains it once; the Problems tab shows where the transition lint found it.
+   * On the loading screen it gets 20 seconds: a slow PC draws nothing for a
+   * while when the stage takes over.
    */
-  void watchdog(long frames) {
+  void watchdog(long frames, boolean loading) {
     long now = System.currentTimeMillis();
     if (frames != watchFrames) {
       if (watchWarned && frames > watchFrames && watchFrames >= 0) {
@@ -1558,7 +1560,7 @@ public class StudioApp extends javafx.application.Application {
       watchChanged = now;
       return;
     }
-    boolean stalled = frames >= 0 && now - watchChanged >= 3000;
+    boolean stalled = frames >= 0 && now - watchChanged >= (loading ? 20000 : 3000);
     boolean noWindow = frames < 0 && now - watchStarted >= 10000;
     if ((stalled || noWindow) && !watchWarned && running.get()) {
       watchWarned = true;
@@ -3092,8 +3094,8 @@ public class StudioApp extends javafx.application.Application {
         liveSwap = new org.openpatch.scratch4j.runner.HotSwap(p, session);
         RunHandle handle = runner.run(p, config,
             new RunListener() {
-          @Override public void onFrames(long frames) {
-            Platform.runLater(() -> watchdog(frames));
+          @Override public void onFrames(long frames, boolean loading) {
+            Platform.runLater(() -> watchdog(frames, loading));
           }
 
           @Override public void onPaused(long frame) {
