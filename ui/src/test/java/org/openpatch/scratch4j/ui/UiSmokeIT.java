@@ -227,6 +227,16 @@ class UiSmokeIT {
         assertThat(pixels.getArgb(6, 6)).as("scaled to 2x2").isEqualTo(0xffff0000);
         paint.cropToSelection();
         assertThat(paint.image().getWidth()).isEqualTo(2);
+        // Ctrl+Z / Ctrl+Y (Cmd on macOS) undo and redo the crop
+        boolean mac = System.getProperty("os.name").toLowerCase().contains("mac");
+        javafx.event.Event.fireEvent(paint, new javafx.scene.input.KeyEvent(
+            javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.Z,
+            false, !mac, false, mac));
+        assertThat(paint.image().getWidth()).isEqualTo(8);
+        javafx.event.Event.fireEvent(paint, new javafx.scene.input.KeyEvent(
+            javafx.scene.input.KeyEvent.KEY_PRESSED, "", "", javafx.scene.input.KeyCode.Y,
+            false, !mac, false, mac));
+        assertThat(paint.image().getWidth()).isEqualTo(2);
         // layers: draw on a new layer, the flattened picture has both, merging keeps it
         paint.addLayer();
         assertThat(paint.layerCount()).isEqualTo(2);

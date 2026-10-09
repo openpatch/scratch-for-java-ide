@@ -94,6 +94,9 @@ final class CodeEditor extends BorderPane {
       });
 
   private static final String INDENT = "  ";
+  /** A method snippet from the block palette (an event block): its name. */
+  private static final java.util.regex.Pattern EVENT_METHOD = java.util.regex.Pattern.compile(
+      "^(?:public |protected |private )?void (\\w+)\\([^)]*\\) \\{\n");
   private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*$");
   private static final Pattern WORD = Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]{2,}\\b");
   private static final Pattern IMAGE_STRING = Pattern.compile(
@@ -536,6 +539,27 @@ final class CodeEditor extends BorderPane {
     }
     String body = snippet.substring(0, snippet.length() - 1);
     boolean multiLine = body.contains("\n");
+    var method = EVENT_METHOD.matcher(body);
+    if (method.find()) {
+      // an event block is a method: it goes into the class body, not into a method
+      int current = area.getCurrentParagraph();
+      int lineEnd = area.getAbsolutePosition(current, area.getParagraph(current).length());
+      var place = MemberPlacement.place(area.getText(), lineEnd, method.group(1));
+      if (place != null && place.existing()) {
+        // the class already reacts to this event: go there instead of a second copy
+        area.moveTo(place.offset());
+        int open = area.getCurrentParagraph();
+        if (open + 1 < area.getParagraphs().size()
+            && !area.getParagraph(open + 1).getText().strip().startsWith("}")) {
+          open++; // the method's first line
+        }
+        area.moveTo(open, area.getParagraph(open).length());
+        area.requestFollowCaret();
+        area.requestFocus();
+        return;
+      }
+      if (place != null) area.moveTo(place.offset());
+    }
     int paragraph = area.getCurrentParagraph();
     String line = area.getParagraph(paragraph).getText();
     boolean blank = line.isBlank();
@@ -545,8 +569,10 @@ final class CodeEditor extends BorderPane {
     boolean prevIsBlank = blank
         ? paragraph == 0 || area.getParagraph(paragraph - 1).getText().isBlank()
         : false;
+    // a closing brace below needs no blank line before it either
     boolean nextIsBlank = paragraph + 1 >= area.getParagraphs().size()
-        || area.getParagraph(paragraph + 1).getText().isBlank();
+        || area.getParagraph(paragraph + 1).getText().isBlank()
+        || area.getParagraph(paragraph + 1).getText().strip().startsWith("}");
     int lineStart = area.getAbsolutePosition(paragraph, 0);
     // multi-line snippets (method overrides) keep a blank line on both sides
     String before = blank ? (multiLine && !prevIsBlank ? "\n" : "")
