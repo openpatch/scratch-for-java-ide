@@ -64,7 +64,22 @@ final class SoundEditorView extends BorderPane {
     this.clip = SoundIO.decode(file);
     getStyleClass().add("sound-editor");
 
+    // Ctrl+Z / Ctrl+Y (Cmd on macOS) anywhere in the editor; text fields keep their own
+    addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+      if (!e.isShortcutDown()
+          || e.getTarget() instanceof javafx.scene.control.TextInputControl) return;
+      if (e.getCode() == javafx.scene.input.KeyCode.Z) {
+        if (e.isShiftDown()) redo(); else undo();
+        e.consume();
+      } else if (e.getCode() == javafx.scene.input.KeyCode.Y) {
+        redo();
+        e.consume();
+      }
+    });
+
+    wave.setFocusTraversable(true);
     wave.setOnMousePressed(e -> {
+      wave.requestFocus(); // the shortcuts need the focus in the editor
       dragStartX = e.getX();
       selection = null;
       redraw();
