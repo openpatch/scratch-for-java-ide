@@ -18,6 +18,14 @@ public interface RunListener {
    */
   default void onFrames(long frames) {}
 
+  /**
+   * The heartbeat with whether the library still shows its loading screen
+   * (where a slow PC may draw nothing for a while). Defaults to {@link #onFrames(long)}.
+   */
+  default void onFrames(long frames, boolean loading) {
+    onFrames(frames);
+  }
+
   /** The game loop stopped ({@code pause}, or after a {@code step}) at this frame. */
   default void onPaused(long frame) {}
 

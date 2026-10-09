@@ -88,7 +88,9 @@ public final class RunHandle {
   private static void control(String message, RunListener listener) {
     if (message.startsWith("frames ")) {
       try {
-        listener.onFrames(Long.parseLong(message.substring("frames ".length()).trim()));
+        String[] beat = message.substring("frames ".length()).trim().split(" ");
+        listener.onFrames(Long.parseLong(beat[0]),
+            beat.length > 1 && beat[1].equals("loading"));
       } catch (NumberFormatException ignored) {
         // a garbled heartbeat is skipped
       }

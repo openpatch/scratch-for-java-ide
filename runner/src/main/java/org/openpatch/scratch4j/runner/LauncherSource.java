@@ -184,7 +184,9 @@ public final class LauncherSource {
                     new Hook();
                     hooked = true;
                   }
-                  System.err.println(MARK + "frames " + frames);
+                  // "loading" while the library's loading screen shows (slow PCs stop
+                  // drawing for a while when the stage takes over)
+                  System.err.println(MARK + "frames " + frames + (loading() ? " loading" : ""));
                   try {
                     Thread.sleep(1000);
                   } catch (InterruptedException e) {
@@ -358,6 +360,24 @@ public final class LauncherSource {
             }
 
             /** The library's Processing sketch (reflective: no Processing types needed to compile). */
+            private static java.lang.reflect.Field state;
+
+            /** The library still shows its loading screen (before the stage runs). */
+            static boolean loading() {
+              Object applet = applet();
+              if (applet == null) return false;
+              try {
+                if (state == null) {
+                  java.lang.reflect.Field field = applet.getClass().getDeclaredField("state");
+                  field.setAccessible(true);
+                  state = field;
+                }
+                return String.valueOf(state.get(applet)).equals("LOADING");
+              } catch (ReflectiveOperationException | RuntimeException e) {
+                return false; // an older library: no loading screen to wait for
+              }
+            }
+
             static Object applet() {
               try {
                 return Class.forName("org.openpatch.scratch.internal.Applet")
