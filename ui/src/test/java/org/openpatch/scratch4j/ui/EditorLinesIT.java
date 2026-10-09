@@ -68,6 +68,21 @@ class EditorLinesIT {
           .forEach(i -> i.fire());
       assertThat(renamed).containsExactly(4);
       assertThat(usages).containsExactly(4);
+
+      // an event block dropped into a method lands after it, in the class body
+      area.replaceText("public class Cat extends Sprite {\n  public void run() {\n"
+          + "    this.move(1);\n  }\n}\n");
+      area.moveTo(2, 4);
+      code.insertBlock("public void whenClicked() {\n  \n}\n");
+      assertThat(area.getText()).isEqualTo("public class Cat extends Sprite {\n"
+          + "  public void run() {\n    this.move(1);\n  }\n\n"
+          + "  public void whenClicked() {\n    \n  }\n}\n");
+      // a second one takes the caret into the method that is already there
+      area.moveTo(2, 4);
+      String before = area.getText();
+      code.insertBlock("public void whenClicked() {\n  \n}\n");
+      assertThat(area.getText()).isEqualTo(before);
+      assertThat(area.getCurrentParagraph()).isEqualTo(6);
     });
   }
 }
