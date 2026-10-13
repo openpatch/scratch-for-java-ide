@@ -901,12 +901,20 @@ public class StudioApp extends javafx.application.Application {
 
   // --- projects ------------------------------------------------------------------
 
-  /** {@code Main <projectDir>} opens that project right away. */
+  /**
+   * {@code Main <projectDir>} opens that project right away.
+   * {@code Main <project.zip|workspace.json> [<parentDir>]} imports it first, like
+   * Project > Open project ZIP / workspace JSON, into parentDir or the projects folder.
+   */
   private void openFromArguments() {
     // null when started without Application.launch (layout tests)
     List<String> args = getParameters() == null ? List.of() : getParameters().getRaw();
-    if (!args.isEmpty() && Files.isDirectory(Path.of(args.get(0)))) {
-      openProjectAt(Path.of(args.get(0)).toAbsolutePath());
+    if (args.isEmpty()) return;
+    Path first = Path.of(args.get(0)).toAbsolutePath();
+    if (Files.isDirectory(first)) {
+      openProjectAt(first);
+    } else if (SharedProjectFile.accepts(first)) {
+      importShared(first, args.size() > 1 ? Path.of(args.get(1)).toAbsolutePath() : ProjectsFolder.current());
     }
   }
 
@@ -3822,10 +3830,16 @@ public class StudioApp extends javafx.application.Application {
     parent.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File folder = parent.showDialog(stage);
     if (folder == null) return;
+    importShared(zip.toPath(), folder.toPath());
+  }
+
+  /** Imports a project ZIP or workspace JSON into a new folder in {@code parentDir} and opens it. */
+  private void importShared(Path file, Path parentDir) {
     try {
-      Path imported = zip.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".json")
-          ? org.openpatch.scratch4j.core.project.PortableProject.importWorkspace(zip.toPath(), folder.toPath())
-          : org.openpatch.scratch4j.export.ProjectFormats.importZip(zip.toPath(), folder.toPath());
+      Files.createDirectories(parentDir);
+      Path imported = SharedProjectFile.isJson(file)
+          ? org.openpatch.scratch4j.core.project.PortableProject.importWorkspace(file, parentDir)
+          : org.openpatch.scratch4j.export.ProjectFormats.importZip(file, parentDir);
       openProjectAt(imported);
       ScratchProject opened = project.get();
       if (opened != null && "nrw".equals(opened.settings().flavour)
