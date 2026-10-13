@@ -84,6 +84,10 @@ public final class StagePreview {
 
   private static Result makeNow(ScratchProject project, String startClass, String stageClass,
       Collection<String> omit, Path java, Duration timeout) {
+    List<String> hidden = hiddenDisplay();
+    if (hidden == null) {
+      return Result.failed(NO_HIDDEN_DISPLAY);
+    }
     try {
       Path buildDir = project.root().resolve(".scratch4j/build/preview");
       Path outDir = buildDir.resolve("classes");
@@ -105,7 +109,7 @@ public final class StagePreview {
       Files.deleteIfExists(output.resolve("frame.png"));
       Files.deleteIfExists(output.resolve("stage.json"));
 
-      List<String> command = new ArrayList<>();
+      List<String> command = new ArrayList<>(hidden);
       command.add(java.toString());
       command.addAll(RunConfig.DEFAULT_JVM_ARGS);
       command.add("-Dscratch4j.preview=" + output.toAbsolutePath());
@@ -128,8 +132,14 @@ public final class StagePreview {
       builder.directory(project.root().toFile());
       builder.redirectErrorStream(true);
       builder.redirectOutput(buildDir.resolve("preview.log").toFile());
+      if (!hidden.isEmpty()) {
+        // only the invisible display: nothing may reach the desktop's
+        builder.environment().remove("WAYLAND_DISPLAY");
+      }
       Process process = builder.start();
       if (!process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
+        // xvfb-run starts the X server and the program as children of its own
+        process.descendants().forEach(ProcessHandle::destroyForcibly);
         process.destroyForcibly();
         return Result.failed("The program took too long to show its stage.");
       }
@@ -140,6 +150,45 @@ public final class StagePreview {
       Thread.currentThread().interrupt();
       return Result.failed("The preview was stopped.");
     }
+  }
+
+  /** Why there is no preview on a Linux without xvfb-run. */
+  public static final String NO_HIDDEN_DISPLAY = "The preview needs xvfb-run, so that the"
+      + " program can draw on an invisible screen instead of opening a window on yours."
+      + " Install it with your system's package manager (Arch: xorg-server-xvfb,"
+      + " Debian and Ubuntu: xvfb, Fedora: xorg-x11-server-Xvfb).";
+
+  /**
+   * What the preview's program runs in so that its window is never seen: on
+   * Linux an X server of its own that draws into memory ({@code xvfb-run}),
+   * because tiling window managers and Wayland compositors place every new
+   * window on the screen, wherever the program puts it. Elsewhere nothing
+   * (the library moves its window out of sight). Null when Linux has no
+   * {@code xvfb-run}: then there is no preview rather than a window that
+   * pops up.
+   */
+  public static List<String> hiddenDisplay() {
+    String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
+    if (!os.contains("linux")) {
+      return List.of();
+    }
+    Path xvfbRun = onPath("xvfb-run");
+    if (xvfbRun == null) {
+      return null;
+    }
+    // -a: the first free display number; a screen big enough for any window
+    return List.of(xvfbRun.toString(), "-a", "-s", "-screen 0 1920x1200x24");
+  }
+
+  private static Path onPath(String program) {
+    String path = System.getenv("PATH");
+    if (path == null) return null;
+    for (String dir : path.split(java.io.File.pathSeparator)) {
+      if (dir.isEmpty()) continue;
+      Path candidate = Path.of(dir, program);
+      if (Files.isExecutable(candidate)) return candidate;
+    }
+    return null;
   }
 
   /** Reads what the library wrote into {@code folder}. */

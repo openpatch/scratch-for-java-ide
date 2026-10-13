@@ -107,7 +107,15 @@ else
   NATIVE_ACCESS='ALL-UNNAMED'
 fi
 
+# The stage designer's preview draws on an invisible screen (xvfb-run) on Linux.
+PACKAGE_DEPS=()
+case "$TYPE" in
+  deb) PACKAGE_DEPS=(--linux-package-deps xvfb) ;;
+  rpm) PACKAGE_DEPS=(--linux-package-deps xorg-x11-server-Xvfb) ;;
+esac
+
 jpackage --verbose --type "$TYPE" \
+  ${PACKAGE_DEPS[@]+"${PACKAGE_DEPS[@]}"} \
   --name "$NAME" \
   --app-version "$VERSION" \
   --vendor "OpenPatch" \
