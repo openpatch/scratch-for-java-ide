@@ -3628,8 +3628,12 @@ public class StudioApp extends javafx.application.Application {
       default -> I18n.t("library.outdated", status.jar() == null ? "?" : status.jar().getFileName(),
           wanted);
     };
-    ButtonType replace = new ButtonType(I18n.t("library.replace"), javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
-    ButtonType keep = new ButtonType(I18n.t("library.keep"), javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
+    // nothing to replace or keep when +libs is empty
+    boolean missing = status.state() == LibraryCheck.State.MISSING;
+    ButtonType replace = new ButtonType(I18n.t(missing ? "library.add" : "library.replace"),
+        javafx.scene.control.ButtonBar.ButtonData.OK_DONE);
+    ButtonType keep = new ButtonType(I18n.t(missing ? "library.skip" : "library.keep"),
+        javafx.scene.control.ButtonBar.ButtonData.CANCEL_CLOSE);
     Alert ask = new Alert(Alert.AlertType.CONFIRMATION, message, replace, keep);
     ask.setHeaderText(I18n.t("library.title"));
     Theme.style(ask);
