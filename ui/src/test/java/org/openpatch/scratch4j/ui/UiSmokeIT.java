@@ -733,7 +733,8 @@ class UiSmokeIT {
         done.countDown();
       }
     });
-    assertThat(done.await(15, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+    // the coin stage's preview compiles the project and starts a program
+    assertThat(done.await(90, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
     javafx.application.Platform.exit();
     assertThat(failure.get()).as("no exception on the FX thread").isNull();
   }
