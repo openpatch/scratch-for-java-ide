@@ -27,8 +27,6 @@ class UiSmokeIT {
 
   @Test
   void editorTreeAndWizardFilesBuildAndEditOnTheFxThread() throws Exception {
-    // the designers here draw what their blocks say; the coin stage below gets a preview
-    System.setProperty("scratch4j.preview", "false");
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "uismoke",
         NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
     Path stage = tmp.resolve("uismoke/MyStage.java");

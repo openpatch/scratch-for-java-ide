@@ -65,6 +65,13 @@ public final class ProjectRunner {
       command.add("-Dsun.java2d.uiScale=1");
     }
     command.addAll(config.extraJvmArgs());
+    // the stage designer shows each stage as this run first draws it
+    command.add("-Dscratch4j.capture="
+        + StagePreview.folder(project, "stage").getParent().toAbsolutePath());
+    String omit = captureOmit(project);
+    if (!omit.isEmpty()) {
+      command.add("-Dscratch4j.capture.omit=" + omit);
+    }
     command.add("-cp");
     command.add(classpathString(project, outDir));
     command.add("Scratch4JLauncher");
@@ -84,6 +91,33 @@ public final class ProjectRunner {
     exit.whenComplete((code, t) -> listener.onExit(code == null ? -1 : code));
     RunHandle.pump(process, listener, exit);
     return handle;
+  }
+
+  /**
+   * The sprites each stage's designer draws itself, which the captured
+   * picture leaves out: {@code Stage:a,b;Other:c}.
+   */
+  static String captureOmit(ScratchProject project) {
+    List<String> parts = new ArrayList<>();
+    try {
+      for (String stage : project.stageClasses()) {
+        Path file = project.root().resolve(stage + ".java");
+        if (!Files.isRegularFile(file)) continue;
+        try {
+          var document = org.openpatch.scratch4j.core.region.StageDocument.read(
+              Files.readString(file));
+          List<String> own = document.model().sprites().stream()
+              .map(org.openpatch.scratch4j.core.region.SpriteRef::name)
+              .filter(document::isSpriteEditable).toList();
+          if (!own.isEmpty()) parts.add(stage + ":" + String.join(",", own));
+        } catch (RuntimeException unreadable) {
+          // unfinished Java in a block: the picture keeps all sprites
+        }
+      }
+    } catch (IOException e) {
+      return "";
+    }
+    return String.join(";", parts);
   }
 
   private List<Path> classpath(ScratchProject project) throws IOException {

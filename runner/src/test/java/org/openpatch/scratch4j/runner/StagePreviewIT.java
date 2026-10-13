@@ -51,6 +51,26 @@ class StagePreviewIT {
   }
 
   @Test
+  void aRunLeavesThePictureForTheDesigner() throws Exception {
+    Path allJar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
+    Path root = BundledTemplates.create("demo-tiled", tmp, "running", allJar);
+    ScratchProject project = ScratchProject.open(root);
+    assertThat(ProjectRunner.captureOmit(project)).isEqualTo("World:inventory");
+
+    var handle = new ProjectRunner().run(project,
+        RunConfig.of(project.startStage()).withExitAfter(4), new RunListener() { });
+    handle.exitFuture().get(60, java.util.concurrent.TimeUnit.SECONDS);
+
+    // the program ran as usual, and drew the world once into the designer's folder
+    var picture = StagePreview.last(project, "World");
+    assertThat(picture).isNotNull();
+    assertThat(picture.sprites()).extracting(StagePreview.Sprite::type).contains("Player");
+    assertThat(picture.sprites()).filteredOn(s -> "inventory".equals(s.field()))
+        .extracting(StagePreview.Sprite::omitted).containsExactly(true);
+  }
+
+  @Test
   void aStageThatNeedsArgumentsSaysSo() throws Exception {
     Path allJar = LibraryJarSource.allJar(
         Path.of(System.getProperty("user.dir"), "target", "bundled"));

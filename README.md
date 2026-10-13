@@ -27,10 +27,10 @@ modify that library.
 ## Build and run from source
 
 Install JDK 25 and Maven 3.9 or newer. A graphical desktop is needed to run
-the IDE and student programs. On Linux the stage designer draws its preview on
-an invisible screen with `xvfb-run` (Arch: `xorg-server-xvfb`, Debian and
-Ubuntu: `xvfb`, Fedora: `xorg-x11-server-Xvfb`); without it the designer shows
-no preview instead of opening a window.
+the IDE and student programs. On Linux, the stage designer's Refresh button
+draws on an invisible screen when `xvfb-run` is installed (Arch:
+`xorg-server-xvfb`, Debian and Ubuntu: `xvfb`); without it a window shows for a
+moment.
 
 ```bash
 mvn verify

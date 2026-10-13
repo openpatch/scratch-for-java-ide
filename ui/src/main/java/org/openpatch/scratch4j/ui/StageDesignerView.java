@@ -169,6 +169,14 @@ final class StageDesignerView extends BorderPane {
     getStyleClass().add("designer");
 
     readFromDisk();
+    pictureWatch.setCycleCount(javafx.animation.Animation.INDEFINITE);
+    sceneProperty().addListener((o, old, scene) -> {
+      if (scene == null) {
+        pictureWatch.stop();
+      } else {
+        pictureWatch.play();
+      }
+    });
 
     canvas.setFocusTraversable(true);
     canvas.setOnMouseMoved(this::hover);
@@ -522,7 +530,7 @@ final class StageDesignerView extends BorderPane {
       model.size(size[0], size[1]);
       renderer.defaultCamera(model.width(), model.height());
       readOnlyReason = "";
-      schedulePreview();
+      loadPicture();
     } catch (IOException | RuntimeException e) {
       document = null;
       model = StageModel.create();
@@ -532,49 +540,71 @@ final class StageDesignerView extends BorderPane {
     }
   }
 
-  // --- preview: the stage as the program draws it -------------------------------
+  // --- the stage as the program draws it: from the last run, or Refresh -------
 
-  /** Previews run one after another, away from the FX thread. */
+  /** Refreshes run one after another, away from the FX thread. */
   private static final java.util.concurrent.ExecutorService PREVIEWS =
       java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "stage-preview");
         t.setDaemon(true);
         return t;
       });
-  /** Off in tests that look at the designer's own drawing ({@code -Dscratch4j.preview=false}). */
-  private static boolean previewOn() {
-    return !"false".equals(System.getProperty("scratch4j.preview"));
+  /** When the picture shown was taken (its stage.json), 0 for none. */
+  private long pictureTime;
+  /** Looks for a newer picture while the designer is on screen (a run just took one). */
+  private final javafx.animation.Timeline pictureWatch = new javafx.animation.Timeline(
+      new javafx.animation.KeyFrame(javafx.util.Duration.seconds(2), e -> {
+        if (pictureFile() != null && modified(pictureFile()) != pictureTime) {
+          loadPicture();
+          refreshAll();
+        }
+      }));
+  private boolean refreshing;
+  private final Button refreshButton = new Button(null, Icons.of("fth-refresh-cw"));
+
+  private Path pictureFile() {
+    return org.openpatch.scratch4j.runner.StagePreview.folder(project, stageClass)
+        .resolve("stage.json");
   }
-  /** What the last preview was made from: the sources and the sprites left out. */
-  private String previewedFrom;
-  private int previewRequest;
+
+  private static long modified(Path file) {
+    try {
+      return Files.getLastModifiedTime(file).toMillis();
+    } catch (IOException e) {
+      return 0;
+    }
+  }
 
   /**
-   * Makes a new preview when the code or the designer's sprites changed: the
-   * stage as the program draws it, without the designer's own sprites (it
-   * draws those itself, so they can be moved).
+   * Shows the stage as the program last drew it: when it ran, or when Refresh
+   * was pressed. The designer's own sprites were left out of that picture; it
+   * draws them itself, so they can be moved.
    */
-  private void schedulePreview() {
-    if (!previewOn() || document == null) return;
-    List<String> omit = ownSprites();
-    String from;
-    try {
-      StringBuilder all = new StringBuilder(String.join(",", omit));
-      for (Path file : project.javaSources()) {
-        all.append('\0').append(file).append('\0').append(
-            file.equals(stageFile) ? currentSource() : Files.readString(file));
-      }
-      from = Integer.toHexString(all.toString().hashCode()) + ":" + all.length();
-    } catch (IOException e) {
-      return;
+  private void loadPicture() {
+    pictureTime = modified(pictureFile());
+    var last = org.openpatch.scratch4j.runner.StagePreview.last(project, stageClass);
+    renderer.setPreview(last);
+    if (last != null) {
+      model.size(last.width(), last.height());
+      previewNote.setText(I18n.t("designer.picture.run", java.time.format.DateTimeFormatter
+          .ofPattern("HH:mm").format(java.time.LocalTime.ofInstant(
+              java.time.Instant.ofEpochMilli(pictureTime), java.time.ZoneId.systemDefault()))));
+    } else {
+      previewNote.setText(I18n.t("designer.picture.none"));
     }
-    if (from.equals(previewedFrom)) return;
-    previewedFrom = from;
-    int request = ++previewRequest;
+    previewNote.setVisible(true);
+    renderer.defaultCamera(model.width(), model.height());
+  }
+
+  /** Draws a new picture now, without waiting for the next run. */
+  void refreshPicture() {
+    if (refreshing || document == null) return;
+    refreshing = true;
+    refreshButton.setDisable(true);
     previewNote.setText(I18n.t("designer.preview.running"));
     previewNote.setVisible(true);
+    List<String> omit = ownSprites();
     PREVIEWS.submit(() -> {
-      if (request != previewRequest) return;
       org.openpatch.scratch4j.runner.StagePreview.Result result;
       try {
         result = org.openpatch.scratch4j.runner.StagePreview.make(project, project.startStage(),
@@ -584,28 +614,24 @@ final class StageDesignerView extends BorderPane {
         result = null;
       }
       var done = result;
-      javafx.application.Platform.runLater(() -> showPreview(request, done));
+      javafx.application.Platform.runLater(() -> {
+        refreshing = false;
+        refreshButton.setDisable(false);
+        showPreview(done);
+      });
     });
   }
 
-  private void showPreview(int request, org.openpatch.scratch4j.runner.StagePreview.Result result) {
-    if (request != previewRequest) return;
-    renderer.setPreview(result);
+  /** Shows a new picture, or why there is none (Refresh; tests make one themselves). */
+  void showPreview(org.openpatch.scratch4j.runner.StagePreview.Result result) {
     if (result != null && result.ok()) {
-      model.size(result.width(), result.height());
-      previewNote.setVisible(false);
+      loadPicture();
     } else {
       previewNote.setText(I18n.t("designer.preview.none",
           result == null || result.error() == null ? "" : result.error()));
       previewNote.setVisible(true);
     }
-    renderer.defaultCamera(model.width(), model.height());
     refreshAll();
-  }
-
-  /** Shows a preview made elsewhere (tests make one and wait for it). */
-  void showPreview(org.openpatch.scratch4j.runner.StagePreview.Result result) {
-    showPreview(++previewRequest, result);
   }
 
   /** The sprites the designer draws itself, which a preview leaves out (tests). */
@@ -620,6 +646,13 @@ final class StageDesignerView extends BorderPane {
   }
 
   // --- layout ------------------------------------------------------------------
+
+  private Button refreshButton() {
+    refreshButton.setTooltip(new Tooltip(I18n.t("designer.picture.refresh")));
+    refreshButton.getStyleClass().addAll("button-icon", "flat");
+    refreshButton.setOnAction(e -> refreshPicture());
+    return refreshButton;
+  }
 
   private Node toolbar() {
     gridToggle.setSelected(false);
@@ -650,6 +683,7 @@ final class StageDesignerView extends BorderPane {
           redraw();
         }),
         new Separator(javafx.geometry.Orientation.VERTICAL),
+        refreshButton(),
         gridToggle, snapToggle, hitboxToggle, mapToggle(), objectsToggle, mapChoice,
         inspectorToggle(),
         spacer, readout,
@@ -1772,7 +1806,6 @@ final class StageDesignerView extends BorderPane {
       model = document.model();
       model.size(width, height);
       listener.onStageWritten(stageFile);
-      schedulePreview();
     } catch (IOException | RuntimeException e) {
       showError(e);
       readFromDisk();

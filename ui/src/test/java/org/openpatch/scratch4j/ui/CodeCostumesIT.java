@@ -25,7 +25,6 @@ class CodeCostumesIT {
   @Test
   void racersLookLikeTheirCreaturesInTheDesignerAndTheSpriteEditor() throws Exception {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
-    System.setProperty("scratch4j.preview", "true");
     I18n.set(I18n.Language.EN);
     Path race = BundledTemplates.create("red-light-green-light-100", tmp, "race",
         org.openpatch.scratch4j.runner.LibraryJarSource.allJar(
@@ -44,10 +43,11 @@ class CodeCostumesIT {
       window.set(stage);
     });
     settle();
-    // the racers come from the program's own first frame (the designer's preview)
+    // the racers come from the program's own first frame: Refresh draws it
     AtomicReference<StageDesignerView> designer = new AtomicReference<>();
     onFx(() -> designer.set((StageDesignerView) window.get().getScene().getRoot()
         .lookupAll(".designer").stream().findFirst().orElseThrow()));
+    onFx(() -> designer.get().refreshPicture());
     for (int i = 0; i < 600; i++) {
       AtomicReference<Boolean> ready = new AtomicReference<>(false);
       onFx(() -> ready.set(designer.get().hasPreview()));

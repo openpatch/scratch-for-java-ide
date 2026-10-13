@@ -85,9 +85,6 @@ public final class StagePreview {
   private static Result makeNow(ScratchProject project, String startClass, String stageClass,
       Collection<String> omit, Path java, Duration timeout) {
     List<String> hidden = hiddenDisplay();
-    if (hidden == null) {
-      return Result.failed(NO_HIDDEN_DISPLAY);
-    }
     try {
       Path buildDir = project.root().resolve(".scratch4j/build/preview");
       Path outDir = buildDir.resolve("classes");
@@ -152,20 +149,14 @@ public final class StagePreview {
     }
   }
 
-  /** Why there is no preview on a Linux without xvfb-run. */
-  public static final String NO_HIDDEN_DISPLAY = "The preview needs xvfb-run, so that the"
-      + " program can draw on an invisible screen instead of opening a window on yours."
-      + " Install it with your system's package manager (Arch: xorg-server-xvfb,"
-      + " Debian and Ubuntu: xvfb, Fedora: xorg-x11-server-Xvfb).";
-
   /**
    * What the preview's program runs in so that its window is never seen: on
    * Linux an X server of its own that draws into memory ({@code xvfb-run}),
    * because tiling window managers and Wayland compositors place every new
    * window on the screen, wherever the program puts it. Elsewhere nothing
-   * (the library moves its window out of sight). Null when Linux has no
-   * {@code xvfb-run}: then there is no preview rather than a window that
-   * pops up.
+   * (the library moves its window out of sight). Without {@code xvfb-run}
+   * the window may show for a moment, which is fine for a preview the user
+   * asked for.
    */
   public static List<String> hiddenDisplay() {
     String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
@@ -174,7 +165,8 @@ public final class StagePreview {
     }
     Path xvfbRun = onPath("xvfb-run");
     if (xvfbRun == null) {
-      return null;
+      // asked for with the Refresh button: a window for a moment is fine then
+      return List.of();
     }
     // -a: the first free display number; a screen big enough for any window
     return List.of(xvfbRun.toString(), "-a", "-s", "-screen 0 1920x1200x24");
