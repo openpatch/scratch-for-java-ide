@@ -31,13 +31,13 @@
         "de": "Ein schnellerer Igel"
       },
       "text": {
-        "en": "In HedgehogSprite.java the hedgehog moves 1 step per frame: this.move(1). Make it 3.",
-        "de": "In HedgehogSprite.java bewegt sich der Igel 1 Schritt pro Bild: this.move(1). Mach 3 daraus."
+        "en": "In HedgehogSprite.java the hedgehog moves 2 steps per frame: this.move(2). Make it 4.",
+        "de": "In HedgehogSprite.java bewegt sich der Igel 2 Schritte pro Bild: this.move(2). Mach 4 daraus."
       },
       "check": {
         "lineChanged": {
           "file": "HedgehogSprite.java",
-          "line": "this.move(1);"
+          "line": "this.move(2);"
         }
       }
     },
@@ -79,8 +79,8 @@
         "de": "Boing!"
       },
       "text": {
-        "en": "Copy this into HedgehogSprite.java, inside the if for the trampoline, below pointInDirection. The hedgehog says Boing! for half a second.",
-        "de": "Kopiere das in HedgehogSprite.java, in das if für das Trampolin, unter pointInDirection. Der Igel sagt eine halbe Sekunde lang Boing!."
+        "en": "Copy this into HedgehogSprite.java, inside the if for the trampoline, below setDirection. The hedgehog says Boing! for half a second.",
+        "de": "Kopiere das in HedgehogSprite.java, in das if für das Trampolin, unter setDirection. Der Igel sagt eine halbe Sekunde lang Boing!."
       },
       "code": "        this.say(\"Boing!\", 500);",
       "check": {
@@ -100,7 +100,7 @@
         "en": "Copy this method into HedgehogSprite.java, below run(). KeyCode needs an import: click the light bulb on the line and the IDE adds it.",
         "de": "Kopiere diese Methode in HedgehogSprite.java, unter run(). KeyCode braucht einen Import: Klick auf die Glühbirne an der Zeile, dann fügt die IDE ihn ein."
       },
-      "code": "  public void whenKeyPressed(KeyCode keyCode) {\n    if (keyCode == KeyCode.SPACE) {\n      this.setPosition(-180, 140);\n      this.pointInDirection(15);\n    }\n  }",
+      "code": "  public void whenKeyPressed(KeyCode keyCode) {\n    if (keyCode == KeyCode.SPACE) {\n      this.setPosition(-180, 140);\n      this.setDirection(160);\n    }\n  }",
       "check": {
         "methodExists": {
           "name": "whenKeyPressed",

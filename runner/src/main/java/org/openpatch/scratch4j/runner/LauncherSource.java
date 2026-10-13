@@ -5,8 +5,8 @@ import org.openpatch.scratch4j.core.project.ProjectSettings;
 /**
  * The launcher the IDE generates into the project's build folder and compiles
  * together with the student's classes. It calls the start class's own static
- * {@code main} when it has one, otherwise instantiates it (the first
- * {@code Stage} creates the library's singleton {@code Window}), and
+ * {@code main} when it has one, otherwise instantiates it (a stage goes
+ * into a new 480x360 {@code Window}), and
  * implements the smoke-test switch {@code -Dscratch4j.ide.exitAfter=N}, which
  * closes the window after N seconds so CI can run programs headlessly. With
  * the control channel enabled, that countdown starts after the first frame.
@@ -90,7 +90,13 @@ public final class LauncherSource {
             } else {
               java.lang.reflect.Constructor<?> constructor = start.getDeclaredConstructor();
               constructor.setAccessible(true);
-              constructor.newInstance();
+              if (org.openpatch.scratch.Stage.class.isAssignableFrom(start)) {
+                // a stage without main: the window it is shown in comes first
+                Window window = new Window(480, 360);
+                window.setStage((org.openpatch.scratch.Stage) constructor.newInstance());
+              } else {
+                constructor.newInstance();
+              }
             }
         %s
           }

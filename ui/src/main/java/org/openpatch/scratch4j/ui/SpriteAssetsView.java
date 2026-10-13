@@ -164,7 +164,7 @@ final class SpriteAssetsView extends BorderPane {
 
   void reload() {
     try {
-      String source = Files.readString(file);
+      String source = currentSource();
       List<SpriteAssets.Entry> entries = SpriteAssets.list(source);
       costumes.getItems().setAll(entries.stream()
           .filter(e -> e.kind() == SpriteAssets.Kind.COSTUME
@@ -914,17 +914,28 @@ final class SpriteAssetsView extends BorderPane {
 
   private void write(UnaryOperator<String> edit, boolean resetHitbox) {
     try {
-      String source = Files.readString(file);
+      String source = currentSource();
       String updated = edit.apply(source);
       if (!updated.equals(source)) {
         LocalHistory.writeString(project.root(), file, updated);
       }
       if (resetHitbox) hitboxDirty = false;
-      reload();
       if (!updated.equals(source)) onSaved.run();
+      reload();
     } catch (IOException | RuntimeException e) {
       alert(e.getMessage());
     }
+  }
+
+  private java.util.function.Supplier<String> sourceSupplier;
+
+  void setSourceSupplier(java.util.function.Supplier<String> supplier) {
+    sourceSupplier = supplier;
+    reload();
+  }
+
+  private String currentSource() throws IOException {
+    return sourceSupplier == null ? Files.readString(file) : sourceSupplier.get();
   }
 
   private void alert(String message) {

@@ -20,13 +20,10 @@ import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.project.ProjectSettings;
 import org.openpatch.scratch4j.core.region.WindowDocument;
 import org.openpatch.scratch4j.core.io.LocalHistory;
-import org.openpatch.scratch4j.core.region.StageDocument;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -52,9 +49,6 @@ final class StageSelectorView extends BorderPane {
   private Consumer<String> onInsertSwitch = snippet -> { };
   private final StageRenderer renderer;
   private final ListView<String> stages = new ListView<>();
-  private final Label sizeWarning = new Label();
-  private final Map<String, Size> sizes = new HashMap<>();
-  private record Size(int width, int height) {}
 
   StageSelectorView(ScratchProject project, Consumer<String> onOpenDesigner,
       Consumer<String> onOpenCode, Runnable onProjectChanged) {
@@ -88,11 +82,6 @@ final class StageSelectorView extends BorderPane {
     windowSettings.setOnAction(e -> showWindowSettings());
 
     setCenter(stages);
-    sizeWarning.setWrapText(true);
-    sizeWarning.getStyleClass().add("text-warning");
-    sizeWarning.setVisible(false);
-    sizeWarning.setManaged(false);
-    setTop(sizeWarning);
     setBottom(new VBox(6, windowSettings, add));
     refresh();
   }
@@ -112,43 +101,12 @@ final class StageSelectorView extends BorderPane {
     try {
       String selected = stages.getSelectionModel().getSelectedItem();
       stages.getItems().setAll(project.stageClasses());
-      sizes.clear();
-      for (String name : stages.getItems()) {
-        Path source = project.root().resolve(name + ".java");
-        if (Files.isRegularFile(source)) {
-          try {
-            StageDocument.declaredSize(Files.readString(source)).ifPresent(size ->
-                sizes.put(name, new Size(size.width(), size.height())));
-          } catch (IOException | RuntimeException ignored) {
-            // hand-written stages can still be opened as code
-          }
-        }
-      }
-      Size start = sizes.get(startStage());
-      if (start == null && !sizes.isEmpty()) {
-        start = sizes.values().iterator().next();
-      }
-      boolean mismatch = false;
-      if (start != null) {
-        for (Size size : sizes.values()) {
-          if (!size.equals(start)) {
-            mismatch = true;
-            break;
-          }
-        }
-      }
-      sizeWarning.setText(mismatch ? I18n.t("stages.size.warning") : "");
-      sizeWarning.setVisible(mismatch);
-      sizeWarning.setManaged(mismatch);
       if (selected != null && stages.getItems().contains(selected)) {
         stages.getSelectionModel().select(selected);
       }
       stages.refresh();
     } catch (IOException e) {
       stages.getItems().clear();
-      sizes.clear();
-      sizeWarning.setVisible(false);
-      sizeWarning.setManaged(false);
     }
   }
 
@@ -205,12 +163,6 @@ final class StageSelectorView extends BorderPane {
       HBox head = new HBox(4, title, spacer, star);
       head.setAlignment(Pos.CENTER_LEFT);
       VBox card = new VBox(6, frame, head);
-      Size size = sizes.get(name);
-      if (size != null) {
-        Label dimensions = new Label(size.width() + " × " + size.height());
-        dimensions.getStyleClass().add("text-muted");
-        card.getChildren().add(dimensions);
-      }
       if (isStart) {
         Label badge = new Label(I18n.t("stages.start"), Icons.of("fth-flag"));
         badge.getStyleClass().add("start-badge");

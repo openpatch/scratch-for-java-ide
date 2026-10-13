@@ -310,15 +310,13 @@ public final class Sb3Importer {
         sb.append('\n').append(scripts.fields());
       }
       if (stageFields != null) {
-        sb.append("\n  // scratch4j:begin fields").append(NewProject.MANAGED).append('\n')
-            .append(stageFields).append("  // scratch4j:end fields\n");
+        sb.append("\n  // begin stage designer\n")
+            .append(stageFields).append("  // end stage designer\n");
       }
       sb.append("\n  public ").append(className).append("() {\n");
-      if (stageFields != null) {
-        sb.append("    super(480, 360);\n");
-      }
-      sb.append("    // scratch4j:begin setup").append(NewProject.MANAGED).append('\n')
-          .append(setup).append("    // scratch4j:end setup\n");
+      String editor = stageFields != null ? "stage designer" : "sprite editor";
+      sb.append("    // begin ").append(editor).append('\n')
+          .append(setup).append("    // end ").append(editor).append('\n');
       if (!scripts.constructor().isEmpty()) {
         sb.append("\n    // when green flag clicked\n").append(scripts.constructor());
       }
@@ -330,8 +328,9 @@ public final class Sb3Importer {
       sb.append("  }\n");
       sb.append(scripts.methods());
       if (stageFields != null) {
-        sb.append("\n  public static void main(String[] args) {\n    new ").append(className)
-            .append("();\n  }\n");
+        sb.append("\n  public static void main(String[] args) {\n")
+            .append("    Window myWindow = new Window(480, 360);\n")
+            .append("    myWindow.setStage(new ").append(className).append("());\n  }\n");
       }
       return sb.append("}\n").toString();
     }

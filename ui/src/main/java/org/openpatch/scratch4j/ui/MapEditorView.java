@@ -64,6 +64,8 @@ final class MapEditorView extends BorderPane {
     NEW_ELLIPSE, NEW_POINT, NEW_POLYGON }
 
   private final ScratchProject project;
+  /** Draws objects whose type names a sprite class as that sprite. */
+  private final StageRenderer sprites;
   private final Path file;
   private final Consumer<Path> onSaved;
   private TmxDocument doc;
@@ -127,6 +129,8 @@ final class MapEditorView extends BorderPane {
   MapEditorView(ScratchProject project, Path file, Consumer<Path> onSaved, Runnable onOpenCode)
       throws IOException {
     this.project = project;
+    this.sprites = new StageRenderer(project);
+    sprites.readClassNames();
     this.file = file;
     this.onSaved = onSaved;
     this.doc = TmxDocument.open(file);
@@ -1107,6 +1111,21 @@ final class MapEditorView extends BorderPane {
     g.setLineWidth(selected ? 2.5 : 1.5);
     double x = o.x * zoom;
     double y = o.y * zoom;
+    StageRenderer.Look look = sprites.mapObjectLook(o);
+    if (look != null) {
+      // the sprite the code makes from this object (type Player, Item...)
+      double[] box = bounds(o);
+      double bx = box[0] * zoom;
+      double by = box[1] * zoom;
+      double bw = (box[2] - box[0]) * zoom;
+      double bh = (box[3] - box[1]) * zoom;
+      g.setImageSmoothing(false);
+      g.drawImage(look.image(), bx, by, bw, bh);
+      if (selected) g.strokeRect(bx, by, bw, bh);
+      g.setFill(Color.web("#3d2a6b"));
+      g.fillText(!o.name.isEmpty() ? o.name : o.type, bx + 3, by - 4);
+      return;
+    }
     switch (o.shape) {
       case POINT -> {
         g.fillOval(x - 5, y - 5, 10, 10);
@@ -1474,8 +1493,10 @@ final class MapEditorView extends BorderPane {
     return null;
   }
 
-  /** [minX, minY, maxX, maxY] in map pixels. */
-  private static double[] bounds(TmxDocument.MapObject o) {
+  /** [minX, minY, maxX, maxY] in map pixels (a sprite's costume around its point). */
+  private double[] bounds(TmxDocument.MapObject o) {
+    StageRenderer.Look look = sprites.mapObjectLook(o);
+    if (look != null) return StageRenderer.spriteBounds(o, look);
     if (o.shape == TmxDocument.Shape.POLYGON || o.shape == TmxDocument.Shape.POLYLINE) {
       double minX = Double.MAX_VALUE;
       double minY = Double.MAX_VALUE;

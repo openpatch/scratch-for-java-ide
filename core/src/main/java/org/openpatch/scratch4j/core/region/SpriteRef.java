@@ -33,6 +33,7 @@ public final class SpriteRef {
   private final String type;
   /** The field's modifier ({@code private}, {@code protected}, {@code public}, or empty). */
   private String visibility = "private";
+  private java.util.List<String> constructorArguments = java.util.List.of();
 
   private String costume;
   private String currentCostume;
@@ -77,6 +78,20 @@ public final class SpriteRef {
 
   public String type() {
     return type;
+  }
+
+  /** Java literals, preserved when moving or duplicating an instance. */
+  public java.util.List<String> constructorArguments() {
+    return constructorArguments;
+  }
+
+  public void constructorArguments(java.util.List<String> arguments) {
+    constructorArguments = JavaFragment.literalArguments(String.join(", ", arguments));
+  }
+
+  public java.util.List<Object> constructorValues() {
+    // null is a valid argument, so List.copyOf is inappropriate here.
+    return constructorArguments.stream().map(JavaFragment::value).toList();
   }
 
   public String costume() {
@@ -251,6 +266,7 @@ public final class SpriteRef {
     return Objects.equals(name, other.name)
         && Objects.equals(type, other.type)
         && Objects.equals(visibility, other.visibility)
+        && Objects.equals(constructorArguments, other.constructorArguments)
         && Objects.equals(costume, other.costume)
         && Objects.equals(currentCostume, other.currentCostume)
         && Objects.equals(rotationStyle, other.rotationStyle)
@@ -275,7 +291,7 @@ public final class SpriteRef {
 
   @Override
   public int hashCode() {
-    return Objects.hash(name, type, visibility, costume, currentCostume, rotationStyle,
+    return Objects.hash(name, type, visibility, constructorArguments, costume, currentCostume, rotationStyle,
         hasPosition, x, y, hasDirection,
         direction, hasSize, size, visible, added, instantiated, hasWidth, width,
         hasHeight, height, text, textWidth, textStyle);
@@ -295,6 +311,7 @@ public final class SpriteRef {
   public SpriteRef copyAs(String newName) {
     SpriteRef copy = new SpriteRef(newName, type);
     copy.visibility = visibility;
+    copy.constructorArguments = constructorArguments;
     copy.costume = costume;
     copy.currentCostume = currentCostume;
     copy.rotationStyle = rotationStyle;

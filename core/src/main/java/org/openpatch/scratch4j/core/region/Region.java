@@ -1,13 +1,12 @@
 package org.openpatch.scratch4j.core.region;
 
 /**
- * A marked region inside a generated-or-managed part of a Java source file,
- * delimited by
+ * A block of a Java source file that a visual editor owns, delimited by
  *
  * <pre>
- * // scratch4j:begin fields
+ * // begin stage designer
  * ...
- * // scratch4j:end fields
+ * // end stage designer
  * </pre>
  *
  * <p>The body is the exact text between the two marker lines (including the
@@ -17,14 +16,16 @@ package org.openpatch.scratch4j.core.region;
 public final class Region {
 
   private final String id;
+  private final String editor;
   private final int beginOffset;
   private final int endOffset;
   private final String body;
   /** The indentation of the begin marker line - generated bodies reuse it. */
   private final String indent;
 
-  Region(String id, int beginOffset, int endOffset, String body, String indent) {
+  Region(String id, String editor, int beginOffset, int endOffset, String body, String indent) {
     this.id = id;
+    this.editor = editor;
     this.beginOffset = beginOffset;
     this.endOffset = endOffset;
     this.body = body;
@@ -36,8 +37,14 @@ public final class Region {
     return indent;
   }
 
+  /** What the block holds: {@code fields}, {@code setup}, {@code window} or {@code options}. */
   public String id() {
     return id;
+  }
+
+  /** The editor that owns the block, as its markers name it ("stage designer"). */
+  public String editor() {
+    return editor;
   }
 
   /** Character offset just after the begin marker line's newline. */

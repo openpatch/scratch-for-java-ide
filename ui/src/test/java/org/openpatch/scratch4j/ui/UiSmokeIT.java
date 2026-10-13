@@ -27,6 +27,8 @@ class UiSmokeIT {
 
   @Test
   void editorTreeAndWizardFilesBuildAndEditOnTheFxThread() throws Exception {
+    // the designers here draw what their blocks say; the coin stage below gets a preview
+    System.setProperty("scratch4j.preview", "false");
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "uismoke",
         NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
     Path stage = tmp.resolve("uismoke/MyStage.java");
@@ -270,8 +272,8 @@ class UiSmokeIT {
 
             public class Hero extends AnimatedSprite {
               public Hero() {
-                // scratch4j:begin setup
-                // scratch4j:end setup
+                // begin sprite editor
+                // end sprite editor
               }
             }
             """);
@@ -316,7 +318,7 @@ class UiSmokeIT {
             };
         // opened at an object from the designer's double click
         var someWall = mapView.objectLayer("Objects").objects.stream()
-            .filter(o -> "wall".equals(o.type)).findFirst().orElseThrow();
+            .filter(o -> "Wall".equals(o.type)).findFirst().orElseThrow();
         mapView.selectObjectById(someWall.id);
         assertThat(mapView.selectedObject()).isSameAs(someWall);
         mapView.selectObject(null);
@@ -330,7 +332,7 @@ class UiSmokeIT {
             wallAt.getX(), wallAt.getY(), javafx.scene.input.MouseButton.PRIMARY, 1, false,
             false, false, false, true, false, false, false, false, false, null));
         assertThat(mapView.selectedObject()).isNotNull();
-        assertThat(mapView.selectedObject().type).isEqualTo("wall");
+        assertThat(mapView.selectedObject().type).isEqualTo("Wall");
         assertThat(mapView.activeLayer().name).isEqualTo("Objects");
         // shortcuts from anywhere in the editor (here: the layer list has the key event)
         var layersNode = mapView.lookup(".list-view");
@@ -347,7 +349,7 @@ class UiSmokeIT {
         key.accept(javafx.scene.input.KeyCode.C, ctrl);
         key.accept(javafx.scene.input.KeyCode.V, ctrl);
         assertThat(objectsLayer.objects).hasSize(before + 1);
-        assertThat(mapView.selectedObject().type).isEqualTo("wall");
+        assertThat(mapView.selectedObject().type).isEqualTo("Wall");
         key.accept(javafx.scene.input.KeyCode.Z, ctrl);
         assertThat(mapView.objectLayer("Objects").objects).as("undo").hasSize(before);
         key.accept(javafx.scene.input.KeyCode.Z, ctrlShift);
@@ -416,7 +418,10 @@ class UiSmokeIT {
             .doesNotContain("Objects");
         worldCode.area().replaceText("var objects = map.getObjectsFromLayer(\"");
         worldCode.area().moveTo(worldCode.area().getLength());
-        assertThat(worldCode.completionCandidates()).containsExactly("Objects");
+        assertThat(worldCode.completionCandidates()).containsExactly("Objects", "Start");
+        worldCode.area().replaceText("map.spawn(\"");
+        worldCode.area().moveTo(worldCode.area().getLength());
+        assertThat(worldCode.completionCandidates()).containsExactly("Objects", "Start");
         worldCode.area().replaceText("new TiledMap(\"Lev");
         worldCode.area().moveTo(worldCode.area().getLength());
         assertThat(worldCode.completionCandidates()).contains("Level1.tmx", "Level2.tmx");
@@ -426,14 +431,14 @@ class UiSmokeIT {
             import org.openpatch.scratch.extensions.tiled.TiledMap;
 
             public class MapStage extends Stage {
-              // scratch4j:begin fields
-              // scratch4j:end fields
+              // begin stage designer
+              // end stage designer
               public MapStage() {
                 super(480, 360);
                 new TiledMap("Level1.tmx", this);
                 this.getCamera().setPosition(240, -180);
-                // scratch4j:begin setup
-                // scratch4j:end setup
+                // begin stage designer
+                // end stage designer
               }
             }
             """);
@@ -460,7 +465,20 @@ class UiSmokeIT {
         assertThat(corner.getBlue()).isLessThan(0.6);
         // the map's objects show in the designer: the spawn point, walls, warps...
         assertThat(worldDesigner.mapObjects()).extracting(o -> o.type)
-            .contains("spawn-point", "wall", "warp");
+            .contains("Player", "Wall", "Warp");
+        // an object typed with a sprite class shows as that sprite: the player where it
+        // starts, the scroll in its own costume; a wall (no costume) stays an outline
+        tiledRendererForUi.chooseMap(tiled.resolve("Level1.tmx"));
+        java.util.function.Function<String, org.openpatch.scratch4j.core.tiled.TmxDocument.MapObject>
+            objectOfType = type -> tiledRendererForUi.mapObjects().stream()
+                .filter(o -> type.equals(o.type)).findFirst().orElseThrow();
+        var playerSprite = tiledRendererForUi.mapObjectSprite(objectOfType.apply("Player"));
+        assertThat(playerSprite).isNotNull();
+        assertThat(tiledRendererForUi.position(playerSprite)[1])
+            .isEqualTo(-objectOfType.apply("Player").y);
+        assertThat(tiledRendererForUi.mapObjectSprite(objectOfType.apply("Item")).costume())
+            .isEqualTo("assets/ScrollFire.png");
+        assertThat(tiledRendererForUi.mapObjectSprite(objectOfType.apply("Wall"))).isNull();
         snapshot(worldDesigner.canvas(), Path.of("target/designer-world.png"));
         // a crash in the running program: explained once, at the student's line
         var crashesSeen = new java.util.ArrayList<org.openpatch.scratch4j.core.lint.RuntimeErrors.Explanation>();
@@ -490,27 +508,51 @@ class UiSmokeIT {
         assertThat(playerLook).isNotNull();
         assertThat(playerLook.getWidth()).isEqualTo(32);
         assertThat(playerLook.getHeight()).isEqualTo(32);
-        // a foreign line in the designer's region: read-only, with the line and the fix
+        // a foreign line in the designer's region is kept, and only the sprite it
+        // touches is left to the code: the stage stays editable
         Files.writeString(tiled.resolve("Pond.java"), """
             import org.openpatch.scratch.*;
 
             public class Pond extends Stage {
-              // scratch4j:begin fields (managed by the stage designer)
-              // scratch4j:end fields
+              // begin stage designer
+              private Sprite frog;
+              // end stage designer
 
               public Pond() {
                 super(480, 360);
-                // scratch4j:begin setup (managed by the stage designer)
+                // begin stage designer
                 this.addBackdrop("background");
                 this.setTint(60);
-                // scratch4j:end setup
+                frog = new Sprite();
+                frog.setTint(30);
+                this.add(frog);
+                // end stage designer
+              }
+            }
+            """);
+        StageDesignerView partlyCode = new StageDesignerView(
+            org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), "Pond", f -> { });
+        assertThat(partlyCode.isReadOnly()).isFalse();
+        assertThat(partlyCode.model().sprites().byName("frog")).isNotNull();
+        // unfinished Java in the region: read-only until the code is complete
+        Files.writeString(tiled.resolve("Pond.java"), """
+            import org.openpatch.scratch.*;
+
+            public class Pond extends Stage {
+              // begin stage designer
+              // end stage designer
+
+              public Pond() {
+                super(480, 360);
+                // begin stage designer
+                this.addBackdrop("background"
+                // end stage designer
               }
             }
             """);
         StageDesignerView pond = new StageDesignerView(
             org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), "Pond", f -> { });
         assertThat(pond.isReadOnly()).isTrue();
-        assertThat(pond.regionIssue().line()).isEqualTo(11);
         javafx.scene.Scene pondScene = new javafx.scene.Scene(pond, 900, 520);
         Theme.apply(pondScene);
         pond.applyCss();
@@ -532,18 +574,26 @@ class UiSmokeIT {
         playerCode.applyCss();
         playerCode.layout();
         snapshot(playerCode, Path.of("target/code-previews.png"));
-        // sprites the stage's code adds (loops over ground tiles and coins) as ghosts
+        // sprites the stage's code adds (loops over ground tiles and coins) come from the
+        // program's own first frame: the designer's preview
         Path coins = org.openpatch.scratch4j.core.project.BundledTemplates.create(
-            "demo-coinCollector", tmp, "coins", null);
-        StageDesignerView coinDesigner = new StageDesignerView(
-            org.openpatch.scratch4j.core.project.ScratchProject.open(coins), "CoinCollector",
+            "demo-coinCollector", tmp, "coins", org.openpatch.scratch4j.runner.LibraryJarSource
+                .allJar(Path.of(System.getProperty("user.dir"), "target", "bundled")));
+        var coinProject = org.openpatch.scratch4j.core.project.ScratchProject.open(coins);
+        StageDesignerView coinDesigner = new StageDesignerView(coinProject, "CoinCollector",
             f -> { });
-        assertThat(coinDesigner.ghosts()).extracting(g -> g.type()).contains("Ground", "Coin");
+        var coinPreview = org.openpatch.scratch4j.runner.StagePreview.make(coinProject,
+            coinProject.startStage(), "CoinCollector", coinDesigner.ownSprites(),
+            org.openpatch.scratch4j.runner.ProgramRuntime.java(), java.time.Duration.ofSeconds(60));
+        assertThat(coinPreview.error()).isNull();
+        coinDesigner.showPreview(coinPreview);
+        assertThat(coinDesigner.hasPreview()).isTrue();
+        assertThat(coinDesigner.codeSprites()).extracting(g -> g.type()).contains("Ground", "Coin");
         javafx.scene.Scene coinScene = new javafx.scene.Scene(coinDesigner, 1000, 560);
         Theme.apply(coinScene);
         coinDesigner.applyCss();
         coinDesigner.layout();
-        snapshot(coinDesigner.canvas(), Path.of("target/designer-ghosts.png"));
+        snapshot(coinDesigner.canvas(), Path.of("target/designer-preview.png"));
         // a sprite made in code: double click and right click lead to its class
         double[] coinAt = null;
         var coinCanvas = coinDesigner.canvas();
@@ -570,16 +620,6 @@ class UiSmokeIT {
             .anyMatch(t -> t != null && t.contains("Coin"));
         coinMenu.getItems().get(0).fire();
         assertThat(opened).containsExactly("Coin", "Coin");
-        // the caret on the line that makes the coins outlines them
-        int coinLine = coinDesigner.ghosts().stream().filter(g -> g.type().equals("Coin"))
-            .findFirst().orElseThrow().line();
-        String coinSource = Files.readString(coins.resolve("CoinCollector.java"));
-        assertThat(coinDesigner.selectFromCode(coinSource.lines().toList().get(coinLine - 1),
-            coinLine)).isTrue();
-        assertThat(coinDesigner.highlightedGhostLine()).isEqualTo(coinLine);
-        snapshot(coinDesigner.canvas(), Path.of("target/designer-ghost-line.png"));
-        coinDesigner.selectFromCode("  public void run() {", coinLine + 1000);
-        assertThat(coinDesigner.highlightedGhostLine()).isEqualTo(-1);
         // the code: Ctrl+hover underlines a name, the right-click menu goes to it
         String playerText = playerCode.content();
         int sprite = playerText.indexOf("extends ") + "extends ".length() + 2;

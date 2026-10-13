@@ -2,9 +2,9 @@ import org.openpatch.scratch.Sprite;
 
 public class NormalSprite extends Sprite {
   public NormalSprite() {
-    // scratch4j:begin setup (managed by the stage designer)
+    // begin sprite editor
     this.addCostume("cat", "cat.png");
-    // scratch4j:end setup
+    // end sprite editor
   }
 
   public void run() {

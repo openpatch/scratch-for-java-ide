@@ -78,6 +78,7 @@ final class StageDesignerView extends BorderPane {
   private final String stageClass;
   private final Path stageFile;
   private final Listener listener;
+  private java.util.function.Supplier<String> sourceSupplier;
   private final StageRenderer renderer;
   private Runnable onOpenCode = () -> { };
   private Runnable onNewSpriteClass = () -> { };
@@ -129,23 +130,22 @@ final class StageDesignerView extends BorderPane {
   private StageDocument document;
   private StageModel model;
   private String readOnlyReason = "";
-  private StageDocument.RegionIssue regionIssue;
-  private HBox regionFixes;
-  private java.util.function.IntConsumer onRegionLine = line -> { };
-  private java.util.function.IntConsumer onMoveOutOfRegion = line -> { };
-
-  void setOnRegionLine(java.util.function.IntConsumer action) {
-    this.onRegionLine = action;
+  private final Label codeOwnedNote = new Label();
+  /** Include edits awaiting autosave when the code is open beside the designer. */
+  void setSourceSupplier(java.util.function.Supplier<String> supplier) {
+    sourceSupplier = supplier;
+    reload();
   }
 
-  void setOnMoveOutOfRegion(java.util.function.IntConsumer action) {
-    this.onMoveOutOfRegion = action;
+  private String currentSource() throws IOException {
+    return sourceSupplier == null ? Files.readString(stageFile, StandardCharsets.UTF_8)
+        : sourceSupplier.get();
   }
 
-  /** The line that makes the designer read-only (tests). */
-  StageDocument.RegionIssue regionIssue() {
-    return regionIssue;
+  private boolean canEdit(SpriteRef ref) {
+    return ref != null && !isReadOnly() && document.isSpriteEditable(ref.name());
   }
+
   private SpriteRef selected;
   private Drag drag = Drag.NONE;
   private double dragOffsetX;
@@ -175,18 +175,6 @@ final class StageDesignerView extends BorderPane {
     canvas.setOnMousePressed(this::press);
     canvas.setOnMouseDragged(this::dragTo);
     canvas.setOnMouseReleased(this::release);
-    // a sprite made in code: its line in the code
-    canvas.addEventHandler(MouseEvent.MOUSE_CLICKED, e -> {
-      if (e.getClickCount() == 1 && hit(e.getX(), e.getY()) == null) {
-        var ghost = renderer.ghostAt(e.getX(), e.getY(), canvas.getWidth(), canvas.getHeight(),
-            scale());
-        if (ghost != null) {
-          renderer.highlightGhostLine(ghost.line());
-          redraw();
-          onGhost.accept(ghost.line());
-        }
-      }
-    });
     // a double click on a sprite (also one made in code) opens its class
     canvas.addEventHandler(MouseEvent.MOUSE_CLICKED, e -> {
       if (e.getClickCount() != 2 || e.getButton() != javafx.scene.input.MouseButton.PRIMARY) {
@@ -198,7 +186,7 @@ final class StageDesignerView extends BorderPane {
     // a double click on a map object (spawn point, wall, item...) opens it in the map editor
     canvas.addEventHandler(MouseEvent.MOUSE_CLICKED, e -> {
       if (e.getClickCount() == 2 && hit(e.getX(), e.getY()) == null
-          && renderer.ghostAt(e.getX(), e.getY(), canvas.getWidth(), canvas.getHeight(),
+          && renderer.codeSpriteAt(e.getX(), e.getY(), canvas.getWidth(), canvas.getHeight(),
               scale()) == null) {
         var object = mapObjectAt(e.getX(), e.getY());
         if (object != null && renderer.chosenMap() != null) {
@@ -234,26 +222,22 @@ final class StageDesignerView extends BorderPane {
     readOnlyDetail.setWrapText(true);
     Button openCode = new Button(I18n.t("designer.opencode"), Icons.of("fth-code"));
     openCode.setOnAction(e -> onOpenCode.run());
-    // the line that is in the way, and the fix: below the region it stays the student's code
-    Button showLine = new Button(I18n.t("designer.readonly.show"), Icons.of("fth-corner-down-right"));
-    showLine.setOnAction(e -> {
-      if (regionIssue != null) onRegionLine.accept(regionIssue.line());
-    });
-    Button moveOut = new Button(I18n.t("designer.readonly.fix"), Icons.of("fth-tool"));
-    moveOut.getStyleClass().add("accent");
-    moveOut.setOnAction(e -> {
-      if (regionIssue != null) onMoveOutOfRegion.accept(regionIssue.line());
-    });
-    regionFixes = new HBox(8, showLine, moveOut);
-    readOnlyBanner.getChildren().addAll(readOnlyTitle, readOnlyDetail, regionFixes, openCode);
+    readOnlyBanner.getChildren().addAll(readOnlyTitle, readOnlyDetail, openCode);
     readOnlyBanner.setMaxHeight(Region.USE_PREF_SIZE);
     readOnlyBanner.setMaxWidth(560);
-    ghostNote.getStyleClass().add("ghost-note");
-    ghostNote.setVisible(false);
-    ghostNote.setMouseTransparent(true);
-    StackPane center = new StackPane(stageScroll, readOnlyBanner, ghostNote);
-    StackPane.setAlignment(ghostNote, Pos.BOTTOM_LEFT);
-    StackPane.setMargin(ghostNote, new Insets(0, 0, 10, 10));
+    previewNote.getStyleClass().add("ghost-note");
+    previewNote.setVisible(false);
+    previewNote.setMouseTransparent(true);
+    previewNote.setWrapText(true);
+    previewNote.setMaxWidth(420);
+    codeOwnedNote.setWrapText(true);
+    codeOwnedNote.getStyleClass().add("ghost-note");
+    codeOwnedNote.setMouseTransparent(true);
+    StackPane center = new StackPane(stageScroll, readOnlyBanner, previewNote, codeOwnedNote);
+    StackPane.setAlignment(codeOwnedNote, Pos.TOP_LEFT);
+    StackPane.setMargin(codeOwnedNote, new Insets(10));
+    StackPane.setAlignment(previewNote, Pos.BOTTOM_LEFT);
+    StackPane.setMargin(previewNote, new Insets(0, 0, 10, 10));
     StackPane.setAlignment(readOnlyBanner, Pos.TOP_CENTER);
     StackPane.setMargin(readOnlyBanner, new Insets(12));
 
@@ -362,7 +346,6 @@ final class StageDesignerView extends BorderPane {
   }
 
   private final ToggleButton objectsToggle = new ToggleButton(null, Icons.of("fth-map-pin"));
-  private java.util.function.IntConsumer onGhost = line -> { };
   private java.util.function.Consumer<String> onOpenClass = type -> { };
 
   /** Opens a sprite's class (double click, "Open class" in the menu). */
@@ -370,31 +353,26 @@ final class StageDesignerView extends BorderPane {
     this.onOpenClass = action;
   }
 
-  /** Whether the caret's line outlines sprites made in code (tests). */
-  int highlightedGhostLine() {
-    return renderer.highlightedGhostLine();
-  }
-
   /** The class of the sprite at a canvas point (a text object has none of its own). */
   String classAt(double x, double y) {
     SpriteRef hit = hit(x, y);
     if (hit != null) return hit.isText() ? null : hit.type();
-    var ghost = renderer.ghostAt(x, y, canvas.getWidth(), canvas.getHeight(), scale());
-    return ghost == null ? null : ghost.type();
+    var made = renderer.codeSpriteAt(x, y, canvas.getWidth(), canvas.getHeight(), scale());
+    return made == null ? null : made.type();
   }
 
   /**
    * The right-click menu at a canvas point: open the sprite's class, its
-   * costumes and sounds (a sprite made in code: its line), then the
+   * costumes and sounds, then the
    * designer's own actions (null: nothing there).
    */
   ContextMenu contextMenuAt(double x, double y) {
     SpriteRef hit = hit(x, y);
-    var ghost = hit == null
-        ? renderer.ghostAt(x, y, canvas.getWidth(), canvas.getHeight(), scale()) : null;
+    var made = hit == null
+        ? renderer.codeSpriteAt(x, y, canvas.getWidth(), canvas.getHeight(), scale()) : null;
     List<javafx.scene.control.MenuItem> items = new java.util.ArrayList<>();
     String type = hit != null ? (hit.isText() ? null : hit.type())
-        : ghost != null ? ghost.type() : null;
+        : made != null ? made.type() : null;
     if (type != null) {
       MenuItem open = new MenuItem(I18n.t("designer.openclass", type), Icons.of("fth-code"));
       open.setOnAction(e -> onOpenClass.accept(type));
@@ -404,35 +382,19 @@ final class StageDesignerView extends BorderPane {
       items.add(open);
       items.add(assets);
     }
-    if (ghost != null) {
-      MenuItem line = new MenuItem(I18n.t("designer.ghost.line", ghost.line()),
-          Icons.of("fth-corner-down-right"));
-      line.setOnAction(e -> onGhost.accept(ghost.line()));
-      items.add(line);
-    }
-    if (hit != null && hit == selected && !isReadOnly()) {
+    if (hit != null && hit == selected && canEdit(selected)) {
       if (!items.isEmpty()) items.add(new javafx.scene.control.SeparatorMenuItem());
       items.addAll(spriteMenu().getItems());
     }
     return items.isEmpty() ? null : new ContextMenu(items.toArray(MenuItem[]::new));
   }
-  private final Label ghostNote = new Label();
+  private final Label previewNote = new Label();
 
-  /** A sprite made in code was clicked: show its line. */
-  void setOnGhost(java.util.function.IntConsumer action) {
-    this.onGhost = action;
+  /** The sprites the stage's code makes, as the preview saw them (tests). */
+  List<StageRenderer.CodeSprite> codeSprites() {
+    return renderer.codeSprites();
   }
 
-  /** The sprites the stage's code adds, as the designer shows them faded (tests). */
-  List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> ghosts() {
-    return renderer.ghosts();
-  }
-
-  private void updateGhostNote() {
-    int n = renderer.ghosts().size();
-    ghostNote.setText(I18n.t("designer.ghosts", n));
-    ghostNote.setVisible(n > 0);
-  }
   private java.util.function.BiConsumer<Path, Integer> onMapObject = (map, id) -> { };
 
   /** A map object was double-clicked: open the map at it. */
@@ -500,14 +462,8 @@ final class StageDesignerView extends BorderPane {
     return selectFromCode(line, -1);
   }
 
-  /**
-   * Like {@link #selectFromCodeLine(String)}; a line that makes sprites in
-   * code ({@code this.add(new Coin())}) outlines those (1-based {@code lineNumber}).
-   */
+  /** Like {@link #selectFromCodeLine(String)} (the line number is not needed). */
   boolean selectFromCode(String line, int lineNumber) {
-    boolean ghosts = renderer.ghosts().stream().anyMatch(g -> g.line() == lineNumber);
-    if (renderer.highlightGhostLine(ghosts ? lineNumber : -1)) redraw();
-    if (ghosts) return true;
     if (line == null) {
       return false;
     }
@@ -553,7 +509,7 @@ final class StageDesignerView extends BorderPane {
 
   private void readFromDisk() {
     try {
-      String source = Files.readString(stageFile, StandardCharsets.UTF_8);
+      String source = currentSource();
       renderer.scan(source);
       if (mapToggle != null) {
         mapToggle.setVisible(renderer.hasMap());
@@ -562,31 +518,105 @@ final class StageDesignerView extends BorderPane {
       }
       document = StageDocument.read(source);
       model = document.model();
-      renderer.setGhosts(org.openpatch.scratch4j.core.region.CodeSprites.of(project.root(),
-          stageClass));
-      updateGhostNote();
-      if (StageDocument.declaredSize(source).isEmpty()) {
-        // a stage without super(w, h) is as big as the window that shows it
-        renderer.windowSize().ifPresent(size -> model.size(size.width(), size.height()));
-      }
+      int[] size = renderer.windowSize();
+      model.size(size[0], size[1]);
       renderer.defaultCamera(model.width(), model.height());
       readOnlyReason = "";
-      regionIssue = null;
+      schedulePreview();
     } catch (IOException | RuntimeException e) {
       document = null;
       model = StageModel.create();
-      readOnlyReason = e.getMessage() == null ? "" : e.getMessage();
-      try {
-        regionIssue = StageDocument.regionIssue(Files.readString(stageFile,
-            StandardCharsets.UTF_8));
-      } catch (IOException ignored) {
-        regionIssue = null;
-      }
-      if (regionIssue != null && regionIssue.line() > 0) {
-        readOnlyReason = I18n.t("designer.readonly.line", regionIssue.line(),
-            regionIssue.statement());
-      }
+      String message = e.getMessage() == null ? "" : e.getMessage();
+      readOnlyReason = message.startsWith("Incomplete Java")
+          ? I18n.t("designer.readonly.incomplete") : message;
     }
+  }
+
+  // --- preview: the stage as the program draws it -------------------------------
+
+  /** Previews run one after another, away from the FX thread. */
+  private static final java.util.concurrent.ExecutorService PREVIEWS =
+      java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "stage-preview");
+        t.setDaemon(true);
+        return t;
+      });
+  /** Off in tests that look at the designer's own drawing ({@code -Dscratch4j.preview=false}). */
+  private static boolean previewOn() {
+    return !"false".equals(System.getProperty("scratch4j.preview"));
+  }
+  /** What the last preview was made from: the sources and the sprites left out. */
+  private String previewedFrom;
+  private int previewRequest;
+
+  /**
+   * Makes a new preview when the code or the designer's sprites changed: the
+   * stage as the program draws it, without the designer's own sprites (it
+   * draws those itself, so they can be moved).
+   */
+  private void schedulePreview() {
+    if (!previewOn() || document == null) return;
+    List<String> omit = ownSprites();
+    String from;
+    try {
+      StringBuilder all = new StringBuilder(String.join(",", omit));
+      for (Path file : project.javaSources()) {
+        all.append('\0').append(file).append('\0').append(
+            file.equals(stageFile) ? currentSource() : Files.readString(file));
+      }
+      from = Integer.toHexString(all.toString().hashCode()) + ":" + all.length();
+    } catch (IOException e) {
+      return;
+    }
+    if (from.equals(previewedFrom)) return;
+    previewedFrom = from;
+    int request = ++previewRequest;
+    previewNote.setText(I18n.t("designer.preview.running"));
+    previewNote.setVisible(true);
+    PREVIEWS.submit(() -> {
+      if (request != previewRequest) return;
+      org.openpatch.scratch4j.runner.StagePreview.Result result;
+      try {
+        result = org.openpatch.scratch4j.runner.StagePreview.make(project, project.startStage(),
+            stageClass, omit, org.openpatch.scratch4j.runner.ProgramRuntime.java(),
+            java.time.Duration.ofSeconds(30));
+      } catch (IOException | RuntimeException e) {
+        result = null;
+      }
+      var done = result;
+      javafx.application.Platform.runLater(() -> showPreview(request, done));
+    });
+  }
+
+  private void showPreview(int request, org.openpatch.scratch4j.runner.StagePreview.Result result) {
+    if (request != previewRequest) return;
+    renderer.setPreview(result);
+    if (result != null && result.ok()) {
+      model.size(result.width(), result.height());
+      previewNote.setVisible(false);
+    } else {
+      previewNote.setText(I18n.t("designer.preview.none",
+          result == null || result.error() == null ? "" : result.error()));
+      previewNote.setVisible(true);
+    }
+    renderer.defaultCamera(model.width(), model.height());
+    refreshAll();
+  }
+
+  /** Shows a preview made elsewhere (tests make one and wait for it). */
+  void showPreview(org.openpatch.scratch4j.runner.StagePreview.Result result) {
+    showPreview(++previewRequest, result);
+  }
+
+  /** The sprites the designer draws itself, which a preview leaves out (tests). */
+  List<String> ownSprites() {
+    return document == null ? List.of() : model.sprites().stream()
+        .filter(ref -> document.isSpriteEditable(ref.name())).map(SpriteRef::name).toList();
+  }
+
+  /** Whether the designer shows the program's own picture of the stage (tests). */
+  boolean hasPreview() {
+    return renderer.hasPreview();
   }
 
   // --- layout ------------------------------------------------------------------
@@ -691,7 +721,7 @@ final class StageDesignerView extends BorderPane {
       }
     });
     visibleToggle.setOnAction(e -> {
-      if (selected != null && !isReadOnly()) {
+      if (canEdit(selected)) {
         selected.visible(visibleToggle.isSelected());
         writeRegions();
       }
@@ -745,14 +775,9 @@ final class StageDesignerView extends BorderPane {
     size.setHgap(8);
     size.addRow(0, fieldLabel(I18n.t("designer.width")), widthField,
         fieldLabel(I18n.t("designer.height")), heightField);
-    for (TextField f : List.of(widthField, heightField)) {
-      f.setOnAction(e -> applyStageSize());
-      f.focusedProperty().addListener((o, was, focused) -> {
-        if (!focused) {
-          applyStageSize();
-        }
-      });
-    }
+    Tooltip windowSize = new Tooltip(I18n.t("designer.size.window"));
+    widthField.setTooltip(windowSize);
+    heightField.setTooltip(windowSize);
 
     VBox panel = new VBox(10,
         card(I18n.t("designer.selected"), "fth-mouse-pointer", spriteCard),
@@ -799,15 +824,17 @@ final class StageDesignerView extends BorderPane {
     readOnlyBanner.setVisible(isReadOnly());
     readOnlyBanner.setManaged(isReadOnly());
     readOnlyDetail.setText(readOnlyReason);
-    boolean fixable = regionIssue != null && regionIssue.line() > 0;
-    regionFixes.setVisible(fixable);
-    regionFixes.setManaged(fixable);
+    boolean partial = document != null && !document.codeOwnedSprites().isEmpty();
+    codeOwnedNote.setVisible(partial);
+    codeOwnedNote.setText(partial ? I18n.t("designer.codeowned",
+        String.join(", ", document.codeOwnedSprites().stream().sorted().toList())) : "");
     undoButton.setDisable(undoDelegate == null && undo.isEmpty());
     redoButton.setDisable(redoDelegate == null && redo.isEmpty());
     widthField.setText(String.valueOf(model.width()));
     heightField.setText(String.valueOf(model.height()));
-    widthField.setDisable(isReadOnly());
-    heightField.setDisable(isReadOnly());
+    // the size is the window's: the window settings change it
+    widthField.setDisable(true);
+    heightField.setDisable(true);
     refreshInstanceTiles();
     refreshClassTiles();
     refreshBackdropTiles();
@@ -852,12 +879,14 @@ final class StageDesignerView extends BorderPane {
     }
     for (String className : classes) {
       ToggleButton tile = spriteTile(renderer.classCostume(className), className);
-      tile.setTooltip(new Tooltip(I18n.t("designer.addinstance", className)));
+      var constructors = org.openpatch.scratch4j.core.region.SpriteConstructors.of(project.root(), className);
+      tile.setTooltip(new Tooltip(I18n.t(constructors.isEmpty()
+          ? "designer.constructor.code" : "designer.addinstance", className)));
       tile.setOnAction(e -> {
         tile.setSelected(false);
         addInstance(className);
       });
-      tile.setDisable(isReadOnly());
+      tile.setDisable(isReadOnly() || constructors.isEmpty());
       classTiles.getChildren().add(tile);
     }
     Button add = new Button(I18n.t("designer.newsprite"), Icons.of("fth-plus", 20));
@@ -1003,7 +1032,7 @@ final class StageDesignerView extends BorderPane {
   private void updateInspector() {
     notifySelection();
     boolean has = selected != null;
-    spriteCard.setDisable(!has || isReadOnly());
+    spriteCard.setDisable(!has || !canEdit(selected));
     if (!has) {
       inspectorUpdating = true;
       selectedName.setText(I18n.t("designer.noselection"));
@@ -1175,7 +1204,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private Drag handleAt(double cx, double cy) {
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return Drag.NONE;
     }
     double scale = scale();
@@ -1220,7 +1249,7 @@ final class StageDesignerView extends BorderPane {
         selected = hit;
         refreshInstanceTiles();
       }
-      if (selected != null) {
+      if (canEdit(selected)) {
         drag = Drag.MOVE;
         double[] xy = toScratch(e.getX(), e.getY(), selected);
         double[] at = renderer.position(selected);
@@ -1242,7 +1271,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private void dragTo(MouseEvent e) {
-    if (selected == null || isReadOnly() || drag == Drag.NONE) {
+    if (!canEdit(selected) || drag == Drag.NONE) {
       return;
     }
     double[] xy = toScratch(e.getX(), e.getY(), selected);
@@ -1294,7 +1323,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private void release(MouseEvent e) {
-    if (dragChanged && selected != null && !isReadOnly()) {
+    if (dragChanged && canEdit(selected)) {
       writeRegions();
     }
     drag = Drag.NONE;
@@ -1322,7 +1351,7 @@ final class StageDesignerView extends BorderPane {
       e.consume();
       return;
     }
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return;
     }
     double step = e.isShiftDown() ? 10 : 1;
@@ -1371,7 +1400,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private void applyInspector() {
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return;
     }
     StageRenderer.Look look = renderer.look(selected);
@@ -1432,27 +1461,6 @@ final class StageDesignerView extends BorderPane {
     }
   }
 
-  private void applyStageSize() {
-    if (isReadOnly()) {
-      return;
-    }
-    try {
-      int w = Integer.parseInt(widthField.getText().trim());
-      int h = Integer.parseInt(heightField.getText().trim());
-      if (w >= 50 && h >= 50 && w <= 4000 && h <= 4000
-          && (w != model.width() || h != model.height())) {
-        model.size(w, h);
-        writeRegions();
-      } else {
-        widthField.setText(String.valueOf(model.width()));
-        heightField.setText(String.valueOf(model.height()));
-      }
-    } catch (NumberFormatException e) {
-      widthField.setText(String.valueOf(model.width()));
-      heightField.setText(String.valueOf(model.height()));
-    }
-  }
-
   private static double parse(String text, double fallback) {
     return text == null || text.isBlank() ? fallback
         : Double.parseDouble(text.trim().replace(',', '.'));
@@ -1475,10 +1483,59 @@ final class StageDesignerView extends BorderPane {
   }
 
   void addInstance(String className) {
+    var choices = org.openpatch.scratch4j.core.region.SpriteConstructors.of(project.root(), className);
+    var noArgs = choices.stream().filter(c -> c.parameters().isEmpty()).findFirst();
+    if (noArgs.isPresent()) {
+      addInstance(className, List.of());
+      return;
+    }
+    if (choices.isEmpty()) return;
+    var constructor = choices.get(0);
+    if (choices.size() > 1) {
+      var choice = new javafx.scene.control.ChoiceDialog<>(constructor, choices);
+      choice.setTitle(I18n.t("designer.constructor.title", className));
+      choice.setHeaderText(I18n.t("designer.constructor.choose"));
+      Theme.style(choice);
+      var picked = choice.showAndWait();
+      if (picked.isEmpty()) return;
+      constructor = picked.get();
+    }
+    var dialog = new javafx.scene.control.Dialog<List<String>>();
+    dialog.setTitle(I18n.t("designer.constructor.title", className));
+    dialog.setHeaderText(I18n.t("designer.constructor.hint"));
+    GridPane grid = new GridPane();
+    grid.setHgap(10);
+    grid.setVgap(8);
+    List<TextField> arguments = new java.util.ArrayList<>();
+    for (var parameter : constructor.parameters()) {
+      TextField argument = new TextField(parameter.initialValue());
+      grid.addRow(arguments.size(), new Label(parameter.name() + " : " + parameter.type()), argument);
+      arguments.add(argument);
+    }
+    dialog.getDialogPane().setContent(grid);
+    dialog.getDialogPane().getButtonTypes().addAll(I18n.ok(), I18n.cancel());
+    var selectedConstructor = constructor;
+    Node ok = dialog.getDialogPane().lookupButton(I18n.ok());
+    Runnable validate = () -> ok.setDisable(!selectedConstructor.accepts(arguments.stream()
+        .map(TextField::getText).toList()));
+    arguments.forEach(argument -> argument.textProperty().addListener((o, a, b) -> validate.run()));
+    validate.run();
+    dialog.setResultConverter(button -> button == I18n.ok()
+        ? arguments.stream().map(TextField::getText).toList() : null);
+    Theme.style(dialog);
+    dialog.showAndWait().ifPresent(values -> addInstance(className, values));
+  }
+
+  void addInstance(String className, List<String> arguments) {
     if (isReadOnly()) {
       return;
     }
+    if (org.openpatch.scratch4j.core.region.SpriteConstructors.of(project.root(), className)
+        .stream().noneMatch(constructor -> constructor.accepts(arguments))) {
+      throw new IllegalArgumentException("No accessible " + className + " constructor accepts " + arguments);
+    }
     SpriteRef ref = new SpriteRef(uniqueName(className), className);
+    ref.constructorArguments(arguments);
     ref.instantiated(true);
     ref.setPosition(0, 0);
     ref.added(true);
@@ -1534,7 +1591,7 @@ final class StageDesignerView extends BorderPane {
    */
   private boolean ensureImport(String simpleName) {
     try {
-      String source = Files.readString(stageFile, StandardCharsets.UTF_8);
+      String source = currentSource();
       if (source.contains("import org.openpatch.scratch." + simpleName + ";")
           || source.contains("import org.openpatch.scratch.*;")) {
         return true;
@@ -1564,7 +1621,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private void duplicateSelected() {
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return;
     }
     double[] at = renderer.position(selected);
@@ -1608,7 +1665,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private void deleteSelected() {
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return;
     }
     model.sprites().remove(selected);
@@ -1618,7 +1675,7 @@ final class StageDesignerView extends BorderPane {
 
   /** Layer order is add order: front = added last. */
   private void moveLayer(boolean toFront) {
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return;
     }
     model.sprites().remove(selected);
@@ -1631,7 +1688,7 @@ final class StageDesignerView extends BorderPane {
   }
 
   private void renameSelected() {
-    if (selected == null || isReadOnly()) {
+    if (!canEdit(selected)) {
       return;
     }
     String oldName = selected.name();
@@ -1701,8 +1758,8 @@ final class StageDesignerView extends BorderPane {
     }
     String selectedName = selected == null ? null : selected.name();
     try {
-      String before = Files.readString(stageFile, StandardCharsets.UTF_8);
-      String updated = document.write(model);
+      String before = currentSource();
+      String updated = document.writeOn(before, model);
       if (!updated.equals(before)) {
         undo.push(before);
         redo.clear();
@@ -1710,8 +1767,12 @@ final class StageDesignerView extends BorderPane {
       }
       // the document is now the source of truth for further edits
       document = StageDocument.read(updated);
+      int width = model.width();
+      int height = model.height();
       model = document.model();
+      model.size(width, height);
       listener.onStageWritten(stageFile);
+      schedulePreview();
     } catch (IOException | RuntimeException e) {
       showError(e);
       readFromDisk();

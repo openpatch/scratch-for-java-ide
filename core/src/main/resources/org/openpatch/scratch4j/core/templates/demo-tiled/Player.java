@@ -11,14 +11,14 @@ public class Player extends AnimatedSprite {
     this.setX(x);
     this.setY(y);
 
-    // scratch4j:begin setup (managed by the stage designer)
+    // begin sprite editor
     this.addAnimation("walk-down", "assets/Skeleton.png", 4, 32, 32, 0, true);
     this.addAnimation("walk-up", "assets/Skeleton.png", 4, 32, 32, 1, true);
     this.addAnimation("walk-left", "assets/Skeleton.png", 4, 32, 32, 2, true);
     this.addAnimation("walk-right", "assets/Skeleton.png", 4, 32, 32, 3, true);
 
     this.setHitbox(1, 31, 1, 10, 30, 10, 30, 31);
-    // scratch4j:end setup
+    // end sprite editor
   }
 
   public boolean hasItem(String name) {

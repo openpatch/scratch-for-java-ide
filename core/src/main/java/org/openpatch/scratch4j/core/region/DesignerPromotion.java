@@ -205,7 +205,10 @@ public final class DesignerPromotion {
     result = result.substring(0, lineStart) + fieldIndent
         + (modifier.isEmpty() ? "" : modifier + " ") + c.promotion.type() + " "
         + c.promotion.name() + ";\n" + result.substring(lineStart);
-    StageDocument.read(result); // throws when the designer could not read it
+    if (!StageDocument.read(result).isSpriteEditable(c.promotion.name())) {
+      throw new IllegalStateException("The stage designer cannot take over "
+          + c.promotion.name() + ": other code in its block decides about it");
+    }
     return result;
   }
 

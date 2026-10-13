@@ -39,6 +39,9 @@ class LauncherSourceTest {
     Files.writeString(window, """
         package org.openpatch.scratch;
         public class Window {
+          public Window() {}
+          public Window(int width, int height) {}
+          public void setStage(Stage stage) {}
           public static Window getInstance() { return new Window(); }
           public static void useFullScreen() {}
           public static void useTextureSampling(TextureSampling value) {}
@@ -53,7 +56,7 @@ class LauncherSourceTest {
         public enum TextureSampling { POINT }
         """);
     assertThat(new CompilerService().compile(List.of(file, window, sampling), List.of(),
-        root.resolve("classes")).success()).isTrue();
+        root.resolve("classes")).errors()).isEmpty();
   }
 
   @Test
@@ -77,6 +80,9 @@ class LauncherSourceTest {
     Files.writeString(window, """
         package org.openpatch.scratch;
         public class Window {
+          public Window() {}
+          public Window(int width, int height) {}
+          public void setStage(Stage stage) {}
           public static Window getInstance() { return new Window(); }
           public void setDebug(boolean value) {}
           public Stage getStage() { return null; }

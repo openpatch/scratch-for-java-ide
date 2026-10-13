@@ -15,10 +15,10 @@ class SpriteRegionWriterTest {
         public Player() {
           this.addCostume("bunny1_stand");
 
-          // scratch4j:begin setup (managed by the stage designer)
+          // begin sprite editor
           this.setSize(50);
           this.setRotationStyle(RotationStyle.LEFT_RIGHT);
-          // scratch4j:end setup
+          // end sprite editor
         }
 
         public void run() {

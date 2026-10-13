@@ -14,9 +14,6 @@ public final class NewProject {
 
   private NewProject() {}
 
-  /** Marker comment the designer owns (see {@code core.region.RegionParser}). */
-  static final String MANAGED = " (managed by the stage designer)";
-
   public static void create(ProjectTemplate template, Path parentDir, String name,
       Path libraryJar) throws IOException {
     Path root = parentDir.resolve(name);
@@ -58,25 +55,21 @@ public final class NewProject {
 
         public class MyStage extends Stage {
 
-          // scratch4j:begin fields%s
-          // scratch4j:end fields
+          // begin stage designer
+          // end stage designer
 
           public MyStage() {
-            super(480, 360);
             this.addBackdrop("background");
 
-            // scratch4j:begin setup%s
-            // scratch4j:end setup
+            // begin stage designer
+            // end stage designer
           }
 
           public void run() {
           }
 
-          public static void main(String[] args) {
-            new MyStage();
-          }
         }
-        """.formatted(MANAGED, MANAGED));
+        """);
   }
 
   private static void writeClassesFirst(Path root, String name) throws IOException {
@@ -87,28 +80,23 @@ public final class NewProject {
 
         public class MyStage extends Stage {
 
-          // scratch4j:begin fields%s
+          // begin stage designer
           Player player;
-          // scratch4j:end fields
+          // end stage designer
 
           public MyStage() {
-            super(480, 360);
-
-            // scratch4j:begin setup%s
+            // begin stage designer
             this.addBackdrop("background");
             player = new Player();
             this.add(player);
-            // scratch4j:end setup
+            // end stage designer
           }
 
           public void run() {
           }
 
-          public static void main(String[] args) {
-            new MyStage();
-          }
         }
-        """.formatted(MANAGED, MANAGED));
+        """);
     write(root.resolve("Player.java"), """
         import org.openpatch.scratch.KeyCode;
         import org.openpatch.scratch.Sprite;
@@ -118,9 +106,9 @@ public final class NewProject {
           public Player() {
             this.addCostume("bunny1_stand");
 
-            // scratch4j:begin setup%s
+            // begin sprite editor
             this.setSize(50);
-            // scratch4j:end setup
+            // end sprite editor
           }
 
           public void run() {
@@ -135,7 +123,7 @@ public final class NewProject {
             this.ifOnEdgeBounce();
           }
         }
-        """.formatted(MANAGED));
+        """);
   }
 
   private static void writeBluejStarter(Path root, String name) throws IOException {

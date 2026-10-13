@@ -1417,6 +1417,19 @@
     "returns": null
   },
   {
+    "className": "Pen",
+    "methodName": "wasUsed",
+    "returnType": "boolean",
+    "params": [],
+    "summary": "Whether the pen has been put down at least once.",
+    "scratchblock": null,
+    "category": "Pen",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Pen/wasUsed",
+    "description": "Whether the pen has been put down at least once.",
+    "paramDocs": [],
+    "returns": "true once down() was called"
+  },
+  {
     "className": "Polygon",
     "methodName": "addPoint",
     "returnType": "void",
@@ -3735,38 +3748,12 @@
     "methodName": "constructor",
     "returnType": "new Stage",
     "params": [],
-    "summary": "Constructs a new Stage with default dimensions.",
+    "summary": "Constructs a new Stage.",
     "scratchblock": null,
     "category": "Operators",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/constructor",
-    "description": "Constructs a new Stage with default dimensions. The default width is 480 pixels and the default height is 360 pixels.",
+    "description": "Constructs a new Stage. A stage is as big as the window it is shown in, so the window has to exist first:\n\nWindow myWindow = new Window(480, 360);\nmyWindow.setStage(new MyStage());",
     "paramDocs": [],
-    "returns": null
-  },
-  {
-    "className": "Stage",
-    "methodName": "constructor",
-    "returnType": "new Stage",
-    "params": ["int width", "final int height"],
-    "summary": "Constructs a new Stage with the specified width and height.",
-    "scratchblock": null,
-    "category": "Operators",
-    "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/constructor",
-    "description": "Constructs a new Stage with the specified width and height.",
-    "paramDocs": ["width: the width of the stage", "height: the height of the stage"],
-    "returns": null
-  },
-  {
-    "className": "Stage",
-    "methodName": "constructor",
-    "returnType": "new Stage",
-    "params": ["int width", "final int height", "String assets"],
-    "summary": "Constructs a new Stage with the specified width, height, and assets path.",
-    "scratchblock": null,
-    "category": "Operators",
-    "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/constructor",
-    "description": "Constructs a new Stage with the specified width, height, and assets path.",
-    "paramDocs": ["width: the width of the stage", "height: the height of the stage", "assets: the path to the assets directory"],
     "returns": null
   },
   {

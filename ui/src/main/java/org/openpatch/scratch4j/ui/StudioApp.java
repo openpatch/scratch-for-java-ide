@@ -1240,6 +1240,7 @@ public class StudioApp extends javafx.application.Application {
   private void linkDesigner(Path codeFile, StageDesignerView view) {
     CodeEditor code = editor.editorFor(codeFile);
     if (code == null) return;
+    view.setSourceSupplier(code::content);
     // one history: the designer's undo steps back through the code's
     view.setUndoDelegates(() -> {
       code.undo();
@@ -1280,6 +1281,7 @@ public class StudioApp extends javafx.application.Application {
   private void linkSpriteEditor(Path codeFile, SpriteAssetsView view) {
     CodeEditor code = editor.editorFor(codeFile);
     if (code == null) return;
+    view.setSourceSupplier(code::content);
     boolean[] fromCode = {false};
     view.setOnEntrySelected(entry -> {
       List<Integer> lines = new ArrayList<>();
@@ -1301,13 +1303,11 @@ public class StudioApp extends javafx.application.Application {
 
   /**
    * A problem's fix (the button under it, the light bulb in the gutter): the
-   * designer's region fixes, or one of the {@link QuickFixes} for common errors.
+   * stage designer taking over a sprite, or one of the {@link QuickFixes} for common errors.
    */
   private void fixProblem(Problem problem) {
     if (problem.file() == null) return;
-    if (ProjectCheck.FIX_MOVE_OUT_OF_REGION.equals(problem.fix())) {
-      moveOutOfRegion(problem.file(), (int) problem.line());
-    } else if (ProjectCheck.FIX_PROMOTE.equals(problem.fix())) {
+    if (ProjectCheck.FIX_PROMOTE.equals(problem.fix())) {
       promoteSprite(problem.file(), (int) problem.line());
     } else if (problem.fix() != null) {
       applyQuickFix(problem);
@@ -1349,23 +1349,6 @@ public class StudioApp extends javafx.application.Application {
       reloadDesigners();
       scheduleCheck();
       setStatus(I18n.t("problems.fixed.promote"));
-    } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
-    }
-  }
-
-  void moveOutOfRegion(Path file, int line) {
-    try {
-      saveAll();
-      String source = Files.readString(file);
-      String fixed = org.openpatch.scratch4j.core.region.StageDocument.moveOutOfRegion(source,
-          line);
-      org.openpatch.scratch4j.core.io.LocalHistory.writeString(project.get().root(), file,
-          fixed);
-      editor.reloadIfOpen(file);
-      reloadDesigners();
-      scheduleCheck();
-      setStatus(I18n.t("problems.fixed.region"));
     } catch (IOException | RuntimeException e) {
       alert(e.getMessage());
     }
@@ -1666,19 +1649,12 @@ public class StudioApp extends javafx.application.Application {
         view.setOnEditSpriteAssets(this::openSpriteAssets);
         view.setOnOpenClass(this::openClass);
         linkDesigner(codeFile, view);
-        view.setOnRegionLine(line -> editor.openAt(codeFile, line));
-        view.setOnGhost(line -> {
-          CodeEditor code = editor.editorFor(codeFile);
-          if (code != null) code.showLinkedLines(List.of(line), true);
-          setStatus(I18n.t("designer.ghost.status", line));
-        });
         view.setOnMapObject((map, id) -> {
           openByType(map);
           if (editor.tool("map:" + map) instanceof MapEditorView mapEditor) {
             mapEditor.selectObjectById(id);
           }
         });
-        view.setOnMoveOutOfRegion(line -> moveOutOfRegion(codeFile, line));
         return view;
       } catch (IOException e) {
         alert(I18n.t("error.designer", e.getMessage()));

@@ -11,16 +11,16 @@ class DesignerPromotionTest {
       import org.openpatch.scratch.*;
 
       public class Quiz extends Stage {
-        // scratch4j:begin fields (managed by the stage designer)
-        // scratch4j:end fields
+        // begin stage designer
+        // end stage designer
 
         private int right = 0;
 
         public Quiz() {
           super(600, 360);
-          // scratch4j:begin setup (managed by the stage designer)
+          // begin stage designer
           this.addBackdrop("background");
-          // scratch4j:end setup
+          // end stage designer
 
           var host = new Sprite();
           host.addCostume("alienGreen_stand");
@@ -39,13 +39,13 @@ class DesignerPromotionTest {
     var found = DesignerPromotion.find(STAGE);
     assertThat(found).extracting(DesignerPromotion.Promotion::name).containsExactly("host");
     String promoted = DesignerPromotion.apply(STAGE, found.get(0).firstLine());
-    assertThat(promoted).contains("  private Sprite host;\n  // scratch4j:end fields")
+    assertThat(promoted).contains("  private Sprite host;\n  // end stage designer")
         .contains("    this.addBackdrop(\"background\");\n"
             + "    host = new Sprite();\n"
             + "    host.setPosition(0, -20);\n"
             + "    host.addCostume(\"alienGreen_stand\");\n"
             + "    this.add(host);\n"
-            + "    // scratch4j:end setup")
+            + "    // end stage designer")
         .doesNotContain("var host");
     var model = StageDocument.read(promoted).model();
     assertThat(model.sprites().byName("host").y()).isEqualTo(-20);

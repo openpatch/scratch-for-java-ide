@@ -1,188 +1,267 @@
 package org.openpatch.scratch4j.core.region;
 
+import com.sun.source.tree.AssignmentTree;
+import com.sun.source.tree.ExpressionStatementTree;
+import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.IdentifierTree;
+import com.sun.source.tree.LiteralTree;
+import com.sun.source.tree.MemberSelectTree;
+import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
+import com.sun.source.tree.UnaryTree;
+import com.sun.source.tree.VariableTree;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import javax.lang.model.element.Modifier;
 
 /**
- * Parses and generates the restricted statement subset the stage designer
- * owns inside the {@code fields} and {@code setup} regions.
- *
- * <p>The subset (2-space style, {@code this.} prefix, as in the library docs):
+ * The statements the stage designer reads and writes in its blocks, matched on
+ * javac's syntax tree, so spacing, comments and {@code this.} make no
+ * difference:
  *
  * <pre>
  * fields:  Type name;
  * setup:   this.addBackdrop("name");   this.addBackdrop("name", "path"[, stretch]);
  *          this.addSound("name");      this.addSound("name", "path");
- *          name = new Type();
- *          name.addCostume("costume");
- *          name.switchCostume("costume");
- *          name.setPosition(x, y);
- *          name.setDirection(deg);
- *          name.setRotationStyle(RotationStyle.LEFT_RIGHT);
- *          name.setSize(percent);
- *          name.setWidth(px); / name.setHeight(px);   (UISprite)
+ *          name = new Type(literals...);
  *          name = new Text("words", x, y, width[, TextStyle.BOX]);
- *          name.hide(); / name.show();
+ *          name.addCostume("costume");  name.switchCostume("costume");
+ *          name.setPosition(x, y);      name.setDirection(deg);  name.setSize(percent);
+ *          name.setRotationStyle(RotationStyle.LEFT_RIGHT);
+ *          name.setWidth(px);  name.setHeight(px);  name.hide();  name.show();
  *          this.add(name);
  * </pre>
  *
- * <p>Every declared field must be instantiated and added — that is the
- * canonical shape the designer generates. Anything else (other calls, other
- * statements, comments, half-finished blocks) throws
- * {@link UnsupportedRegionException}: the designer then goes read-only for
- * that class instead of destroying user code.
+ * <p>Any other statement is the student's own: it stays as it is, and the
+ * sprites it touches are left to the code (see {@link StageDocument}).
  */
 public final class RegionStatements {
 
-  /** The region is not expressible in the designer's subset. */
+  /** The blocks cannot be read at all (unfinished Java). */
   public static final class UnsupportedRegionException extends RuntimeException {
     public UnsupportedRegionException(String message) {
       super(message);
     }
   }
 
-  private static final Pattern FIELD_DECL =
-      Pattern.compile("(?:(private|protected|public)\\s+)?(\\w+)\\s+(\\w+)\\s*;");
-  private static final Pattern ADD_BACKDROP =
-      Pattern.compile("this\\.addBackdrop\\(\"([^\"]+)\"(?:\\s*,\\s*\"([^\"]+)\"(?:\\s*,\\s*(true|false))?)?\\)\\s*;");
-  private static final Pattern ADD_SOUND =
-      Pattern.compile("this\\.addSound\\(\"([^\"]+)\"(?:\\s*,\\s*\"([^\"]+)\")?\\)\\s*;");
-  private static final Pattern NEW_INSTANCE =
-      Pattern.compile("(\\w+)\\s*=\\s*new\\s+(\\w+)\\(\\)\\s*;");
-  private static final Pattern ADD_COSTUME =
-      Pattern.compile("(\\w+)\\.addCostume\\(\"([^\"]+)\"\\)\\s*;");
-  private static final Pattern SWITCH_COSTUME =
-      Pattern.compile("(\\w+)\\.switchCostume\\(\"([^\"]+)\"\\)\\s*;");
-  private static final Pattern SET_ROTATION_STYLE = Pattern.compile(
-      "(\\w+)\\.setRotationStyle\\(((?:org\\.openpatch\\.scratch\\.)?RotationStyle\\.(?:ALL_AROUND|LEFT_RIGHT|DONT))\\)\\s*;");
-  private static final Pattern SET_POSITION =
-      Pattern.compile("(\\w+)\\.setPosition\\((-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\)\\s*;");
-  private static final Pattern SET_DIRECTION =
-      Pattern.compile("(\\w+)\\.setDirection\\((-?\\d+(?:\\.\\d+)?)\\)\\s*;");
-  private static final Pattern SET_SIZE =
-      Pattern.compile("(\\w+)\\.setSize\\((-?\\d+(?:\\.\\d+)?)\\)\\s*;");
-  private static final String NUMBER = "(-?\\d+(?:\\.\\d+)?)";
-  private static final Pattern SET_WIDTH =
-      Pattern.compile("(\\w+)\\.setWidth\\(" + NUMBER + "\\)\\s*;");
-  private static final Pattern SET_HEIGHT =
-      Pattern.compile("(\\w+)\\.setHeight\\(" + NUMBER + "\\)\\s*;");
-  private static final Pattern NEW_TEXT = Pattern.compile(
-      "(\\w+)\\s*=\\s*new\\s+Text\\(\"((?:[^\"\\\\]|\\\\.)*)\"\\s*,\\s*" + NUMBER
-      + "\\s*,\\s*" + NUMBER + "\\s*,\\s*" + NUMBER
-      + "(?:\\s*,\\s*((?:org\\.openpatch\\.scratch\\.)?TextStyle\\.(?:PLAIN|BOX|SPEAK|THINK)))?"
-      + "\\)\\s*;");
-  private static final Pattern HIDE = Pattern.compile("(\\w+)\\.hide\\(\\)\\s*;");
-  private static final Pattern SHOW = Pattern.compile("(\\w+)\\.show\\(\\)\\s*;");
-  private static final Pattern THIS_ADD = Pattern.compile("this\\.add\\((\\w+)\\)\\s*;");
-
   private RegionStatements() {}
 
-  /** Parses the fields-region body into sprite refs (with type, no values). */
-  public static void parseFields(String body, StageModel model) {
-    List<String> lines = body.lines().toList();
-    for (int i = 0; i < lines.size(); i++) {
-      String line = lines.get(i).strip();
-      if (line.isEmpty()) {
-        continue;
-      }
-      Matcher m = FIELD_DECL.matcher(line);
-      if (!m.matches()) {
-        throw new UnsupportedRegionException("fields line " + (i + 1)
-            + " is not a field declaration: " + line);
-      }
-      SpriteRef ref = new SpriteRef(m.group(3), m.group(2))
-          .visibility(m.group(1) == null ? "" : m.group(1));
-      if (model.sprites().byName(ref.name()) != null) {
-        throw new UnsupportedRegionException("duplicate sprite name: " + ref.name());
-      }
-      model.sprites().add(ref);
+  /** Reads a field of the fields block; false when it is not a plain field declaration. */
+  static boolean readField(Tree tree, StageModel model) {
+    if (!(tree instanceof VariableTree field) || field.getInitializer() != null
+        || !(field.getType() instanceof IdentifierTree type)) {
+      return false;
     }
+    var flags = field.getModifiers().getFlags();
+    if (!field.getModifiers().getAnnotations().isEmpty() || flags.size() > 1) return false;
+    String visibility = "";
+    for (Modifier flag : flags) {
+      if (flag != Modifier.PRIVATE && flag != Modifier.PROTECTED && flag != Modifier.PUBLIC) {
+        return false;
+      }
+      visibility = flag.toString();
+    }
+    String name = field.getName().toString();
+    if (model.sprites().byName(name) != null) return false;
+    model.sprites().add(new SpriteRef(name, type.getName().toString()).visibility(visibility));
+    return true;
   }
 
-  /** Parses the setup-region body into backdrops and sprite values. */
-  public static void parseSetup(String body, StageModel model) {
-    List<String> lines = body.lines().toList();
-    for (int i = 0; i < lines.size(); i++) {
-      String line = lines.get(i).strip();
-      if (line.isEmpty()) {
-        continue;
+  /**
+   * Reads a statement of the setup block into the model; false when it is not
+   * one the designer writes. {@code written} is the statement as it stands in
+   * the file, for constructor arguments as they were typed ({@code -1.5f}).
+   */
+  static boolean readSetup(JavaFragment.Statement statement, StageModel model) {
+    if (!(statement.tree() instanceof ExpressionStatementTree es)) return false;
+    ExpressionTree e = es.getExpression();
+    if (e instanceof AssignmentTree assignment) {
+      return readCreation(assignment, statement, model);
+    }
+    if (!(e instanceof MethodInvocationTree call)
+        || !(call.getMethodSelect() instanceof MemberSelectTree select)) {
+      return false;
+    }
+    String method = select.getIdentifier().toString();
+    List<? extends ExpressionTree> args = call.getArguments();
+    if (isThis(select.getExpression())) {
+      return readStageCall(method, args, model);
+    }
+    SpriteRef ref = model.sprites().byName(name(select.getExpression()));
+    if (ref == null) return false;
+    switch (method) {
+      case "addCostume" -> {
+        if (args.size() != 1 || string(args.get(0)) == null) return false;
+        ref.costume(string(args.get(0)));
       }
-      String location = "setup line " + (i + 1) + ": ";
-      Matcher m;
-      if ((m = ADD_BACKDROP.matcher(line)).matches()) {
-        String path = m.group(2);
-        if (m.group(3) != null && m.group(1).equals(path)) {
+      case "switchCostume" -> {
+        if (args.size() != 1 || string(args.get(0)) == null) return false;
+        ref.currentCostume(string(args.get(0)));
+      }
+      case "setPosition" -> {
+        if (args.size() != 2 || number(args.get(0)) == null || number(args.get(1)) == null) {
+          return false;
+        }
+        ref.setPosition(number(args.get(0)), number(args.get(1)));
+      }
+      case "setDirection", "setSize", "setWidth", "setHeight" -> {
+        if (args.size() != 1 || number(args.get(0)) == null) return false;
+        double value = number(args.get(0));
+        switch (method) {
+          case "setDirection" -> ref.direction(value);
+          case "setSize" -> ref.size(value);
+          case "setWidth" -> ref.width(value);
+          default -> ref.height(value);
+        }
+      }
+      case "setRotationStyle" -> {
+        String style = constant(args, "RotationStyle", "ALL_AROUND", "LEFT_RIGHT", "DONT");
+        if (style == null) return false;
+        ref.rotationStyle(style);
+      }
+      case "hide", "show" -> {
+        if (!args.isEmpty()) return false;
+        ref.visible(method.equals("show"));
+      }
+      default -> {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static boolean readStageCall(String method, List<? extends ExpressionTree> args,
+      StageModel model) {
+    switch (method) {
+      case "addBackdrop" -> {
+        if (args.isEmpty() || args.size() > 3 || string(args.get(0)) == null
+            || args.size() > 1 && string(args.get(1)) == null
+            || args.size() > 2 && bool(args.get(2)) == null) {
+          return false;
+        }
+        String name = string(args.get(0));
+        String path = args.size() > 1 ? string(args.get(1)) : null;
+        Boolean stretch = args.size() > 2 ? bool(args.get(2)) : null;
+        if (stretch != null && name.equals(path)) {
           path = null; // generated built-in stretch uses the name as its path
         }
-        model.addBackdrop(new StageModel.Backdrop(m.group(1), path,
-            m.group(3) == null ? null : Boolean.valueOf(m.group(3))));
-      } else if ((m = ADD_SOUND.matcher(line)).matches()) {
-        model.addSound(new StageModel.Sound(m.group(1), m.group(2)));
-      } else if ((m = NEW_TEXT.matcher(line)).matches()) {
-        SpriteRef ref = require(model, m.group(1), location);
-        if (!ref.isText()) {
-          throw new UnsupportedRegionException(location
-              + "type Text does not match the field " + ref.type());
+        model.addBackdrop(new StageModel.Backdrop(name, path, stretch));
+      }
+      case "addSound" -> {
+        if (args.isEmpty() || args.size() > 2 || string(args.get(0)) == null
+            || args.size() > 1 && string(args.get(1)) == null) {
+          return false;
         }
-        ref.text(m.group(2));
-        ref.setPosition(Double.parseDouble(m.group(3)), Double.parseDouble(m.group(4)));
-        ref.textWidth(Double.parseDouble(m.group(5)));
-        ref.textStyle(m.group(6));
-        ref.instantiated(true);
-      } else if ((m = NEW_INSTANCE.matcher(line)).matches()) {
-        SpriteRef ref = require(model, m.group(1), location);
-        if (ref.isText()) {
-          throw new UnsupportedRegionException(location
-              + "a Text needs its words and position: new Text(\"...\", x, y, width)");
-        }
-        if (!ref.type().equals(m.group(2))) {
-          throw new UnsupportedRegionException(location
-              + "type " + m.group(2) + " does not match the field " + ref.type());
-        }
-        ref.instantiated(true);
-      } else if ((m = ADD_COSTUME.matcher(line)).matches()) {
-        require(model, m.group(1), location).costume(m.group(2));
-      } else if ((m = SWITCH_COSTUME.matcher(line)).matches()) {
-        require(model, m.group(1), location).currentCostume(m.group(2));
-      } else if ((m = SET_POSITION.matcher(line)).matches()) {
-        require(model, m.group(1), location)
-            .setPosition(Double.parseDouble(m.group(2)), Double.parseDouble(m.group(3)));
-      } else if ((m = SET_DIRECTION.matcher(line)).matches()) {
-        require(model, m.group(1), location).direction(Double.parseDouble(m.group(2)));
-      } else if ((m = SET_ROTATION_STYLE.matcher(line)).matches()) {
-        require(model, m.group(1), location).rotationStyle(m.group(2));
-      } else if ((m = SET_SIZE.matcher(line)).matches()) {
-        require(model, m.group(1), location).size(Double.parseDouble(m.group(2)));
-      } else if ((m = SET_WIDTH.matcher(line)).matches()) {
-        require(model, m.group(1), location).width(Double.parseDouble(m.group(2)));
-      } else if ((m = SET_HEIGHT.matcher(line)).matches()) {
-        require(model, m.group(1), location).height(Double.parseDouble(m.group(2)));
-      } else if ((m = HIDE.matcher(line)).matches()) {
-        require(model, m.group(1), location).visible(false);
-      } else if ((m = SHOW.matcher(line)).matches()) {
-        require(model, m.group(1), location).visible(true);
-      } else if ((m = THIS_ADD.matcher(line)).matches()) {
-        require(model, m.group(1), location).added(true);
-      } else {
-        throw new UnsupportedRegionException(
-            location + "not part of the designer subset: " + line);
+        model.addSound(new StageModel.Sound(string(args.get(0)),
+            args.size() > 1 ? string(args.get(1)) : null));
+      }
+      case "add" -> {
+        SpriteRef ref = args.size() == 1 ? model.sprites().byName(name(args.get(0))) : null;
+        if (ref == null) return false;
+        ref.added(true);
+      }
+      default -> {
+        return false;
       }
     }
-    for (SpriteRef ref : model.sprites()) {
-      if (!ref.isInstantiated() || !ref.isAdded()) {
-        throw new UnsupportedRegionException(
-            "sprite " + ref.name() + " is declared but not instantiated and added");
-      }
-    }
+    return true;
   }
 
-  private static SpriteRef require(StageModel model, String name, String location) {
-    SpriteRef ref = model.sprites().byName(name);
-    if (ref == null) {
-      throw new UnsupportedRegionException(location + "unknown sprite name: " + name);
+  /** {@code name = new Type(...)} for a field of the block. */
+  private static boolean readCreation(AssignmentTree assignment, JavaFragment.Statement statement,
+      StageModel model) {
+    SpriteRef ref = model.sprites().byName(name(assignment.getVariable()));
+    if (ref == null || !(assignment.getExpression() instanceof NewClassTree created)
+        || created.getClassBody() != null
+        || !(created.getIdentifier() instanceof IdentifierTree type)
+        || !type.getName().contentEquals(ref.type())) {
+      return false;
     }
-    return ref;
+    List<? extends ExpressionTree> args = created.getArguments();
+    if (ref.isText()) {
+      if (args.size() < 4 || args.size() > 5 || string(args.get(0)) == null
+          || number(args.get(1)) == null || number(args.get(2)) == null
+          || number(args.get(3)) == null) {
+        return false;
+      }
+      String style = null;
+      if (args.size() == 5) {
+        String constant = constant(args.subList(4, 5), "TextStyle", "PLAIN", "BOX", "SPEAK",
+            "THINK");
+        if (constant == null) return false;
+        style = args.get(4).toString();
+      }
+      // the words as written in the source, escapes and all (the designer keeps them so)
+      String written = args.get(0).toString();
+      ref.text(written.substring(1, written.length() - 1));
+      ref.setPosition(number(args.get(1)), number(args.get(2)));
+      ref.textWidth(number(args.get(3)));
+      ref.textStyle(style);
+    } else {
+      List<String> written;
+      try {
+        written = statement.writtenArguments();
+      } catch (UnsupportedRegionException notLiterals) {
+        return false;
+      }
+      if (written == null) return false;
+      ref.constructorArguments(written);
+    }
+    ref.instantiated(true);
+    return true;
+  }
+
+  private static boolean isThis(ExpressionTree tree) {
+    return tree instanceof IdentifierTree id && id.getName().contentEquals("this");
+  }
+
+  /** {@code name} or {@code this.name}; null for anything else. */
+  static String name(ExpressionTree tree) {
+    if (tree instanceof IdentifierTree id) return id.getName().toString();
+    if (tree instanceof MemberSelectTree select && isThis(select.getExpression())) {
+      return select.getIdentifier().toString();
+    }
+    return null;
+  }
+
+  private static String string(ExpressionTree tree) {
+    return tree instanceof LiteralTree literal && literal.getValue() instanceof String value
+        ? value : null;
+  }
+
+  private static Boolean bool(ExpressionTree tree) {
+    return tree instanceof LiteralTree literal && literal.getValue() instanceof Boolean value
+        ? value : null;
+  }
+
+  private static Double number(ExpressionTree tree) {
+    if (tree instanceof LiteralTree literal && literal.getValue() instanceof Number value
+        && !(literal.getValue() instanceof Character)) {
+      return value.doubleValue();
+    }
+    if (tree instanceof UnaryTree unary && (unary.getKind() == Tree.Kind.UNARY_MINUS
+        || unary.getKind() == Tree.Kind.UNARY_PLUS)) {
+      Double inner = number(unary.getExpression());
+      if (inner == null || !(unary.getExpression() instanceof LiteralTree)) return null;
+      return unary.getKind() == Tree.Kind.UNARY_MINUS ? -inner : inner;
+    }
+    return null;
+  }
+
+  /**
+   * {@code Type.CONSTANT} (also fully qualified) as the single argument, as it
+   * is written; null when it is something else.
+   */
+  private static String constant(List<? extends ExpressionTree> args, String type,
+      String... constants) {
+    if (args.size() != 1 || !(args.get(0) instanceof MemberSelectTree select)) return null;
+    String owner = select.getExpression().toString();
+    if (!owner.equals(type) && !owner.equals("org.openpatch.scratch." + type)) return null;
+    String name = select.getIdentifier().toString();
+    for (String constant : constants) {
+      if (constant.equals(name)) return args.get(0).toString();
+    }
+    return null;
   }
 
   /** Generates the canonical fields-region body (no trailing newline beyond the last line). */
@@ -233,7 +312,8 @@ public final class RegionStatements {
         sb.append(indent).append("this.add(").append(ref.name()).append(");\n");
         continue;
       }
-      sb.append(indent).append(ref.name()).append(" = new ").append(ref.type()).append("();\n");
+      sb.append(indent).append(ref.name()).append(" = new ").append(ref.type()).append('(')
+          .append(String.join(", ", ref.constructorArguments())).append(");\n");
       if (ref.costume() != null) {
         sb.append(indent).append(ref.name()).append(".addCostume(\"")
             .append(ref.costume()).append("\");\n");

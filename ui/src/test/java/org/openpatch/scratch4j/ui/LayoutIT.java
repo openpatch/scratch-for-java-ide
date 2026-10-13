@@ -123,7 +123,7 @@ class LayoutIT {
       // one history: a sprite added in the designer is undone through the code's history
       int sprites = designer.model().sprites().size();
       String before = code.content();
-      designer.addInstance("Player");
+      designer.addInstance("Player", List.of("0", "0"));
       assertThat(designer.model().sprites()).hasSize(sprites + 1);
       assertThat(code.content()).as("the code beside shows it").isNotEqualTo(before);
       designer.undo();
@@ -253,14 +253,14 @@ class LayoutIT {
         import org.openpatch.scratch.*;
 
         public class Pond extends Stage {
-          // scratch4j:begin fields (managed by the stage designer)
-          // scratch4j:end fields
+          // begin stage designer
+          // end stage designer
 
           public Pond() {
             super(480, 360);
-            // scratch4j:begin setup (managed by the stage designer)
+            // begin stage designer
             this.addBackdrop("background");
-            // scratch4j:end setup
+            // end stage designer
             var host = new Sprite();
             host.addCostume("alienGreen_stand");
             host.setY(-20);
@@ -343,10 +343,10 @@ class LayoutIT {
 
         public class Cat extends Sprite {
           public Cat() {
-            // scratch4j:begin setup
+            // begin sprite editor
             this.addCostume("bunny1_stand");
             this.addSound("%s");
-            // scratch4j:end setup
+            // end sprite editor
           }
         }
         """.formatted(sound));

@@ -57,7 +57,7 @@ class NewProjectTest {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "cfproj", scratchJar());
     String player = Files.readString(tmp.resolve("cfproj/Player.java"));
     assertThat(player).contains("class Player extends Sprite");
-    assertThat(player).contains("// scratch4j:begin setup");
+    assertThat(player).contains("// begin sprite editor");
     assertThat(player).contains("addCostume(\"bunny1_stand\")");
     assertThat(ScratchProject.open(tmp.resolve("cfproj")).spriteClasses())
         .contains("Player");
@@ -67,8 +67,8 @@ class NewProjectTest {
   void imperativeTemplateHasStageRegions() throws IOException {
     NewProject.create(ProjectTemplate.IMPERATIVE, tmp, "improj", scratchJar());
     String stage = Files.readString(tmp.resolve("improj/MyStage.java"));
-    assertThat(stage).contains("// scratch4j:begin fields");
-    assertThat(stage).contains("// scratch4j:begin setup");
+    assertThat(stage).contains("// begin stage designer");
+    assertThat(stage).contains("// begin stage designer");
   }
 
   @Test

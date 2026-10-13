@@ -60,7 +60,6 @@ public final class ProjectCheck {
   public static final String FIX_PROMOTE = "region.promote";
 
   /** The fix for a statement the stage designer does not manage: move it below the region. */
-  public static final String FIX_MOVE_OUT_OF_REGION = "region.moveOut";
 
   private ProjectCheck() {}
 
@@ -218,38 +217,27 @@ public final class ProjectCheck {
               f.suggestions(), false));
         }
       }
-      // stage designer regions it cannot read: the line, and the fix
+      // sprites the stage designer can take over
       boolean de = language == DiagnosticsExplanations.Language.DE;
       for (Path source : sources) {
         String text = texts.get(source);
-        if (!text.contains("scratch4j:begin") || !"Stage".equals(
-            org.openpatch.scratch4j.core.region.DesignerRegions.kindOf(source.getParent(),
-                source.getFileName().toString().replaceFirst("\\.java$", "")))) {
+        if (!"Stage".equals(org.openpatch.scratch4j.core.region.DesignerRegions.kindOf(
+            source.getParent(), source.getFileName().toString().replaceFirst("\\.java$", "")))) {
           continue;
         }
-        var issue = org.openpatch.scratch4j.core.region.StageDocument.regionIssue(text);
-        if (issue == null) {
-          for (var promotion : org.openpatch.scratch4j.core.region.DesignerPromotion.find(text)) {
-            problems.add(new Problem(source, promotion.firstLine(), 0, de
-                ? "Die Figur " + promotion.name() + " kann der B\u00fchnen-Designer \u00fcbernehmen."
-                : "The stage designer can take over the sprite " + promotion.name() + ".",
-                de ? "Dann kannst du sie im Designer sehen, verschieben und einstellen."
-                    : "You can then see, move and set it up in the designer.",
-                List.of(), false, FIX_PROMOTE));
-          }
+        List<org.openpatch.scratch4j.core.region.DesignerPromotion.Promotion> promotions;
+        try {
+          promotions = org.openpatch.scratch4j.core.region.DesignerPromotion.find(text);
+        } catch (RuntimeException unreadable) {
+          continue; // unfinished Java: the compiler says where
         }
-        if (issue != null && issue.line() > 0) {
-          problems.add(new Problem(source, issue.line(), 0, de
-              ? "Der B\u00fchnen-Designer kann diese Zeile nicht lesen und ist darum "
-                  + "schreibgesch\u00fctzt."
-              : "The stage designer cannot read this line, so it is read-only.",
-              de ? "Im Bereich zwischen scratch4j:begin und scratch4j:end stehen nur "
-                  + "Hintergr\u00fcnde, Kl\u00e4nge und Figuren mit Position, Gr\u00f6\u00dfe "
-                  + "und Kost\u00fcm. Eigener Code geh\u00f6rt darunter (" + issue.message() + ")."
-                  : "Between scratch4j:begin and scratch4j:end the designer keeps only "
-                  + "backdrops, sounds and sprites with their position, size and costume. Your "
-                  + "own code belongs below the region (" + issue.message() + ").",
-              List.of(), false, FIX_MOVE_OUT_OF_REGION));
+        for (var promotion : promotions) {
+          problems.add(new Problem(source, promotion.firstLine(), 0, de
+              ? "Die Figur " + promotion.name() + " kann der B\u00fchnen-Designer \u00fcbernehmen."
+              : "The stage designer can take over the sprite " + promotion.name() + ".",
+              de ? "Dann kannst du sie im Designer sehen, verschieben und einstellen."
+                  : "You can then see, move and set it up in the designer.",
+              List.of(), false, FIX_PROMOTE));
         }
       }
       // Scratch-to-Java pitfalls: forever loops, sleep, a second window, shared counters

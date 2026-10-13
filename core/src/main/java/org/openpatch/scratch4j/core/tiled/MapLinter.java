@@ -35,6 +35,7 @@ import java.util.stream.Stream;
  * new TiledMap("assets/maps/level.tmx", this)   // exists? loads in Scratch for Java?
  * map.stampLayerToBackground("Ground")          // a tile layer of the map?
  * map.getObjectsFromLayer("Objects")            // an object layer of the map?
+ * map.spawn("Objects")                          // the same
  * </pre>
  *
  * Layer names are checked against the maps the file loads by name, or against
@@ -100,7 +101,8 @@ public final class MapLinter {
           @Override
           public Void visitMethodInvocation(MethodInvocationTree call, Void p) {
             String name = methodName(call);
-            if (("getObjectsFromLayer".equals(name) || "stampLayerToBackground".equals(name)
+            if (("getObjectsFromLayer".equals(name) || "spawn".equals(name)
+                || "stampLayerToBackground".equals(name)
                 || "stampLayerToForeground".equals(name)) && call.getArguments().size() == 1
                 && call.getArguments().get(0) instanceof LiteralTree lit
                 && lit.getValue() instanceof String layer) {
@@ -166,7 +168,7 @@ public final class MapLinter {
 
   private void checkLayer(Path file, String method, String layer, long line, List<Layers> maps,
       List<Finding> findings) {
-    boolean objects = method.equals("getObjectsFromLayer");
+    boolean objects = method.equals("getObjectsFromLayer") || method.equals("spawn");
     Set<String> wanted = new LinkedHashSet<>();
     Set<String> other = new LinkedHashSet<>();
     for (Layers map : maps) {

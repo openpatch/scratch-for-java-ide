@@ -30,6 +30,9 @@ class AbiturListRunTest {
         package org.openpatch.scratch;
         public class Window {
           private static final Window INSTANCE = new Window();
+          public Window() {}
+          public Window(int width, int height) {}
+          public void setStage(Stage stage) {}
           public static Window getInstance() { return INSTANCE; }
           public Stage getStage() { return Stage.INSTANCE; }
           public void setDebug(boolean value) {}

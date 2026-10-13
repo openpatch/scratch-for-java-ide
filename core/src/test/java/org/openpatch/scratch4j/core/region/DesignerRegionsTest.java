@@ -44,8 +44,8 @@ class DesignerRegionsTest {
 
         public class World extends Stage {
 
-          // scratch4j:begin fields (managed by the stage designer)
-          // scratch4j:end fields
+          // begin stage designer
+          // end stage designer
 
           private int score;
 
@@ -55,8 +55,8 @@ class DesignerRegionsTest {
               score = 1; // a } in a comment and "}" in a string
             }
 
-            // scratch4j:begin setup (managed by the stage designer)
-            // scratch4j:end setup
+            // begin stage designer
+            // end stage designer
           }
 
           public void run() {
@@ -83,8 +83,8 @@ class DesignerRegionsTest {
 
         public class Coin extends Sprite {
           public Coin() {
-            // scratch4j:begin setup (managed by the stage designer)
-            // scratch4j:end setup
+            // begin sprite editor
+            // end sprite editor
           }
 
           public void run() {
@@ -113,14 +113,14 @@ class DesignerRegionsTest {
     assertThat(settings.pixelArt()).isTrue();
     assertThat(settings.startStage()).isEqualTo("World");
     assertThat(managed).contains("    super(640, 360, \"assets\");\n\n"
-        + "    // scratch4j:begin window (managed by the project settings)\n"
+        + "    // begin project settings\n"
         + "    this.setStage(new World());\n"
-        + "    // scratch4j:end window\n  }");
+        + "    // end project settings\n  }");
     assertThat(managed).contains("    Text.useFont(\"assets/font.ttf\", 11);\n"
-        + "    // scratch4j:begin options (managed by the project settings)\n"
+        + "    // begin project settings\n"
         + "    Window.useTextureSampling(TextureSampling.POINT);\n"
         + "    Window.useFullScreen();\n"
-        + "    // scratch4j:end options\n"
+        + "    // end project settings\n"
         + "    new Game();");
   }
 
@@ -175,7 +175,7 @@ class DesignerRegionsTest {
             + "AnimatedSprite|UISprite)\\b.*")) {
           assertThat(RegionParser.has(text, "setup")).as(source.toString()).isTrue();
           if (text.contains("extends Stage")) {
-            assertThat(StageDocument.isDesignerEditable(text)).as(source.toString()).isTrue();
+            assertThat(StageDocument.read(text).foreign()).as(source.toString()).isEmpty();
           }
         }
       }
@@ -203,8 +203,8 @@ class DesignerRegionsTest {
         }
         """;
     assertThat(DesignerRegions.ensureSprite(hand)).contains(
-        "    // scratch4j:begin setup (managed by the stage designer)\n"
+        "    // begin sprite editor\n"
         + "    this.addCostume(\"boss\", \"assets/boss.png\");\n"
-        + "    // scratch4j:end setup\n");
+        + "    // end sprite editor\n");
   }
 }

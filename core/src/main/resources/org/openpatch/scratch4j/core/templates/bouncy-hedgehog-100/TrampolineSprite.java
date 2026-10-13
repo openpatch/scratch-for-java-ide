@@ -3,16 +3,16 @@ import org.openpatch.scratch.Sprite;
 
 public class TrampolineSprite extends Sprite {
   public TrampolineSprite() {
-    // scratch4j:begin setup (managed by the stage designer)
+    // begin sprite editor
     this.addCostume("trampoline", "trampoline.png");
-    // scratch4j:end setup
+    // end sprite editor
     this.setPosition(0, -120);
   }
 
-  public void whenKeyPressed(KeyCode keyCode) {
-    if (keyCode == KeyCode.LEFT) {
+  public void whenKeyPressed(KeyCode key) {
+    if (key == KeyCode.LEFT) {
       this.changeX(-10);
-    } else if (keyCode == KeyCode.RIGHT) {
+    } else if (key == KeyCode.RIGHT) {
       this.changeX(10);
     }
   }

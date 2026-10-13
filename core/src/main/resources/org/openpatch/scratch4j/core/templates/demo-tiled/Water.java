@@ -1,11 +1,9 @@
 import org.openpatch.scratch.*;
 
 public class Water extends Sprite {
-  public Water(double x, double y) {
-    this.setX(x);
-    this.setY(y);
-
-    // scratch4j:begin setup (managed by the stage designer)
-    // scratch4j:end setup
+  // The map puts it where its object is, and makes the object's area its hitbox.
+  public Water() {
+    // begin sprite editor
+    // end sprite editor
   }
 }

@@ -22,8 +22,9 @@ class NewClassTest {
     for (NewClass.Kind kind : NewClass.Kind.values()) {
       Path file = NewClass.create(kind, tmp, "My" + kind.name().toLowerCase());
       String source = Files.readString(file);
-      assertThat(source).contains("// scratch4j:begin setup");
-      assertThat(source).contains("// scratch4j:end setup");
+      String editor = kind == NewClass.Kind.STAGE ? "stage designer" : "sprite editor";
+      assertThat(source).contains("// begin " + editor);
+      assertThat(source).contains("// end " + editor);
       assertThat(source).contains("class My" + kind.name().toLowerCase());
     }
   }

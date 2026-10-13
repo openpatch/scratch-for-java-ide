@@ -30,7 +30,6 @@ import java.util.stream.Stream;
  */
 public final class DesignerRegions {
 
-  private static final String STAGE_NOTE = " (managed by the stage designer)";
   private static final Pattern CLASS = Pattern.compile(
       "(?m)^([ \\t]*)public\\s+class\\s+(\\w+)\\s+extends\\s+(Stage|Sprite|AnimatedSprite|"
           + "UISprite|Window)\\b[^{]*\\{[ \\t]*\\r?\\n");
@@ -88,7 +87,7 @@ public final class DesignerRegions {
         result = addOptions(result, name);
       }
       if (!RegionParser.has(result, WindowDocument.SETUP)) {
-        result = addToConstructor(result, name, WindowDocument.SETUP, WindowDocument.MANAGED);
+        result = addToConstructor(result, name, RegionParser.PROJECT_SETTINGS);
         result = pullIntoWindowRegion(result);
       }
       return result;
@@ -97,14 +96,16 @@ public final class DesignerRegions {
       Matcher again = ANY_CLASS.matcher(result);
       again.find();
       String indent = again.group(1) + memberIndent(result, again.end());
-      result = result.substring(0, again.end()) + "\n" + indent + "// scratch4j:begin fields"
-          + STAGE_NOTE + "\n" + indent + "// scratch4j:end fields\n"
+      result = result.substring(0, again.end()) + "\n"
+          + RegionParser.begin(indent, RegionParser.STAGE_DESIGNER) + "\n"
+          + RegionParser.end(indent, RegionParser.STAGE_DESIGNER) + "\n"
           + result.substring(again.end());
     }
     if (!RegionParser.has(result, "setup")) {
       // around the statements the visual editors manage, where they are; else at the end
       String wrapped = wrapManaged(result, name, kind.equals("Stage"));
-      result = wrapped != null ? wrapped : addToConstructor(result, name, "setup", STAGE_NOTE);
+      result = wrapped != null ? wrapped : addToConstructor(result, name,
+          kind.equals("Stage") ? RegionParser.STAGE_DESIGNER : RegionParser.SPRITE_EDITOR);
     }
     return result;
   }
@@ -176,8 +177,9 @@ public final class DesignerRegions {
     int start = lines.get(bestFrom)[0];
     int end = lines.get(bestTo)[1];
     String indent = text(source, lines.get(bestFrom)).replaceAll("\\S.*", "");
-    return source.substring(0, start) + indent + "// scratch4j:begin setup" + STAGE_NOTE + "\n"
-        + source.substring(start, end) + indent + "// scratch4j:end setup\n"
+    String editor = stage ? RegionParser.STAGE_DESIGNER : RegionParser.SPRITE_EDITOR;
+    return source.substring(0, start) + RegionParser.begin(indent, editor) + "\n"
+        + source.substring(start, end) + RegionParser.end(indent, editor) + "\n"
         + source.substring(end);
   }
 
@@ -202,12 +204,17 @@ public final class DesignerRegions {
       return true;
     }
     // the stage designer reads it (and finds something in it)
-    String trial = source.substring(0, lines.get(i)[0]) + "// scratch4j:begin setup\n"
-        + source.substring(lines.get(i)[0], lines.get(j)[1]) + "// scratch4j:end setup\n"
+    String trial = source.substring(0, lines.get(i)[0])
+        + RegionParser.begin("", RegionParser.STAGE_DESIGNER) + "\n"
+        + source.substring(lines.get(i)[0], lines.get(j)[1])
+        + RegionParser.end("", RegionParser.STAGE_DESIGNER) + "\n"
         + source.substring(lines.get(j)[1]);
     try {
-      StageModel model = StageDocument.read(trial).model();
-      return !model.backdrops().isEmpty() || !model.sprites().isEmpty() || !model.sounds().isEmpty();
+      StageDocument read = StageDocument.read(trial);
+      StageModel model = read.model();
+      return read.foreign().isEmpty() && read.codeOwnedSprites().isEmpty()
+          && (!model.backdrops().isEmpty() || !model.sprites().isEmpty()
+              || !model.sounds().isEmpty());
     } catch (RuntimeException e) {
       return false;
     }
@@ -264,7 +271,7 @@ public final class DesignerRegions {
     return null;
   }
 
-  private static String addToConstructor(String source, String name, String id, String note) {
+  private static String addToConstructor(String source, String name, String editor) {
     int[] body = constructorBody(source, name);
     if (body == null) {
       // no constructor: an explicit empty one is what Java generated anyway
@@ -274,7 +281,7 @@ public final class DesignerRegions {
       String inner = indent + "  ";
       int at = afterFieldsRegion(source, type.end());
       return source.substring(0, at) + indent + "public " + name + "() {\n" + inner
-          + "// scratch4j:begin " + id + note + "\n" + inner + "// scratch4j:end " + id + "\n"
+          + RegionParser.begin("", editor) + "\n" + RegionParser.end(inner, editor) + "\n"
           + indent + "}\n\n" + source.substring(at);
     }
     // before the constructor's closing brace, indented like its statements
@@ -284,8 +291,8 @@ public final class DesignerRegions {
         && source.substring(lineStart, close).isBlank();
     String closeIndent = braceOnOwnLine ? source.substring(lineStart, close) : "";
     String inner = statementIndent(source, body[0], close, closeIndent + "  ");
-    String region = inner + "// scratch4j:begin " + id + note + "\n" + inner
-        + "// scratch4j:end " + id + "\n";
+    String region = RegionParser.begin(inner, editor) + "\n"
+        + RegionParser.end(inner, editor) + "\n";
     if (braceOnOwnLine) {
       return source.substring(0, lineStart) + "\n" + region + source.substring(lineStart);
     }
@@ -361,11 +368,12 @@ public final class DesignerRegions {
     }
     String keptText = kept.substring(0, kept.length() - 1);
     StringBuilder region = new StringBuilder();
-    region.append(indent).append("// scratch4j:begin options").append(WindowDocument.MANAGED).append('\n');
+    region.append(RegionParser.begin(indent, RegionParser.PROJECT_SETTINGS)).append('\n');
     for (String line : moved) {
       region.append(indent).append(line).append('\n');
     }
-    region.append(indent).append("// scratch4j:end options\n").append(indent);
+    region.append(RegionParser.end(indent, RegionParser.PROJECT_SETTINGS)).append('\n')
+        .append(indent);
     String newBody = keptText + region + body.substring(create.start() + indent.length());
     return source.substring(0, main.end()) + newBody + source.substring(end);
   }

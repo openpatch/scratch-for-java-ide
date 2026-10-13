@@ -105,7 +105,7 @@ final class CodeEditor extends BorderPane {
   private static final Pattern MAP_STRING = Pattern.compile(
       "\\bnew\\s+TiledMap\\(\"([^\"]*)$");
   private static final Pattern LAYER_STRING = Pattern.compile(
-      "\\b(getObjectsFromLayer|stampLayerToBackground|stampLayerToForeground)"
+      "\\b(getObjectsFromLayer|spawn|stampLayerToBackground|stampLayerToForeground)"
           + "\\(\"([^\"]*)$");
   private static final Pattern SOUND_STRING = Pattern.compile(
       "\\b(addSound|playSound|startSound|playSoundUntilDone)"
@@ -174,9 +174,11 @@ final class CodeEditor extends BorderPane {
     area.requestFollowCaret();
     area.styleProperty().bind(FONT_SIZE.asString("-fx-font-size: %dpx;"));
     rehighlight();
+    updateRegions();
 
     area.multiPlainChanges().successionEnds(Duration.ofMillis(40)).subscribe(ignore -> {
       rehighlight();
+      updateRegions();
       dirty.set(!area.getText().equals(savedText));
       onEdited.run();
     });
@@ -888,9 +890,82 @@ final class CodeEditor extends BorderPane {
     this.onCaretLine = listener;
   }
 
+  // --- the visual editors' blocks: tinted, named in the gutter ---------------------
+
+  /** Line (0-based) -> style of the visual editors' blocks: marker, line, own code. */
+  private final java.util.Map<Integer, String> regionStyles = new java.util.HashMap<>();
+  /** Line (0-based) -> what the gutter says about it (the block's editor, own code). */
+  private final javafx.collections.ObservableMap<Integer, String> regionNotes =
+      javafx.collections.FXCollections.observableHashMap();
+
+  /**
+   * Finds the blocks a visual editor owns ({@code // begin stage designer}) and
+   * marks them: the markers faint, the lines between tinted, and in a stage
+   * the statements the designer leaves to the student's code.
+   */
+  private void updateRegions() {
+    String text = area.getText();
+    java.util.Map<Integer, String> styles = new java.util.HashMap<>();
+    java.util.Map<Integer, String> notes = new java.util.HashMap<>();
+    if (text.contains("// begin ") || text.contains("//begin ")) {
+      try {
+        int[] lineStarts = lineStarts(text);
+        for (var region : org.openpatch.scratch4j.core.region.RegionParser.parse(text)) {
+          int begin = lineAt(lineStarts, region.beginOffset()) - 1;
+          int end = lineAt(lineStarts, region.endOffset());
+          styles.put(begin, "region-marker");
+          styles.put(end, "region-marker");
+          for (int l = begin + 1; l < end; l++) styles.put(l, "region-line");
+          notes.put(begin, I18n.t("code.region." + switch (region.editor()) {
+            case org.openpatch.scratch4j.core.region.RegionParser.STAGE_DESIGNER -> "stage";
+            case org.openpatch.scratch4j.core.region.RegionParser.SPRITE_EDITOR -> "sprite";
+            default -> "settings";
+          }));
+        }
+        if (text.contains("// begin stage designer")) {
+          for (var own : org.openpatch.scratch4j.core.region.StageDocument.read(text).foreign()) {
+            styles.put(own.line() - 1, "region-own");
+            notes.put(own.line() - 1, I18n.t("code.region.own"));
+          }
+        }
+      } catch (RuntimeException unfinished) {
+        // markers that do not pair up yet, unfinished Java: no blocks to show
+      }
+    }
+    java.util.Set<Integer> changed = new java.util.HashSet<>(regionStyles.keySet());
+    changed.addAll(styles.keySet());
+    regionStyles.clear();
+    regionStyles.putAll(styles);
+    regionNotes.keySet().retainAll(notes.keySet());
+    regionNotes.putAll(notes);
+    for (int line : changed) paragraphStyle(line + 1);
+  }
+
+  private static int[] lineStarts(String text) {
+    List<Integer> starts = new ArrayList<>();
+    starts.add(0);
+    for (int i = 0; i < text.length(); i++) {
+      if (text.charAt(i) == '\n') starts.add(i + 1);
+    }
+    return starts.stream().mapToInt(Integer::intValue).toArray();
+  }
+
+  /** The 0-based line an offset is on. */
+  private static int lineAt(int[] lineStarts, int offset) {
+    int found = java.util.Arrays.binarySearch(lineStarts, offset);
+    return found >= 0 ? found : -found - 2;
+  }
+
+  /** The style of a line in a visual editor's block (tests); null outside the blocks. */
+  String regionStyle(int line) {
+    return regionStyles.get(line - 1);
+  }
+
   private void paragraphStyle(int line) {
     if (line <= 0 || line - 1 >= area.getParagraphs().size()) return;
     List<String> styles = new ArrayList<>();
+    String region = regionStyles.get(line - 1);
+    if (region != null) styles.add(region);
     if (line == debugLine) styles.add("debug-line");
     if (linkedLines.contains(line)) styles.add("linked-line");
     area.setParagraphStyle(line - 1, styles);
@@ -952,6 +1027,19 @@ final class CodeEditor extends BorderPane {
           e.consume();
         }
       });
+      // a visual editor's block starts here, or the designer leaves this line be
+      Label block = new Label();
+      block.getStyleClass().add("gutter-region");
+      block.setMinWidth(14);
+      Runnable updateBlock = () -> {
+        String note = regionNotes.get(line);
+        block.setGraphic(note == null ? null : Icons.of(
+            "region-own".equals(regionStyles.get(line)) ? "fth-code" : "fth-layout", 12));
+        block.setTooltip(note == null ? null : new Tooltip(note));
+      };
+      updateBlock.run();
+      regionNotes.addListener((javafx.collections.MapChangeListener<Integer, String>) c ->
+          updateBlock.run());
       Region marker = new Region();
       marker.getStyleClass().add("gutter-marker");
       Runnable update = () -> {
@@ -983,7 +1071,7 @@ final class CodeEditor extends BorderPane {
       previewSlot.setMinWidth(18);
       previewSlot.setPrefWidth(18);
       if (preview != null) previewSlot.getChildren().add(preview);
-      HBox box = new HBox(marker, bulb, number, previewSlot);
+      HBox box = new HBox(marker, bulb, number, block, previewSlot);
       box.setAlignment(Pos.CENTER_LEFT);
       box.getStyleClass().add("gutter");
       box.setCursor(javafx.scene.Cursor.HAND);
@@ -1635,7 +1723,8 @@ final class CodeEditor extends BorderPane {
     Matcher layer = LAYER_STRING.matcher(before);
     if (layer.find()) {
       completionStart = area.getCaretPosition() - layer.group(2).length();
-      return layerCompletions(layer.group(2), layer.group(1).equals("getObjectsFromLayer"));
+      return layerCompletions(layer.group(2), layer.group(1).equals("getObjectsFromLayer")
+          || layer.group(1).equals("spawn"));
     }
     Matcher sound = SOUND_STRING.matcher(before);
     if (sound.find()) {

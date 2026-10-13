@@ -69,8 +69,8 @@ class DesignerOutputCompilesTest {
 
         public class Hero extends AnimatedSprite {
           public Hero() {
-            // scratch4j:begin setup
-            // scratch4j:end setup
+            // begin sprite editor
+            // end sprite editor
           }
         }
         """;

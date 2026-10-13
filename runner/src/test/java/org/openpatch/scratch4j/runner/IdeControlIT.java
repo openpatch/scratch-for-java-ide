@@ -105,7 +105,6 @@ class IdeControlIT {
 
         public class MyStage extends Stage {
           public MyStage() {
-            super(480, 360);
             this.add(new Cat());
           }
         }

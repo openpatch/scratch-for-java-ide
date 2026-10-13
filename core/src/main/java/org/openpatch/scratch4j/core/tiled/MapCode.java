@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * map.stampLayerToBackground("Ground");
  * </pre>
  *
- * written after the stage's managed setup region (or after {@code super(...)}),
+ * written after the stage designer's block in the constructor (or after {@code super(...)}),
  * with the import it needs.
  */
 public final class MapCode {
@@ -26,13 +26,15 @@ public final class MapCode {
     if (source.contains("new TiledMap(\"" + mapPath + "\"")) {
       throw new IllegalArgumentException("This stage already loads " + mapPath);
     }
-    Matcher anchor = Pattern.compile("(?m)^([ \\t]*)// scratch4j:end setup[^\\n]*\\n")
-        .matcher(source);
+    var setup = org.openpatch.scratch4j.core.region.RegionParser.parse(source).stream()
+        .filter(r -> r.id().equals("setup")).findFirst().orElse(null);
     String indent;
     int at;
-    if (anchor.find()) {
-      indent = anchor.group(1);
-      at = anchor.end();
+    if (setup != null) {
+      // after the line that ends the stage designer's block in the constructor
+      indent = setup.indent();
+      int lineEnd = source.indexOf('\n', setup.endOffset());
+      at = lineEnd < 0 ? source.length() : lineEnd + 1;
     } else {
       Matcher superCall = Pattern.compile("(?m)^([ \\t]*)super\\([^;]*\\);[^\\n]*\\n")
           .matcher(source);

@@ -6,16 +6,13 @@ import java.nio.file.Path;
 
 /**
  * Generates new Sprite / AnimatedSprite / UISprite / Stage classes in the
- * library's documentation style: 2-space indent, {@code this.} prefix, a
- * managed {@code setup} region for the designer, Java 17 compatible.
+ * library's documentation style: 2-space indent, {@code this.} prefix, the
+ * block the stage designer or sprite editor owns, Java 17 compatible.
  */
 public final class NewClass {
 
   /** The class kinds offered by the wizard. */
   public enum Kind { STAGE, SPRITE, ANIMATED_SPRITE, UI_SPRITE }
-
-  /** Marker comment the designer owns (same as the templates). */
-  private static final String MANAGED = " (managed by the stage designer)";
 
   private NewClass() {}
 
@@ -42,20 +39,18 @@ public final class NewClass {
 
           public class %s extends Stage {
 
-            // scratch4j:begin fields%s
-            // scratch4j:end fields
+            // begin stage designer
+            // end stage designer
 
             public %s() {
-              super(480, 360);
-
-              // scratch4j:begin setup%s
-              // scratch4j:end setup
+              // begin stage designer
+              // end stage designer
             }
 
             public void run() {
             }
           }
-          """.formatted(name, MANAGED, name, MANAGED);
+          """.formatted(name, name);
       case SPRITE -> """
           import org.openpatch.scratch.Sprite;
 
@@ -64,14 +59,14 @@ public final class NewClass {
             public %s() {
               this.addCostume("bunny1_stand");
 
-              // scratch4j:begin setup%s
-              // scratch4j:end setup
+              // begin sprite editor
+              // end sprite editor
             }
 
             public void run() {
             }
           }
-          """.formatted(name, name, MANAGED);
+          """.formatted(name, name);
       case ANIMATED_SPRITE -> """
           import org.openpatch.scratch.AnimatedSprite;
 
@@ -80,14 +75,14 @@ public final class NewClass {
             public %s() {
               this.addAnimation("idle", "bunny1_walk%%d", 2);
 
-              // scratch4j:begin setup%s
-              // scratch4j:end setup
+              // begin sprite editor
+              // end sprite editor
             }
 
             public void run() {
             }
           }
-          """.formatted(name, name, MANAGED);
+          """.formatted(name, name);
       case UI_SPRITE -> """
           import org.openpatch.scratch.UISprite;
 
@@ -95,16 +90,16 @@ public final class NewClass {
 
             public %s() {
 
-              // scratch4j:begin setup%s
+              // begin sprite editor
               this.setWidth(100);
               this.setHeight(40);
-              // scratch4j:end setup
+              // end sprite editor
             }
 
             public void run() {
             }
           }
-          """.formatted(name, name, MANAGED);
+          """.formatted(name, name);
     };
   }
 }

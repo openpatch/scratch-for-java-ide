@@ -29,11 +29,18 @@ class StageRendererTest {
   }
 
   @Test
-  void aSpriteTheStageDoesNotPlaceStandsWhereItsConstructorPutsIt(@TempDir Path tmp)
+  void aSpriteTheStageDoesNotPlaceStandsWhereThePreviewSawIt(@TempDir Path tmp)
       throws Exception {
     Path root = BundledTemplates.create("red-light-green-light-100", tmp, "race", null);
     var renderer = new StageRenderer(ScratchProject.open(root));
     SpriteRef referee = new SpriteRef("referee", "Referee");
+    // without a preview: in the middle
+    assertThat(renderer.position(referee)).containsExactly(0, 0);
+    // the preview saw its constructor put it at (-250, 110)
+    renderer.setPreview(new org.openpatch.scratch4j.runner.StagePreview.Result(
+        tmp.resolve("frame.png"), "RaceStage", 480, 360, 0, 0, 100, java.util.List.of(
+            new org.openpatch.scratch4j.runner.StagePreview.Sprite("Referee", "referee", -250,
+                110, 40, 40, 90, 45, "referee", true, false, true)), null));
     assertThat(renderer.position(referee)).containsExactly(-250, 110);
     assertThat(renderer.look(referee).size()).isEqualTo(45);
     // the stage's own setPosition comes after the constructor's

@@ -82,7 +82,7 @@ final class StageRenderer {
   /** Defaults a sprite class sets on itself in its constructor. */
   private record ClassDefaults(long modified, String costume, Double size, Double direction,
       RotationStyle style, Map<String, String> costumes, double[] hitbox,
-      double[] rotationCenter, Double width, Double height, int[] nineSlice, double[] start) {}
+      double[] rotationCenter, Double width, Double height, int[] nineSlice) {}
 
   private static final Pattern COSTUME = Pattern.compile("addCostume\\(\\s*\"([^\"]+)\"");
   private static final Pattern COSTUME_WITH_PATH =
@@ -113,14 +113,15 @@ final class StageRenderer {
   }
 
   /**
-   * Where a sprite stands: the stage's own {@code setPosition}, else where its
-   * constructor puts it, as {@code new Referee()} runs before the stage's calls.
+   * Where a sprite stands: the stage's own {@code setPosition}, else where the
+   * preview saw it (its constructor may place it), else in the middle.
    */
   double[] position(SpriteRef ref) {
     if (ref.hasPosition() || ref.isText()) {
       return new double[] {ref.x(), ref.y()};
     }
-    return defaultsOf(ref.type()).start().clone();
+    double[] seen = previewPositions.get(ref.name());
+    return seen == null ? new double[] {0, 0} : seen.clone();
   }
 
   Look look(SpriteRef ref) {
@@ -159,23 +160,19 @@ final class StageRenderer {
 
   // --- Tiled map backdrop and camera (preview of new TiledMap(..., this) / getCamera()) -----
 
-  private static final Pattern CAMERA = Pattern.compile(
-      "getCamera\\(\\)\\.setPosition\\(\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*\\)");
   private org.openpatch.scratch4j.core.assets.TiledMapReader.TiledMap map;
   private final Map<Path, Image> tilesets = new ConcurrentHashMap<>();
   private double cameraX;
   private double cameraY;
-  /** Whether the stage sets its camera to literal numbers (else the preview chooses). */
-  private boolean literalCamera;
   private boolean showMap = true;
 
   private List<Path> mapChoices = List.of();
   private Path chosenMap;
 
   /**
-   * Reads the stage's map and camera position (absent: no map, camera at 0, 0).
-   * A computed map path offers every project map; the designer lets the user
-   * pick which one to preview.
+   * Reads which map the stage loads, for its objects (and, without a preview,
+   * its tiles). A computed map path offers every project map; the designer
+   * lets the user pick one.
    */
   void scan(String stageSource) {
     map = null;
@@ -187,13 +184,6 @@ final class StageRenderer {
       chosenMap = mapChoices.isEmpty() ? null : mapChoices.get(0);
     }
     loadMap();
-    Matcher camera = CAMERA.matcher(stageSource);
-    literalCamera = false;
-    if (camera.find()) {
-      literalCamera = true;
-      cameraX = Double.parseDouble(camera.group(1));
-      cameraY = Double.parseDouble(camera.group(2));
-    }
   }
 
   private void loadMap() {
@@ -217,6 +207,38 @@ final class StageRenderer {
         map = null;
       }
     }
+    readClassNames();
+  }
+
+  /** Reads the project's class names again (a class was added or renamed). */
+  void readClassNames() {
+    java.util.Set<String> names = new java.util.HashSet<>();
+    try (var files = Files.list(project.root())) {
+      files.map(f -> f.getFileName().toString()).filter(f -> f.endsWith(".java"))
+          .forEach(f -> names.add(f.substring(0, f.length() - 5)));
+    } catch (IOException e) {
+      // no sprite looks for map objects
+    }
+    classNames = names;
+  }
+
+  /** The project's class names, as spelled in its file names. */
+  private java.util.Set<String> classNames = java.util.Set.of();
+
+  /**
+   * A map object whose type names one of the project's sprite classes
+   * ({@code Player}, {@code Item}) as that sprite where the library puts the
+   * object ({@code object.x}, {@code object.y}), in the costume named like the
+   * object when the class has one ({@code scroll-fire}). Null for any other
+   * object, and for a class without a costume ({@code Wall}).
+   */
+  SpriteRef mapObjectSprite(org.openpatch.scratch4j.core.tiled.TmxDocument.MapObject o) {
+    if (!classNames.contains(o.type)) return null;
+    SpriteRef ref = new SpriteRef(o.name.isEmpty() ? o.type : o.name, o.type);
+    ref.setPosition(o.x, -o.y);
+    String costume = defaultsOf(o.type).costumes().get(o.name);
+    if (costume != null) ref.costume(costume);
+    return look(ref).image() == null ? null : ref;
   }
 
   private List<org.openpatch.scratch4j.core.tiled.TmxDocument.MapObject> mapObjects = List.of();
@@ -248,6 +270,21 @@ final class StageRenderer {
       double sw = Math.max(0, r[2] - r[0]) * scale;
       double sh = Math.max(0, r[3] - r[1]) * scale;
       Color color = objectColor(o.type);
+      // the preview has the real sprite already; without one, a faded stand-in
+      SpriteRef sprite = previewImage == null ? mapObjectSprite(o) : null;
+      if (sprite != null) {
+        Look look = look(sprite);
+        g.save();
+        g.translate(-cameraX * scale, cameraY * scale);
+        spriteAlpha = 0.4;
+        drawSprite(g, sprite, look, w, h, scale);
+        spriteAlpha = 1;
+        g.restore();
+        double[] box = spriteBounds(o, look);
+        label(g, sprite.name(), color, w / 2 + (box[0] - cameraX) * scale,
+            h / 2 + (box[1] + cameraY) * scale);
+        continue;
+      }
       g.setStroke(color);
       g.setFill(color.deriveColor(0, 1, 1, 0.18));
       switch (o.shape) {
@@ -282,14 +319,32 @@ final class StageRenderer {
       }
       String label = !o.name.isEmpty() ? o.name : o.type;
       if (!label.isEmpty()) {
-        double tw = labelWidth(label);
-        g.setFill(Color.rgb(255, 255, 255, 0.85));
-        g.fillRect(sx, sy - 15, tw + 6, 14);
-        g.setFill(color.darker());
-        g.fillText(label, sx + 3, sy - 4);
+        label(g, label, color, sx, sy);
       }
     }
     g.restore();
+  }
+
+  /** A map object's name on a light tag just above (x, y). */
+  private static void label(GraphicsContext g, String text, Color color, double x, double y) {
+    double tw = labelWidth(text);
+    g.setFill(Color.rgb(255, 255, 255, 0.85));
+    g.fillRect(x, y - 15, tw + 6, 14);
+    g.setFill(color.darker());
+    g.fillText(text, x + 3, y - 4);
+  }
+
+  /** A map object's sprite costume and its size in map pixels (null: drawn as a shape). */
+  Look mapObjectLook(org.openpatch.scratch4j.core.tiled.TmxDocument.MapObject o) {
+    SpriteRef sprite = mapObjectSprite(o);
+    return sprite == null ? null : look(sprite);
+  }
+
+  /** [minX, minY, maxX, maxY] of a map object drawn as a sprite, in map pixels (y down). */
+  static double[] spriteBounds(org.openpatch.scratch4j.core.tiled.TmxDocument.MapObject o,
+      Look look) {
+    return new double[] {o.x - look.width() / 2, o.y - look.height() / 2,
+        o.x + look.width() / 2, o.y + look.height() / 2};
   }
 
   /** [minX, minY, maxX, maxY] of an object in map pixels (y down). */
@@ -325,7 +380,8 @@ final class StageRenderer {
     double my = (canvasY - h / 2) / scale - cameraY;
     for (int i = mapObjects.size() - 1; i >= 0; i--) {
       var o = mapObjects.get(i);
-      double[] r = objectBounds(o);
+      SpriteRef sprite = mapObjectSprite(o);
+      double[] r = sprite == null ? objectBounds(o) : spriteBounds(o, look(sprite));
       double pad = 6 / scale;
       if (mx >= r[0] - pad && mx <= r[2] + pad && my >= r[1] - pad && my <= r[3] + pad) {
         return o;
@@ -362,37 +418,53 @@ final class StageRenderer {
   }
 
   /**
-   * Without a literal camera position, a stage with a map is previewed with the
-   * map's top left corner in the screen's top left corner (TiledMap puts tile
-   * (0, 0) at the stage centre; the game usually moves the camera at runtime).
+   * The camera: where the preview's was; without a preview, a stage with a map
+   * shows the map's top left corner in the screen's top left corner (TiledMap
+   * puts tile (0, 0) at the stage centre).
    */
   void defaultCamera(double stageWidth, double stageHeight) {
-    if (!literalCamera && map != null) {
+    if (preview != null) {
+      cameraX = preview.cameraX();
+      cameraY = preview.cameraY();
+    } else if (map != null) {
       cameraX = stageWidth / 2;
       cameraY = -stageHeight / 2;
-    } else if (!literalCamera) {
+    } else {
       cameraX = 0;
       cameraY = 0;
     }
   }
 
-  /** The size in the project's window class ({@code super(640, 360, ...)}), if any. */
-  java.util.Optional<StageDocument.Dimensions> windowSize() {
+  /**
+   * The window's size, which every stage has: from the preview, else from the
+   * project's window class ({@code super(640, 360, ...)}) or its
+   * {@code new Window(640, 360)}; 480 x 360 when neither says.
+   */
+  int[] windowSize() {
+    if (preview != null && preview.width() > 0) {
+      return new int[] {preview.width(), preview.height()};
+    }
+    Pattern windowClass = Pattern.compile("super\\(\\s*(\\d+)\\s*,\\s*(\\d+)");
+    Pattern newWindow = Pattern.compile("new\\s+Window\\(\\s*(\\d+)\\s*,\\s*(\\d+)");
     try {
       for (String window : project.windowClasses()) {
         Path file = project.sourceOf(window);
         if (file == null) continue;
-        Matcher m = Pattern.compile("super\\(\\s*(\\d+)\\s*,\\s*(\\d+)")
-            .matcher(Files.readString(file, StandardCharsets.UTF_8));
+        Matcher m = windowClass.matcher(Files.readString(file, StandardCharsets.UTF_8));
         if (m.find()) {
-          return java.util.Optional.of(new StageDocument.Dimensions(
-              Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2))));
+          return new int[] {Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2))};
+        }
+      }
+      for (Path file : project.javaSources()) {
+        Matcher m = newWindow.matcher(Files.readString(file, StandardCharsets.UTF_8));
+        if (m.find()) {
+          return new int[] {Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2))};
         }
       }
     } catch (IOException e) {
       // the default size
     }
-    return java.util.Optional.empty();
+    return new int[] {480, 360};
   }
 
   boolean hasMap() {
@@ -607,7 +679,7 @@ final class StageRenderer {
       modified = Files.getLastModifiedTime(file).toMillis();
     } catch (IOException e) {
       return new ClassDefaults(0, null, null, null, RotationStyle.ALL_AROUND,
-          Map.of(), null, null, null, null, null, new double[] {0, 0});
+          Map.of(), null, null, null, null, null);
     }
     ClassDefaults cached = defaults.get(className);
     if (cached != null && cached.modified() == modified) {
@@ -689,8 +761,7 @@ final class StageRenderer {
     }
     ClassDefaults fresh = new ClassDefaults(modified, costume, size, direction,
         style, java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(costumes)),
-        hitbox, rotationCenter, width, height, nineSlice,
-        org.openpatch.scratch4j.core.region.CodeSprites.start(project.root(), className));
+        hitbox, rotationCenter, width, height, nineSlice);
     defaults.put(className, fresh);
     return fresh;
   }
@@ -704,9 +775,88 @@ final class StageRenderer {
     return CostumeView.costume(ref, project.root());
   }
 
+  /** How strongly the next sprite is drawn (stand-ins for map objects are faded). */
+  private double spriteAlpha = 1;
+
+  // --- the preview: the stage as the program draws it (see StagePreview) -------------
+
+  /** A sprite the stage's code makes, where the preview saw it; its picture is the preview's. */
+  record CodeSprite(String type, double x, double y, double width, double height,
+      String costume) {}
+
+  private org.openpatch.scratch4j.runner.StagePreview.Result preview;
+  private Image previewImage;
+  /** Where the preview saw the designer's own sprites (theirs to place when the stage does not). */
+  private Map<String, double[]> previewPositions = Map.of();
+  /** The designer's sprites the preview drew itself (the code decides about them). */
+  private java.util.Set<String> drawnByPreview = java.util.Set.of();
+  private List<CodeSprite> codeSprites = List.of();
+
+  /**
+   * Shows the stage as the program drew it (null: as the designer's blocks
+   * describe it, without what the code adds).
+   */
+  void setPreview(org.openpatch.scratch4j.runner.StagePreview.Result result) {
+    preview = result != null && result.ok() ? result : null;
+    previewImage = null;
+    previewPositions = Map.of();
+    drawnByPreview = java.util.Set.of();
+    codeSprites = List.of();
+    if (preview == null) return;
+    var seen = preview;
+    try (var in = Files.newInputStream(preview.frame())) {
+      previewImage = new Image(in);
+    } catch (IOException | RuntimeException e) {
+      // no picture: where the sprites were is still worth knowing
+      preview = null;
+    }
+    Map<String, double[]> positions = new java.util.HashMap<>();
+    java.util.Set<String> drawn = new java.util.HashSet<>();
+    List<CodeSprite> made = new java.util.ArrayList<>();
+    for (var sprite : seen.sprites()) {
+      if (sprite.field() != null) {
+        positions.put(sprite.field(), new double[] {sprite.x(), sprite.y()});
+        if (!sprite.omitted()) drawn.add(sprite.field());
+      }
+      if (!sprite.omitted() && sprite.visible() && !sprite.ui()) {
+        made.add(new CodeSprite(sprite.type(), sprite.x(), sprite.y(), sprite.width(),
+            sprite.height(), sprite.costume()));
+      }
+    }
+    previewPositions = Map.copyOf(positions);
+    if (preview == null) return;
+    drawnByPreview = java.util.Set.copyOf(drawn);
+    codeSprites = List.copyOf(made);
+  }
+
+  /** Whether the designer shows the program's own picture of the stage. */
+  boolean hasPreview() {
+    return preview != null;
+  }
+
+  /** The sprites the stage's code makes, as the preview saw them (tests, clicks). */
+  List<CodeSprite> codeSprites() {
+    return codeSprites;
+  }
+
+  /** The code sprite under a canvas point, or null. */
+  CodeSprite codeSpriteAt(double canvasX, double canvasY, double w, double h, double scale) {
+    for (int i = codeSprites.size() - 1; i >= 0; i--) {
+      var sprite = codeSprites.get(i);
+      double cx = w / 2 + (sprite.x() - cameraX) * scale;
+      double cy = h / 2 - (sprite.y() - cameraY) * scale;
+      double hw = Math.max(8, sprite.width() * scale / 2);
+      double hh = Math.max(8, sprite.height() * scale / 2);
+      if (Math.abs(canvasX - cx) <= hw && Math.abs(canvasY - cy) <= hh) return sprite;
+    }
+    return null;
+  }
+
   /**
    * Draws the stage into {@code g} at {@code scale} (canvas pixels per stage
-   * unit). Hidden sprites are drawn faintly so they stay selectable.
+   * unit): the preview's picture (else the backdrop and the map), then the
+   * designer's own sprites. Hidden sprites are drawn faintly so they stay
+   * selectable.
    */
   void draw(GraphicsContext g, StageModel model, double scale, boolean grid) {
     stageWidth = model.width();
@@ -714,15 +864,20 @@ final class StageRenderer {
     double h = model.height() * scale;
     g.setFill(Color.WHITE);
     g.fillRect(0, 0, w, h);
-    Image backdrop = backdrop(model);
-    if (backdrop != null) {
-      g.setImageSmoothing(true);
-      g.drawImage(backdrop, 0, 0, w, h);
+    Image backdrop = previewImage != null ? null : backdrop(model);
+    if (previewImage != null) {
+      g.setImageSmoothing(scale < 1);
+      g.drawImage(previewImage, 0, 0, w, h);
+    } else {
+      if (backdrop != null) {
+        g.setImageSmoothing(true);
+        g.drawImage(backdrop, 0, 0, w, h);
+      }
+      drawMap(g, w, h, scale);
     }
-    drawMap(g, w, h, scale);
     if (grid) {
       g.setLineWidth(1);
-      g.setStroke(Color.rgb(0, 0, 0, backdrop == null ? 0.06 : 0.10));
+      g.setStroke(Color.rgb(0, 0, 0, backdrop == null && previewImage == null ? 0.06 : 0.10));
       for (double x = 0; x <= model.width() / 2.0; x += 20) {
         line(g, w / 2 + x * scale, 0, w / 2 + x * scale, h);
         line(g, w / 2 - x * scale, 0, w / 2 - x * scale, h);
@@ -739,7 +894,7 @@ final class StageRenderer {
     g.save();
     g.translate(-cameraX * scale, cameraY * scale);
     for (SpriteRef ref : model.sprites()) {
-      if (!ref.hasPosition() && !ref.isAdded()) {
+      if (!ref.hasPosition() && !ref.isAdded() || drawnByPreview.contains(ref.name())) {
         continue;
       }
       // a UI sprite (setUI(true), UISprite) stays where it is on the screen
@@ -749,86 +904,7 @@ final class StageRenderer {
       g.restore();
     }
     g.restore();
-    drawGhosts(g, w, h, scale);
     drawMapObjects(g, w, h, scale);
-  }
-
-  private List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> ghosts = List.of();
-  private double spriteAlpha = 1;
-  private int ghostLine = -1;
-  /** How strongly ghosts are drawn: faded in the designer, solid in a thumbnail. */
-  private double ghostAlpha = 0.4;
-
-  /** Outlines the ghosts one line of code makes (-1: none); whether that changed. */
-  boolean highlightGhostLine(int line) {
-    boolean changed = ghostLine != line;
-    ghostLine = line;
-    return changed;
-  }
-
-  int highlightedGhostLine() {
-    return ghostLine;
-  }
-
-  /** Sprites the stage's own code adds (worked out without running), drawn faded. */
-  void setGhosts(List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> ghosts) {
-    this.ghosts = List.copyOf(ghosts);
-  }
-
-  List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> ghosts() {
-    return ghosts;
-  }
-
-  private void drawGhosts(GraphicsContext g, double w, double h, double scale) {
-    if (ghosts.isEmpty()) return;
-    g.save();
-    g.translate(-cameraX * scale, cameraY * scale);
-    spriteAlpha = 0.4;
-    for (var ghost : ghosts) {
-      SpriteRef ref = ghostRef(ghost);
-      spriteAlpha = ghost.line() == ghostLine ? Math.max(0.85, ghostAlpha) : ghostAlpha;
-      Look look = look(ref);
-      drawSprite(g, ref, look, w, h, scale);
-      if (ghost.line() == ghostLine) {
-        // the caret's line made this one: outlined like a selection
-        double cx = w / 2 + ghost.x() * scale;
-        double cy = h / 2 - ghost.y() * scale;
-        double hw = Math.max(8, look.width() * scale / 2);
-        double hh = Math.max(8, look.height() * scale / 2);
-        g.setStroke(Color.web("#4c97ff"));
-        g.setLineWidth(1.5);
-        g.setLineDashes(5, 4);
-        g.strokeRect(cx - hw, cy - hh, hw * 2, hh * 2);
-        g.setLineDashes((double[]) null);
-      }
-    }
-    spriteAlpha = 1;
-    g.restore();
-  }
-
-  /** A ghost as a sprite: its class, its place, and its own costume when its arguments set it. */
-  private static SpriteRef ghostRef(org.openpatch.scratch4j.core.region.CodeSprites.Ghost ghost) {
-    SpriteRef ref = new SpriteRef("ghost", ghost.type());
-    ref.setPosition(ghost.x(), ghost.y());
-    if (ghost.costume() != null) {
-      ref.costume(ghost.costume()); // new Racer("ladybug", ...) looks like a ladybug
-    }
-    return ref;
-  }
-
-  /** The ghost under a canvas point, or null. */
-  org.openpatch.scratch4j.core.region.CodeSprites.Ghost ghostAt(double canvasX,
-      double canvasY, double w, double h, double scale) {
-    for (int i = ghosts.size() - 1; i >= 0; i--) {
-      var ghost = ghosts.get(i);
-      Look look = look(ghostRef(ghost));
-      double cx = w / 2 + (ghost.x() - cameraX) * scale;
-      double cy = h / 2 - (ghost.y() - cameraY) * scale;
-      double hw = Math.max(8, look.width() * scale / 2);
-      double hh = Math.max(8, look.height() * scale / 2);
-      if (Math.abs(canvasX - cx) <= hw && Math.abs(canvasY - cy) <= hh) return ghost;
-    }
-    return null;
   }
 
   private static void line(GraphicsContext g, double x1, double y1, double x2, double y2) {
@@ -850,17 +926,20 @@ final class StageRenderer {
     if (look.mirrored()) {
       g.scale(-1, 1);
     }
-    // hidden sprites faintly; a ghost or live overlay keeps its own fading on top
+    // hidden sprites faintly; a faded stand-in keeps its own fading on top
     g.setGlobalAlpha(spriteAlpha * (ref.isVisible() ? 1 : 0.3));
     if (look.isText()) {
       drawText(g, look, dw, dh, scale);
     } else if (look.image() == null) {
-      g.setFill(Color.web("#855cd6", 0.25));
-      g.setStroke(Color.web("#855cd6"));
-      g.fillRoundRect(-dw / 2, -dh / 2, dw, dh, 8, 8);
+      // no costume: invisible in the game (it may draw with its pen), so only a
+      // dashed outline with its name, to find and select it
+      g.setStroke(Color.web("#855cd6", 0.8));
+      g.setLineWidth(1.5);
+      g.setLineDashes(4, 3);
       g.strokeRoundRect(-dw / 2, -dh / 2, dw, dh, 8, 8);
-      g.setFill(Color.web("#3d2a6b"));
-      g.fillText(ref.name(), -dw / 2 + 4, 4);
+      g.setLineDashes((double[]) null);
+      g.setFill(Color.web("#855cd6"));
+      g.fillText(ref.name(), -dw / 2 + 4, -dh / 2 - 4);
     } else if (look.slice() != null) {
       g.setImageSmoothing(scale < 1.5);
       drawNineSlice(g, look, -dw / 2, -dh / 2, scale);
@@ -985,27 +1064,25 @@ final class StageRenderer {
     g.setLineDashes();
   }
 
-  /** A thumbnail of a stage class (the stage selector's cards). */
+  /**
+   * A thumbnail of a stage class (the stage selector's cards): its last
+   * preview with the designer's sprites on it, else what its blocks describe.
+   */
   Image thumbnail(String stageClass, double width) {
     StageModel model;
+    var designerPreview = preview;
     try {
       String source = Files.readString(project.root().resolve(stageClass + ".java"),
           StandardCharsets.UTF_8);
-      // the stage's own map and camera, as the designer shows them
       scan(source);
       model = StageDocument.read(source).model();
-      if (StageDocument.declaredSize(source).isEmpty()) {
-        StageModel sized = model;
-        windowSize().ifPresent(size -> sized.size(size.width(), size.height()));
-      }
+      setPreview(org.openpatch.scratch4j.runner.StagePreview.last(project, stageClass));
+      int[] size = windowSize();
+      model.size(size[0], size[1]);
       defaultCamera(model.width(), model.height());
     } catch (IOException | RuntimeException e) {
       model = StageModel.create();
     }
-    // sprites the stage's code adds are part of what it looks like
-    List<org.openpatch.scratch4j.core.region.CodeSprites.Ghost> designerGhosts = ghosts;
-    ghosts = org.openpatch.scratch4j.core.region.CodeSprites.of(project.root(), stageClass);
-    ghostAlpha = 1;
     try {
       double scale = width / model.width();
       Canvas canvas = new Canvas(width, model.height() * scale);
@@ -1014,8 +1091,7 @@ final class StageRenderer {
       params.setFill(Color.TRANSPARENT);
       return canvas.snapshot(params, null);
     } finally {
-      ghosts = designerGhosts;
-      ghostAlpha = 0.4;
+      setPreview(designerPreview);
     }
   }
 }

@@ -1,118 +1,147 @@
 package org.openpatch.scratch4j.core.region;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
-import java.util.regex.Matcher;
+import java.util.Set;
 import java.util.regex.Pattern;
 import javax.lang.model.SourceVersion;
 
 /**
- * One stage class as the designer sees it: the {@code fields} and
- * {@code setup} regions hold the model; everything else in the file is
- * untouchable. Read and write round-trip losslessly for canonical bodies;
- * bodies outside the designer's subset make the document
- * {@link #isDesignerEditable() not designer-editable} (read-only) instead of
- * destroying user code.
+ * One stage class as the designer sees it: the stage designer's blocks hold
+ * the model; everything else in the file is untouchable.
+ *
+ * <p>A statement in a block that the designer does not write (see
+ * {@link RegionStatements}) stays as it is. It is {@linkplain #foreign()
+ * foreign}, and the sprites it touches are {@linkplain #codeOwnedSprites()
+ * left to the code}: the designer shows them but does not change them. Only
+ * Java that does not parse makes the whole stage unreadable.
  */
 public final class StageDocument {
 
-  private static final Pattern SUPER_SIZE =
-      Pattern.compile("super\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
+  /** Field types that are values, not sprites. */
+  private static final Pattern VALUE_TYPE = Pattern.compile(
+      "byte|short|int|long|float|double|boolean|char|(?:java\\.lang\\.)?(?:String|Byte|Short"
+          + "|Integer|Long|Float|Double|Boolean|Character)");
+
+  /** A statement in a block that the designer leaves to the code: its line in the file. */
+  public record Foreign(int line, String statement) {}
 
   private final String source;
   private final StageModel model;
+  private final StageModel original;
+  private final Set<String> codeOwned;
+  private final List<Foreign> foreign;
 
-  public record Dimensions(int width, int height) {}
-
-  private StageDocument(String source, StageModel model) {
+  private StageDocument(String source, StageModel model, Set<String> codeOwned,
+      List<Foreign> foreign) {
     this.source = source;
     this.model = model;
+    this.original = copy(model);
+    this.codeOwned = Set.copyOf(codeOwned);
+    this.foreign = List.copyOf(foreign);
   }
 
-  /** Parses a stage class source; throws on regions outside the subset. */
+  private static StageModel copy(StageModel model) {
+    StageModel copy = StageModel.create();
+    copy.size(model.width(), model.height());
+    copy.backdrops().addAll(model.backdrops());
+    copy.sounds().addAll(model.sounds());
+    model.sprites().forEach(ref -> copy.addSprite(ref.copy()));
+    return copy;
+  }
+
+  /**
+   * Reads a stage class.
+   *
+   * @throws RegionParser.RegionParseException when the markers do not pair up
+   * @throws RegionStatements.UnsupportedRegionException when a block is not
+   *     finished Java
+   */
   public static StageDocument read(String source) {
     StageModel model = StageModel.create();
-    declaredSize(source).ifPresent(size -> model.size(size.width(), size.height()));
-    List<Region> regions = RegionParser.parse(source);
+    var regions = RegionParser.parse(source);
+    Set<String> codeOwned = new HashSet<>();
+    List<Foreign> foreign = new ArrayList<>();
     Region fields = find(regions, "fields");
-    Region setup = find(regions, "setup");
-    if (fields != null) {
-      RegionStatements.parseFields(fields.body(), model);
+    if (fields != null) for (var statement : JavaFragment.statements(fields.body(), true)) {
+      if (!RegionStatements.readField(statement.tree(), model)) {
+        foreign.add(foreign(source, fields, statement));
+        if (statement.tree() instanceof com.sun.source.tree.VariableTree variable) {
+          String name = variable.getName().toString();
+          if (model.sprites().byName(name) == null) {
+            model.addSprite(new SpriteRef(name, variable.getType().toString()));
+          }
+          codeOwned.add(name);
+        }
+      }
     }
-    RegionStatements.parseSetup(setup == null ? "" : setup.body(), model);
-    return new StageDocument(source, model);
+    Region setup = find(regions, "setup");
+    // the layer order is the add order (front: added last), not the fields' order
+    List<String> addOrder = new ArrayList<>();
+    if (setup != null) for (var statement : JavaFragment.statements(setup.body(), false)) {
+      String key = StageRegionEdit.key(statement.tree(), false);
+      if (key != null && key.endsWith("/add")) addOrder.add(key.substring(0, key.length() - 4));
+      if (!RegionStatements.readSetup(statement, model)) {
+        foreign.add(foreign(source, setup, statement));
+        // every sprite the statement mentions is the code's from now on
+        new com.sun.source.util.TreeScanner<Void, Void>() {
+          @Override public Void visitIdentifier(com.sun.source.tree.IdentifierTree identifier,
+              Void unused) {
+            if (model.sprites().byName(identifier.getName().toString()) != null) {
+              codeOwned.add(identifier.getName().toString());
+            }
+            return super.visitIdentifier(identifier, unused);
+          }
+
+          @Override public Void visitMemberSelect(com.sun.source.tree.MemberSelectTree member,
+              Void unused) {
+            String name = RegionStatements.name(member);
+            if (name != null && model.sprites().byName(name) != null) codeOwned.add(name);
+            return super.visitMemberSelect(member, unused);
+          }
+        }.scan(statement.tree(), null);
+      }
+    }
+    List<SpriteRef> declared = List.copyOf(model.sprites());
+    model.sprites().sort(java.util.Comparator.comparingInt(ref -> {
+      int added = addOrder.indexOf(ref.name());
+      return added >= 0 ? added : addOrder.size() + declared.indexOf(ref);
+    }));
+    for (SpriteRef ref : List.copyOf(model.sprites())) {
+      if (VALUE_TYPE.matcher(ref.type()).matches()) {
+        // int score; String name; are no sprites: the code keeps them as they are
+        model.sprites().remove(ref);
+        codeOwned.remove(ref.name());
+      } else if (!ref.isAdded() || !ref.isInstantiated()) {
+        codeOwned.add(ref.name());
+      }
+    }
+    return new StageDocument(source, model, codeOwned, foreign);
   }
 
-  /** Reads a literal {@code super(width, height)} even if designer regions are unsupported. */
-  public static Optional<Dimensions> declaredSize(String source) {
-    Matcher size = SUPER_SIZE.matcher(source);
-    return size.find()
-        ? Optional.of(new Dimensions(Integer.parseInt(size.group(1)),
-            Integer.parseInt(size.group(2))))
-        : Optional.empty();
+  private static Foreign foreign(String source, Region region, JavaFragment.Statement statement) {
+    int line = lineOf(source, region.beginOffset()) + statement.line() - 1;
+    return new Foreign(line, statement.source().strip());
+  }
+
+  /** Whether the designer may change this sprite (not left to the code). */
+  public boolean isSpriteEditable(String name) {
+    return !codeOwned.contains(name);
+  }
+
+  /** The sprites the code decides about: the designer shows them, and leaves them be. */
+  public Set<String> codeOwnedSprites() {
+    return codeOwned;
+  }
+
+  /** The statements in the blocks that the designer leaves to the code. */
+  public List<Foreign> foreign() {
+    return foreign;
   }
 
   private static Region find(List<Region> regions, String id) {
     return regions.stream().filter(r -> r.id().equals(id)).findFirst().orElse(null);
-  }
-
-  /** True when the regions parse into the designer subset (this read succeeded). */
-  public static boolean isDesignerEditable(String source) {
-    try {
-      read(source);
-      return true;
-    } catch (RuntimeException e) {
-      return false;
-    }
-  }
-
-  /** Why the designer cannot read a stage's regions: the line (1-based, in the file) and why. */
-  public record RegionIssue(int line, String statement, String message) {}
-
-  private static final Pattern REGION_LINE =
-      Pattern.compile("^(fields|setup) line (\\d+)(?::| is)\\s*(.*)$");
-  private static final Pattern UNADDED =
-      Pattern.compile("^sprite (\\w+) is declared but not instantiated and added$");
-  private static final Pattern DUPLICATE = Pattern.compile("^duplicate sprite name: (\\w+)$");
-
-  /** The line that makes the designer read-only (null: the regions are readable or absent). */
-  public static RegionIssue regionIssue(String source) {
-    try {
-      read(source);
-      return null;
-    } catch (RegionStatements.UnsupportedRegionException e) {
-      String message = e.getMessage() == null ? "" : e.getMessage();
-      String[] lines = source.split("\n", -1);
-      Matcher m = REGION_LINE.matcher(message);
-      if (m.matches()) {
-        Region region = RegionParser.find(source, m.group(1));
-        int first = lineOf(source, region.beginOffset());
-        int line = first + Integer.parseInt(m.group(2)) - 1;
-        String statement = line >= 1 && line <= lines.length ? lines[line - 1].strip() : "";
-        return new RegionIssue(line, statement, m.group(3));
-      }
-      Matcher unadded = UNADDED.matcher(message);
-      Matcher duplicate = DUPLICATE.matcher(message);
-      String name = unadded.matches() ? unadded.group(1)
-          : duplicate.matches() ? duplicate.group(1) : null;
-      if (name != null && RegionParser.has(source, "fields")) {
-        // the field declaration of that sprite (the last one for a duplicate)
-        Region fields = RegionParser.find(source, "fields");
-        int first = lineOf(source, fields.beginOffset());
-        String[] body = source.substring(fields.beginOffset(), fields.endOffset())
-            .split("\n", -1);
-        int found = -1;
-        for (int i = 0; i < body.length; i++) {
-          if (body[i].matches("\\s*\\w+\\s+" + Pattern.quote(name) + "\\s*;\\s*")) {
-            found = first + i;
-          }
-        }
-        if (found > 0) return new RegionIssue(found, lines[found - 1].strip(), message);
-      }
-      return new RegionIssue(0, "", message);
-    } catch (RuntimeException e) {
-      return null;
-    }
   }
 
   /** Line (1-based) of an offset. */
@@ -122,31 +151,6 @@ public final class StageDocument {
       if (source.charAt(i) == '\n') line++;
     }
     return line;
-  }
-
-  /**
-   * Moves one statement (1-based {@code line}) of a designer region to just
-   * below the region, where it stays the student's own code; the designer can
-   * read the region again (when nothing else in it is foreign).
-   */
-  public static String moveOutOfRegion(String source, int line) {
-    String[] lines = source.split("\n", -1);
-    if (line < 1 || line > lines.length) {
-      throw new IllegalArgumentException("No line " + line);
-    }
-    for (Region region : RegionParser.parse(source)) {
-      int first = lineOf(source, region.beginOffset());
-      int last = lineOf(source, region.endOffset()) - 1;
-      if (line < first || line > last) continue;
-      // the end marker's line comes right after the body
-      int endMarker = last + 1;
-      java.util.List<String> out = new java.util.ArrayList<>(java.util.Arrays.asList(lines));
-      String moved = out.remove(line - 1);
-      endMarker -= 1;
-      out.add(endMarker, moved);
-      return String.join("\n", out);
-    }
-    throw new IllegalArgumentException("Line " + line + " is not in a designer region");
   }
 
   public StageModel model() {
@@ -184,35 +188,35 @@ public final class StageDocument {
   }
 
   /**
-   * Serializes the model back into the regions (and keeps {@code super(w, h)}
-   * in sync with the model's size — that one line is the stage's size
-   * declaration, which the designer owns). The fields region must exist when
-   * the model has sprites (the templates create it). Returns the new source
-   * text; nothing is written to disk here.
+   * Writes the model back into the blocks, changing only what the model
+   * changed. Returns the new source text; nothing is written to disk here.
    */
   public String write(StageModel updated) {
+    return writeOn(source, updated);
+  }
+
+  /** Applies only this visual edit's changed values to the latest code editor text. */
+  public String writeOn(String latestSource, StageModel updated) {
+    StageDocument latest = read(latestSource);
+    for (SpriteRef old : original.sprites()) {
+      SpriteRef changed = updated.sprites().byName(old.name());
+      if (!java.util.Objects.equals(old, changed)
+          && (!isSpriteEditable(old.name()) || !latest.isSpriteEditable(old.name()))) {
+        throw new IllegalArgumentException(old.name() + " is controlled by its Java code");
+      }
+    }
     // a stage written by hand gets its regions with the first designer edit
-    String result = DesignerRegions.ensureStage(source);
+    String result = DesignerRegions.ensureStage(latestSource);
     if (!updated.sprites().isEmpty()) {
       if (!RegionParser.has(result, "fields")) {
         throw new RegionStatements.UnsupportedRegionException(
             "stage class has no fields region for its sprites");
       }
-      Region fields = RegionParser.find(result, "fields");
-      result = RegionParser.rewrite(result, "fields",
-          RegionStatements.generateFields(updated, fields.indent()));
+      result = StageRegionEdit.rewrite(result, "fields", original, updated, latest.model());
     } else if (RegionParser.has(result, "fields")) {
-      Region fields = RegionParser.find(result, "fields");
-      result = RegionParser.rewrite(result, "fields",
-          RegionStatements.generateFields(updated, fields.indent()));
+      result = StageRegionEdit.rewrite(result, "fields", original, updated, latest.model());
     }
-    Region setup = RegionParser.find(result, "setup");
-    result = RegionParser.rewrite(result, "setup",
-        RegionStatements.generateSetup(updated, setup.indent()));
-    Matcher size = SUPER_SIZE.matcher(result);
-    if (size.find()) {
-      result = size.replaceFirst("super(" + updated.width() + ", " + updated.height() + ")");
-    }
+    result = StageRegionEdit.rewrite(result, "setup", original, updated, latest.model());
     boolean texts = updated.sprites().stream().anyMatch(SpriteRef::isText);
     boolean styles = updated.sprites().stream()
         .anyMatch(r -> r.isText() && r.textStyle() != null && r.textStyle().startsWith("TextStyle."));

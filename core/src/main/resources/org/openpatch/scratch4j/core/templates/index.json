@@ -500,9 +500,7 @@
       "assets/TilesetWater.png",
       "save.json"
     ],
-    "requiredSheets": [
-      "platformer"
-    ]
+    "requiredSheets": []
   },
   {
     "id": "demo-timedDot",

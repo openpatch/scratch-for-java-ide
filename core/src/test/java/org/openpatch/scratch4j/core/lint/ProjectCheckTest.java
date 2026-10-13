@@ -25,22 +25,16 @@ class ProjectCheckTest {
   }
 
   @Test
-  void aForeignLineInTheDesignerRegionIsReportedWithItsFix() throws IOException {
+  void ownCodeInTheDesignersBlockIsNoProblem() throws IOException {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "region", libraryJar());
     Path stage = tmp.resolve("region/MyStage.java");
     String source = Files.readString(stage);
-    int at = source.indexOf("// scratch4j:end setup");
-    String foreign = source.substring(0, at) + "this.setTint(60);\n    "
-        + source.substring(at);
-    Files.writeString(stage, foreign);
-    var problems = ProjectCheck.check(ScratchProject.open(tmp.resolve("region")),
-        DiagnosticsExplanations.Language.EN);
-    var region = problems.stream()
-        .filter(p -> ProjectCheck.FIX_MOVE_OUT_OF_REGION.equals(p.fix())).toList();
-    assertThat(region).hasSize(1);
-    int line = foreign.lines().toList().indexOf("    this.setTint(60);") + 1;
-    assertThat(region.get(0).line()).isEqualTo(line);
-    assertThat(region.get(0).error()).isFalse();
+    // the block in the constructor, after the one with the fields
+    int at = source.indexOf("// end stage designer", source.indexOf("public MyStage()"));
+    String own = source.substring(0, at) + "this.setTint(60);\n    " + source.substring(at);
+    Files.writeString(stage, own);
+    assertThat(ProjectCheck.check(ScratchProject.open(tmp.resolve("region")),
+        DiagnosticsExplanations.Language.EN)).isEmpty();
   }
 
   @Test
@@ -53,7 +47,6 @@ class ProjectCheckTest {
         public class MyStage extends Stage {
 
           public MyStage() {
-            super(480, 360);
             int x =
           }
         }

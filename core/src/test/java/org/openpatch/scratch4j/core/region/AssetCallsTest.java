@@ -118,10 +118,10 @@ class AssetCallsTest {
     String sprite = """
         public class Cat extends Sprite {
           public Cat() {
-            // scratch4j:begin setup
+            // begin sprite editor
             this.addCostume("cat_a");
             this.addCostume("cat_b");
-            // scratch4j:end setup
+            // end sprite editor
           }
         }
         """;
@@ -136,11 +136,11 @@ class AssetCallsTest {
     String sprite = """
         public class Hero extends AnimatedSprite {
           public Hero() {
-            // scratch4j:begin setup
+            // begin sprite editor
             this.addCostume("idle", "assets/hero.png", 32, 0, 32, 32);
             this.addAnimation("walk", "assets/hero.png", 4, 32, 32, 1);
             this.addSound("jump");
-            // scratch4j:end setup
+            // end sprite editor
           }
         }
         """;

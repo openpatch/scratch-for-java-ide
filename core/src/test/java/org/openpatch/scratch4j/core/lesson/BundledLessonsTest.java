@@ -95,15 +95,15 @@ class BundledLessonsTest {
         List.of(run())));
     walks.put("bouncy-hedgehog", List.of(
         List.of(run()),
-        List.of(edit("HedgehogSprite.java", "this.move(1);", "this.move(3);")),
+        List.of(edit("HedgehogSprite.java", "this.move(2);", "this.move(4);")),
         List.of(edit("TrampolineSprite.java", "this.changeX(-10);", "this.changeX(-20);"),
             edit("TrampolineSprite.java", "this.changeX(10);", "this.changeX(20);")),
         List.of(run()),
         List.of(after("HedgehogSprite.java",
-            "        this.pointInDirection(Random.random(-45, 45));\n")),
+            "        this.setDirection(Random.randomInt(-45, 45));\n")),
         // the method below run(), and the import the light bulb adds
-        List.of(edit("HedgehogSprite.java", "      this.say(\"Ouch!\", 2000);\n    }\n  }\n",
-                "      this.say(\"Ouch!\", 2000);\n    }\n  }\n\n" + CODE + "\n"),
+        List.of(edit("HedgehogSprite.java", "      this.say(\"Ouch!\");\n    }\n  }\n",
+                "      this.say(\"Ouch!\");\n    }\n  }\n\n" + CODE + "\n"),
             edit("HedgehogSprite.java", "import org.openpatch.scratch.Random;\n",
                 "import org.openpatch.scratch.Random;\nimport org.openpatch.scratch.KeyCode;\n")),
         List.of(run())));

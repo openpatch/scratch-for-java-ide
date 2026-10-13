@@ -12,30 +12,56 @@ class RegionParserTest {
   // A representative stage with managed regions.
   private static final String SAMPLE = """
       public class MyStage extends Stage {
-        // scratch4j:begin fields  (managed by the stage designer)
+        // begin stage designer
         Player player;
-        // scratch4j:end fields
+        // end stage designer
 
         public MyStage() {
-          super(480, 360);
-          // scratch4j:begin setup  (managed by the stage designer)
+          // begin stage designer
           this.addBackdrop("background");
           player = new Player();
           player.setPosition(-120, 40);
           player.setDirection(90);
           player.setSize(80);
           this.add(player);
-          // scratch4j:end setup
+          // end stage designer
         }
       }
       """;
 
   @Test
-  void findsRegionsWithTrailingMarkerProse() {
+  void aBlockIsNamedByWhereItStands() {
     List<Region> regions = RegionParser.parse(SAMPLE);
     assertThat(regions).extracting(Region::id).containsExactly("fields", "setup");
+    assertThat(regions).extracting(Region::editor)
+        .containsOnly(RegionParser.STAGE_DESIGNER);
     assertThat(RegionParser.find(SAMPLE, "fields").body())
         .isEqualTo("  Player player;\n");
+  }
+
+  @Test
+  void theProjectSettingsHaveABlockInTheWindowAndOneInMain() {
+    String window = """
+        public class MyWindow extends Window {
+          public MyWindow() {
+            super(480, 360);
+            // begin project settings
+            this.setStage(new MyStage());
+            // end project settings
+          }
+
+          public static void main(String[] args) {
+            String s = "{ not a brace }";
+            // begin project settings
+            Window.useFullScreen();
+            // end project settings
+            new MyWindow();
+          }
+        }
+        """;
+    assertThat(RegionParser.parse(window)).extracting(Region::id)
+        .containsExactly("window", "options");
+    assertThat(RegionParser.find(window, "options").body()).contains("useFullScreen");
   }
 
   @Test
@@ -60,7 +86,7 @@ class RegionParserTest {
   @Test
   void rewriteAppendsMissingTrailingNewline() {
     String rewritten = RegionParser.rewrite(SAMPLE, "fields", "Enemy enemy;");
-    assertThat(rewritten).contains("Enemy enemy;\n  // scratch4j:end fields");
+    assertThat(rewritten).contains("Enemy enemy;\n  // end stage designer");
   }
 
   @Test
@@ -68,55 +94,74 @@ class RegionParserTest {
     String empty = """
         public class Player extends Sprite {
           public Player() {
-            // scratch4j:begin setup (managed by the stage designer)
-            // scratch4j:end setup
+            // begin sprite editor
+            // end sprite editor
           }
         }
         """;
     Region region = RegionParser.find(empty, "setup");
     assertThat(region.body()).isEmpty();
+    assertThat(region.editor()).isEqualTo(RegionParser.SPRITE_EDITOR);
     assertThat(RegionParser.rewrite(empty, "setup", region.body())).isEqualTo(empty);
     assertThat(RegionParser.rewrite(empty, "setup", "    this.setSize(50);\n"))
-        .contains("this.setSize(50);\n    // scratch4j:end setup");
+        .contains("this.setSize(50);\n    // end sprite editor");
+  }
+
+  @Test
+  void windowsLineEndingsParse() {
+    String crlf = SAMPLE.replace("\n", "\r\n");
+    assertThat(RegionParser.parse(crlf)).extracting(Region::id).containsExactly("fields", "setup");
+    assertThat(RegionParser.rewrite(crlf, "setup", RegionParser.find(crlf, "setup").body()))
+        .isEqualTo(crlf);
   }
 
   @Test
   void rejectsMissingEndMarker() {
     assertThatThrownBy(() -> RegionParser.parse("""
-        // scratch4j:begin fields
+        // begin stage designer
         int x;
         """))
         .isInstanceOf(RegionParser.RegionParseException.class)
-        .hasMessageContaining("fields");
+        .hasMessageContaining("// end stage designer");
   }
 
   @Test
   void rejectsMismatchedEndMarker() {
     assertThatThrownBy(() -> RegionParser.parse("""
-        // scratch4j:begin fields
-        // scratch4j:end setup
+        // begin stage designer
+        // end sprite editor
         """))
         .isInstanceOf(RegionParser.RegionParseException.class)
-        .hasMessageContaining("fields");
+        .hasMessageContaining("sprite editor");
   }
 
   @Test
-  void rejectsDuplicateIds() {
+  void rejectsTwoBlocksInTheSamePlace() {
     assertThatThrownBy(() -> RegionParser.parse("""
-        // scratch4j:begin a
-        // scratch4j:end a
-        // scratch4j:begin a
-        // scratch4j:end a
+        class A extends Sprite {
+          A() {
+            // begin sprite editor
+            // end sprite editor
+            // begin sprite editor
+            // end sprite editor
+          }
+        }
         """))
         .isInstanceOf(RegionParser.RegionParseException.class)
-        .hasMessageContaining("Duplicate");
+        .hasMessageContaining("second");
   }
 
   @Test
   void rejectsMarkersInsideANewBody() {
     assertThatThrownBy(() -> RegionParser.rewrite(SAMPLE, "setup",
-        "// scratch4j:begin other\n"))
+        "// begin sprite editor\n"))
         .isInstanceOf(RegionParser.RegionParseException.class);
+  }
+
+  @Test
+  void otherCommentsAreNoMarkers() {
+    String plain = "class A {\n  // begin the game\n  // end of story\n}\n";
+    assertThat(RegionParser.parse(plain)).isEmpty();
   }
 
   @Test

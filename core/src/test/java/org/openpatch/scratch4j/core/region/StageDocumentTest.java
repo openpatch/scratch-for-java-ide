@@ -13,39 +13,45 @@ class StageDocumentTest {
   /** A representative stage with managed regions. */
   private static final String PLAN_SAMPLE = """
       public class MyStage extends Stage {
-        // scratch4j:begin fields  (managed by the stage designer)
+        // begin stage designer
         Player player;
-        // scratch4j:end fields
+        // end stage designer
 
         public MyStage() {
-          super(480, 360);
-          // scratch4j:begin setup  (managed by the stage designer)
+          // begin stage designer
           this.addBackdrop("background");
           player = new Player();
           player.setPosition(-120, 40);
           player.setDirection(90);
           player.setSize(80);
           this.add(player);
-          // scratch4j:end setup
+          // end stage designer
         }
       }
       """;
 
   @Test
-  void sizeCanBeReadWhenDesignerRegionsAreNotEditable() {
+  void codeTheDesignerDoesNotWriteStaysAndIsReported() {
     String source = """
         class Level extends Stage {
           Level() {
-            super(800, 600);
-            // scratch4j:begin setup
+            // begin stage designer
             helper();
-            // scratch4j:end setup
+            // end stage designer
           }
         }
         """;
-    assertThat(StageDocument.isDesignerEditable(source)).isFalse();
-    assertThat(StageDocument.declaredSize(source))
-        .contains(new StageDocument.Dimensions(800, 600));
+    StageDocument document = StageDocument.read(source);
+    assertThat(document.foreign()).extracting(StageDocument.Foreign::statement)
+        .containsExactly("helper();");
+    assertThat(document.foreign().get(0).line()).isEqualTo(4);
+  }
+
+  @Test
+  void unfinishedJavaCannotBeRead() {
+    String source = PLAN_SAMPLE.replace("this.add(player);", "this.add(player");
+    assertThatThrownBy(() -> StageDocument.read(source))
+        .isInstanceOf(RegionStatements.UnsupportedRegionException.class);
   }
 
   @Test
@@ -167,15 +173,14 @@ class StageDocumentTest {
 
         public class MyStage extends Stage {
 
-          // scratch4j:begin fields (managed by the stage designer)
-          // scratch4j:end fields
+          // begin stage designer
+          // end stage designer
 
           public MyStage() {
-            super(480, 360);
-            this.addBackdrop("background");
+              this.addBackdrop("background");
 
-            // scratch4j:begin setup (managed by the stage designer)
-            // scratch4j:end setup
+            // begin stage designer
+            // end stage designer
           }
 
           public void run() {
@@ -198,18 +203,17 @@ class StageDocumentTest {
 
         public class MyStage extends Stage {
 
-          // scratch4j:begin fields (managed by the stage designer)
+          // begin stage designer
           Player player;
-          // scratch4j:end fields
+          // end stage designer
 
           public MyStage() {
-            super(480, 360);
-
-            // scratch4j:begin setup (managed by the stage designer)
+  
+            // begin stage designer
             this.addBackdrop("background");
             player = new Player();
             this.add(player);
-            // scratch4j:end setup
+            // end stage designer
           }
 
           public void run() {
@@ -228,7 +232,6 @@ class StageDocumentTest {
   @Test
   void modelSurvivesWriteThenRead() {
     StageModel model = StageModel.create();
-    model.size(800, 600);
     model.addBackdrop(new StageModel.Backdrop("background", null));
     model.addBackdrop(new StageModel.Backdrop("desert", "assets/desert.png"));
     SpriteRef enemy = new SpriteRef("enemy1", "Enemy");
@@ -262,7 +265,6 @@ class StageDocumentTest {
         .contains("player.setPosition(10, -20);")
         .doesNotContain("player.setDirection(90);")
         .doesNotContain("player.setSize(80);")
-        .contains("super(480, 360);")
         .contains("public MyStage() {");
   }
 
@@ -281,34 +283,49 @@ class StageDocumentTest {
   }
 
   @Test
-  void statementsOutsideTheSubsetGoReadOnly() {
+  void commentsInTheRegionsAreKeptNotRejected() {
     String commented = PLAN_SAMPLE.replace("player = new Player();",
         "player = new Player(); // hand note");
-    assertThat(StageDocument.isDesignerEditable(commented)).isFalse();
-    assertThatThrownBy(() -> StageDocument.read(commented))
-        .isInstanceOf(RegionStatements.UnsupportedRegionException.class);
+    StageDocument document = StageDocument.read(commented);
+    assertThat(document.foreign()).isEmpty();
+    StageModel moved = document.model();
+    moved.sprites().byName("player").setPosition(0, 0);
+    assertThat(document.write(moved)).contains("player = new Player(); // hand note")
+        .contains("player.setPosition(0, 0);");
+  }
 
+  /** Whether the designer leaves the sprite to the code in that source. */
+  private static boolean leftToCode(String source, String sprite) {
+    return !StageDocument.read(source).isSpriteEditable(sprite);
+  }
+
+  @Test
+  void aSpriteTheCodeChangesIsLeftToTheCode() {
     String foreign = PLAN_SAMPLE.replace("player.setSize(80);",
         "player.setColor(255, 0, 0);");
-    assertThat(StageDocument.isDesignerEditable(foreign)).isFalse();
+    assertThat(leftToCode(foreign, "player")).isTrue();
+    assertThat(StageDocument.read(foreign).foreign()).hasSize(1);
   }
 
   @Test
-  void declaredButNeverAddedSpritesGoReadOnly() {
+  void aSpriteThatIsNeverAddedIsLeftToTheCode() {
     String incomplete = PLAN_SAMPLE.replace("this.add(player);", "");
-    assertThat(StageDocument.isDesignerEditable(incomplete)).isFalse();
+    assertThat(leftToCode(incomplete, "player")).isTrue();
   }
 
   @Test
-  void referencesToUnknownSpritesGoReadOnly() {
+  void callsOnUnknownSpritesAreTheCodes() {
     String unknown = PLAN_SAMPLE.replace("player.setDirection(90);", "ghost.setDirection(90);");
-    assertThat(StageDocument.isDesignerEditable(unknown)).isFalse();
+    StageDocument document = StageDocument.read(unknown);
+    assertThat(document.foreign()).extracting(StageDocument.Foreign::statement)
+        .containsExactly("ghost.setDirection(90);");
+    assertThat(document.isSpriteEditable("player")).isTrue();
   }
 
   @Test
   void newTypeMustMatchTheField() {
     String mismatch = PLAN_SAMPLE.replace("player = new Player();", "player = new Enemy();");
-    assertThat(StageDocument.isDesignerEditable(mismatch)).isFalse();
+    assertThat(leftToCode(mismatch, "player")).isTrue();
   }
 
   @Test
@@ -374,13 +391,13 @@ class StageDocumentTest {
     String bare = PLAN_SAMPLE.replace("Player player;", "Player player;\n  Text t;")
         .replace("    this.add(player);\n",
             "    this.add(player);\n    t = new Text();\n    this.add(t);\n");
-    assertThat(StageDocument.isDesignerEditable(bare)).isFalse();
+    assertThat(leftToCode(bare, "t")).isTrue();
   }
 
   @Test
   void textConstructorOnASpriteFieldIsNotEditable() {
     String bad = PLAN_SAMPLE.replace("player = new Player();",
         "player = new Text(\"x\", 0, 0, 0);");
-    assertThat(StageDocument.isDesignerEditable(bad)).isFalse();
+    assertThat(leftToCode(bad, "player")).isTrue();
   }
 }

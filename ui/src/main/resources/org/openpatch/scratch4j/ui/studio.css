@@ -1318,3 +1318,16 @@
   -fx-text-fill: -s-run;
   -fx-font-weight: bold;
 }
+
+/* the visual editors' blocks in the code: // begin stage designer ... // end stage designer */
+.code-area .region-line {
+  -fx-background-color: -color-accent-subtle;
+}
+.code-area .region-marker {
+  -fx-background-color: -color-accent-subtle;
+  -fx-opacity: 0.7;
+}
+.code-area .region-own {
+  -fx-background-color: rgba(232, 163, 23, 0.16);
+}
+.gutter-region .ikonli-font-icon { -fx-icon-color: -color-accent-emphasis; }

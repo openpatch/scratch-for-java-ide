@@ -3,19 +3,18 @@ import org.openpatch.scratch.*;
 
 public class Pipes extends Stage {
 
-  // scratch4j:begin fields (managed by the stage designer)
+  // begin stage designer
   private PenSprite penSprite;
-  // scratch4j:end fields
+  // end stage designer
 
   public Pipes() {
-    super(1280, 800);
     this.setTint(60);
-    // scratch4j:begin setup (managed by the stage designer)
+    // begin stage designer
     this.addBackdrop("chalkBoard", "backdrops/chalk_board.jpg");
     this.addSound("bg", "sounds/bensound-enigmatic.ogg");
     penSprite = new PenSprite();
     this.add(penSprite);
-    // scratch4j:end setup
+    // end stage designer
   }
 
   public void whenKeyPressed(KeyCode keyCode) {
@@ -38,6 +37,7 @@ public class Pipes extends Stage {
   }
 
   public static void main(String[] args) {
-    new Pipes();
+    Window myWindow = new Window(1280, 800);
+    myWindow.setStage(new Pipes());
   }
 }

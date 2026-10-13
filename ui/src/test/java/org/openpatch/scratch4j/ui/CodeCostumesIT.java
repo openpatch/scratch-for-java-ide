@@ -25,10 +25,11 @@ class CodeCostumesIT {
   @Test
   void racersLookLikeTheirCreaturesInTheDesignerAndTheSpriteEditor() throws Exception {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
+    System.setProperty("scratch4j.preview", "true");
     I18n.set(I18n.Language.EN);
     Path race = BundledTemplates.create("red-light-green-light-100", tmp, "race",
-        org.openpatch.scratch4j.core.project.NewProject.classpathJar(
-            org.openpatch.scratch.internal.BuiltinAssets.class));
+        org.openpatch.scratch4j.runner.LibraryJarSource.allJar(
+            Path.of(System.getProperty("user.dir"), "target", "bundled")));
     startFx();
     AtomicReference<StudioApp> app = new AtomicReference<>();
     AtomicReference<javafx.stage.Stage> window = new AtomicReference<>();
@@ -43,13 +44,22 @@ class CodeCostumesIT {
       window.set(stage);
     });
     settle();
+    // the racers come from the program's own first frame (the designer's preview)
+    AtomicReference<StageDesignerView> designer = new AtomicReference<>();
+    onFx(() -> designer.set((StageDesignerView) window.get().getScene().getRoot()
+        .lookupAll(".designer").stream().findFirst().orElseThrow()));
+    for (int i = 0; i < 600; i++) {
+      AtomicReference<Boolean> ready = new AtomicReference<>(false);
+      onFx(() -> ready.set(designer.get().hasPreview()));
+      if (ready.get()) break;
+      Thread.sleep(100);
+    }
     onFx(() -> {
       var root = window.get().getScene().getRoot();
-      StageDesignerView designer = (StageDesignerView) root.lookupAll(".designer").stream()
-          .findFirst().orElseThrow();
-      assertThat(designer.ghosts().stream().filter(g -> g.type().equals("Racer")))
-          .extracting(org.openpatch.scratch4j.core.region.CodeSprites.Ghost::costume)
-          .containsExactly("bee", "ladybug", "snail");
+      assertThat(designer.get().hasPreview()).isTrue();
+      assertThat(designer.get().codeSprites().stream().filter(g -> g.type().equals("Racer")))
+          .extracting(StageRenderer.CodeSprite::costume)
+          .containsExactlyInAnyOrder("bee", "ladybug", "snail");
       UiSmokeIT.snapshot(root, Path.of("target/race-designer.png"));
       app.get().openSpriteAssets(race.resolve("Racer.java"));
     });

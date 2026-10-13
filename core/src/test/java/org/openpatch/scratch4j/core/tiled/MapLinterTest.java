@@ -24,8 +24,8 @@ class MapLinterTest {
     assertThat(linter.lint(root, world, source)).isEmpty();
 
     String broken = source.replace("stampLayerToBackground(\"Walls\")",
-        "stampLayerToBackground(\"walls\")").replace("getObjectsFromLayer(\"Objects\")",
-        "getObjectsFromLayer(\"Floor\")");
+        "stampLayerToBackground(\"walls\")").replace("spawn(\"Objects\")",
+        "spawn(\"Floor\")");
     var findings = new MapLinter(Language.EN).lint(root, world, broken);
     assertThat(findings).extracting(MapLinter.Finding::message).containsExactlyInAnyOrder(
         "\"Floor\" is a tile layer, not an object layer.",

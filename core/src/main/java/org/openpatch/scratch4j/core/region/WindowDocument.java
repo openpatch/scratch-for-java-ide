@@ -37,7 +37,6 @@ public final class WindowDocument {
 
   public static final String SETUP = "window";
   public static final String OPTIONS = "options";
-  public static final String MANAGED = " (managed by the project settings)";
 
   /** The settings a window class holds. {@code startStage} may be null. */
   public record Settings(int width, int height, String startStage, boolean fullScreen,
@@ -160,17 +159,17 @@ public final class WindowDocument {
 
           public %1$s() {
             super(%2$d, %3$d);
-            // scratch4j:begin %4$s%6$s
-            // scratch4j:end %4$s
+            // begin project settings
+            // end project settings
           }
 
           public static void main(String[] args) {
-            // scratch4j:begin %5$s%6$s
-            // scratch4j:end %5$s
+            // begin project settings
+            // end project settings
             new %1$s();
           }
         }
-        """.formatted(className, settings.width(), settings.height(), SETUP, OPTIONS, MANAGED);
+        """.formatted(className, settings.width(), settings.height());
     return write(source, settings);
   }
 

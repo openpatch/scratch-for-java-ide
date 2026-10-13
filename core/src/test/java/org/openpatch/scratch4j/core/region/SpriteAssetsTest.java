@@ -11,9 +11,9 @@ class SpriteAssetsTest {
       public class Player extends AnimatedSprite {
         public Player() {
           this.addCostume("original");
-          // scratch4j:begin setup
+          // begin sprite editor
           this.setSize(80);
-          // scratch4j:end setup
+          // end sprite editor
         }
       }
       """;
