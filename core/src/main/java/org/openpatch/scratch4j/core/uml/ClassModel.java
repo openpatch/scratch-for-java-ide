@@ -78,7 +78,7 @@ public final class ClassModel {
 
   private static final Pattern MANY = Pattern.compile(
       "^(?:java\\.util\\.)?(?:List|ArrayList|LinkedList|Set|HashSet|Collection|Queue|Deque|"
-          + "ArrayDeque|CopyOnWriteArrayList)<\\s*(\\w+)\\s*>$|^(\\w+)\\[\\]$");
+          + "ArrayDeque|CopyOnWriteArrayList)<\\s*(\\w+)\\s*>$|^(\\w+)(?:\\[\\])+$");
   private static final Pattern MAP_VALUE = Pattern.compile(
       "^(?:java\\.util\\.)?(?:Map|HashMap|TreeMap|LinkedHashMap)<[^,]+,\\s*(\\w+)\\s*>$");
 

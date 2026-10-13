@@ -32,4 +32,21 @@ class ClassModelTest {
     assertThat(model.associations()).contains(
         new ClassModel.Association("World", "Player", "player", false));
   }
+
+  @Test
+  void arraysOfAnyDimensionAreManyAssociations() throws Exception {
+    Path world = tmp.resolve("World.java");
+    java.nio.file.Files.writeString(world, """
+        public class World extends Stage {
+          private Item[][] grid = new Item[9][16];
+          private Item[] row;
+          private int[][] heights;
+        }
+        """);
+    java.nio.file.Files.writeString(tmp.resolve("Item.java"), "public class Item {}");
+    var model = ClassModel.of(java.util.List.of(world, tmp.resolve("Item.java")));
+    assertThat(model.associations()).containsExactlyInAnyOrder(
+        new ClassModel.Association("World", "Item", "grid", true),
+        new ClassModel.Association("World", "Item", "row", true));
+  }
 }
