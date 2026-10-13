@@ -23,7 +23,7 @@ class DebuggerTest {
   void pausesShowsVariablesStepsAndContinues() throws Exception {
     Files.writeString(root.resolve("Counter.java"), """
         public class Counter {
-          int score = 7;
+          int score = 7; Counter[][] grid = new Counter[2][3];
 
           void count() {
             int total = 0;
@@ -41,7 +41,7 @@ class DebuggerTest {
           }
 
           public static void main(String[] args) {
-            new Counter().count();
+            Counter c = new Counter(); c.grid[1][2] = c; c.count();
             for (int i = 0; i < 3; i++) {
               new Helper().finish();
             }
@@ -82,6 +82,9 @@ class DebuggerTest {
       assertThat(objects).hasSize(1);
       assertThat(objects.get(0).className()).isEqualTo("Counter");
       assertThat(objects.get(0).values()).contains(new Debugger.Variable("score", "int", "7"));
+      // a two-dimensional array: the cell, not the inner array, points at the object
+      assertThat(objects.get(0).references()).containsExactly(
+          new Debugger.Reference("grid[1][2]", objects.get(0).id()));
 
       debugger.stepOver();
       Debugger.Pause next = pauses.poll(10, TimeUnit.SECONDS);

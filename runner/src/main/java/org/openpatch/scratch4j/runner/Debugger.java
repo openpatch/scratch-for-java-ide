@@ -631,14 +631,8 @@ public final class Debugger {
           if (value instanceof ObjectReference ref && found.containsKey(ref.uniqueID())) {
             refs.add(new Reference(field.name(), ref.uniqueID()));
           } else if (value instanceof ObjectReference ref && isList(ref)) {
-            int index = 0;
             List<Value> items = listItems(ref);
-            for (Value item : items) {
-              if (item instanceof ObjectReference r && found.containsKey(r.uniqueID())) {
-                refs.add(new Reference(field.name() + "[" + index + "]", r.uniqueID()));
-              }
-              index++;
-            }
+            listReferences(field.name(), items, found, refs, 0);
             values.add(new Variable(field.name(), simple(field.typeName()),
                 "[" + items.size() + "]"));
           } else {
@@ -650,6 +644,23 @@ public final class Debugger {
       return out;
     } finally {
       if (!wasPaused) machine.resume();
+    }
+  }
+
+  /**
+   * References to listed objects among {@code items}, labelled {@code grid[1][7]}:
+   * the inner arrays of a two-dimensional array are followed, not shown as objects.
+   */
+  private static void listReferences(String label, List<Value> items,
+      java.util.Map<Long, ObjectReference> found, List<Reference> refs, int depth) {
+    for (int i = 0; i < items.size(); i++) {
+      Value item = items.get(i);
+      String at = label + "[" + i + "]";
+      if (item instanceof ObjectReference r && found.containsKey(r.uniqueID())) {
+        refs.add(new Reference(at, r.uniqueID()));
+      } else if (item instanceof ArrayReference inner && depth < 3) {
+        listReferences(at, inner.getValues(), found, refs, depth + 1);
+      }
     }
   }
 
