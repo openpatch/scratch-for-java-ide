@@ -18,6 +18,7 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.util.Duration;
+import org.openpatch.scratch4j.core.project.Abiturklassen;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.uml.ClassModel;
 import org.openpatch.scratch4j.runner.Debugger;
@@ -54,12 +55,15 @@ final class DiagramView extends BorderPane {
   private final CheckBox attributes = new CheckBox(I18n.t("diagram.attributes"));
   private final CheckBox methods = new CheckBox(I18n.t("diagram.methods"));
   private final CheckBox library = new CheckBox(I18n.t("diagram.library"));
+  /** The project's own copies of the NRW Abiturklassen; off by default, they crowd a game. */
+  private final CheckBox abitur = new CheckBox(I18n.t("diagram.abitur"));
   private final CheckBox live = new CheckBox(I18n.t("diagram.live"));
   private final Button snapshot = new Button(I18n.t("diagram.snapshot"), Icons.of("fth-camera"));
   private final Label message = new Label();
   private final StackPane center;
   private final Timeline liveTimer;
   private ClassModel.Model model;
+  private Set<String> abiturPresent = Set.of();
   private boolean reading;
 
   DiagramView(ScratchProject project, Supplier<Debugger> session, Consumer<Path> openFile) {
@@ -82,7 +86,8 @@ final class DiagramView extends BorderPane {
     attributes.setSelected(true);
     methods.setSelected(true);
     library.setSelected(true);
-    for (CheckBox box : List.of(attributes, methods, library)) {
+    abitur.setTooltip(new javafx.scene.control.Tooltip(I18n.t("diagram.abitur.tooltip")));
+    for (CheckBox box : List.of(attributes, methods, library, abitur)) {
       box.setOnAction(e -> refresh());
     }
     snapshot.setOnAction(e -> readObjects());
@@ -98,7 +103,8 @@ final class DiagramView extends BorderPane {
     HBox.setHgrow(spacer, Priority.ALWAYS);
     Button export = Icons.labeled("fth-image", I18n.t("diagram.export"), this::exportPng);
     HBox bar = new HBox(6, classesMode, objectsMode, new Separator(
-        javafx.geometry.Orientation.VERTICAL), attributes, methods, library, snapshot, live,
+        javafx.geometry.Orientation.VERTICAL), attributes, methods, library, abitur, snapshot,
+        live,
         spacer,
         Icons.button("fth-zoom-out", I18n.t("designer.zoomout"),
             () -> canvas.setZoom(canvas.zoom() / 1.25)),
@@ -135,6 +141,13 @@ final class DiagramView extends BorderPane {
   /** Re-reads the code (after saves) or the running program. */
   void refresh() {
     boolean objects = objectsMode.isSelected();
+    try {
+      abiturPresent = Abiturklassen.present(project);
+    } catch (IOException e) {
+      abiturPresent = Set.of();
+    }
+    abitur.setVisible(!objects && !abiturPresent.isEmpty());
+    abitur.setManaged(abitur.isVisible());
     attributes.setVisible(!objects);
     methods.setVisible(!objects);
     library.setVisible(!objects);
@@ -178,8 +191,10 @@ final class DiagramView extends BorderPane {
     Map<String, Integer> depth = new HashMap<>();
     List<UmlCanvas.Box> boxes = new ArrayList<>();
     List<UmlCanvas.Edge> edges = new ArrayList<>();
+    Set<String> hidden = abitur.isSelected() ? Set.of() : abiturPresent;
     for (ClassModel.UmlClass c : model.classes()) {
       if (c.library() && !library.isSelected()) continue;
+      if (hidden.contains(c.name())) continue;
       List<List<String>> sections = new ArrayList<>();
       if (!c.library()) {
         if (attributes.isSelected()) {
@@ -193,12 +208,14 @@ final class DiagramView extends BorderPane {
       boxes.add(new UmlCanvas.Box(c.name(), UmlCanvas.BoxKind.CLASS, title,
           c.isAbstract() || c.isInterface(), false, c.library(), sections, depth(c, depth)));
       if (c.superclass() != null && model.byName(c.superclass()) != null
+          && !hidden.contains(c.superclass())
           && (library.isSelected() || !model.byName(c.superclass()).library())) {
         edges.add(new UmlCanvas.Edge(c.name(), c.superclass(),
             UmlCanvas.EdgeKind.INHERITANCE, ""));
       }
     }
     for (ClassModel.Association a : model.associations()) {
+      if (hidden.contains(a.from()) || hidden.contains(a.to())) continue;
       edges.add(new UmlCanvas.Edge(a.from(), a.to(), UmlCanvas.EdgeKind.ASSOCIATION,
           a.role() + (a.many() ? " *" : "")));
     }
