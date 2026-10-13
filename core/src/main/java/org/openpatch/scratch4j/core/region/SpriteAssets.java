@@ -14,9 +14,19 @@ public final class SpriteAssets {
   /**
    * One asset call. Sheet forms carry their tile size ({@code tileWidth},
    * {@code tileHeight}, and {@code row} for a sheet animation; 0 otherwise).
+   * {@code computed} is the path expression as written when the code works the
+   * path out ({@code addAnimation("unten", bild, ...)}): then {@code reference}
+   * is null and the entry is read-only.
    */
   public record Entry(Kind kind, String name, String reference, int frames, boolean managed,
-      int tileWidth, int tileHeight, int row, boolean columns, int cropX, int cropY) {
+      int tileWidth, int tileHeight, int row, boolean columns, int cropX, int cropY,
+      String computed) {
+    public Entry(Kind kind, String name, String reference, int frames, boolean managed,
+        int tileWidth, int tileHeight, int row, boolean columns, int cropX, int cropY) {
+      this(kind, name, reference, frames, managed, tileWidth, tileHeight, row, columns, cropX,
+          cropY, null);
+    }
+
     public Entry(Kind kind, String name, String reference, int frames, boolean managed) {
       this(kind, name, reference, frames, managed, 0, 0, 0, false, 0, 0);
     }
@@ -39,6 +49,11 @@ public final class SpriteAssets {
     /** {@code addAnimation(name, sheet, frames, width, height[, row])}. */
     public boolean isSheetAnimation() {
       return kind == Kind.ANIMATION && tileWidth > 0;
+    }
+
+    /** The path is worked out by the code, so it is known only when the program runs. */
+    public boolean isComputed() {
+      return computed != null;
     }
   }
 
@@ -76,40 +91,51 @@ public final class SpriteAssets {
     return entries;
   }
 
-  /** The entry a call describes (null for forms with non-literal arguments). */
+  /**
+   * The entry a call describes: null when the name or a number is not a literal.
+   * A path the code works out ({@code bild}) gives a read-only entry with
+   * {@code computed} set, so the tab still shows the asset.
+   */
   private static Entry entry(AssetCalls.Call c, boolean managed) {
     int n = c.args().size();
     String name = c.string(0);
     if (name == null) return null;
+    String path = c.string(1);
+    String computed = path == null && n >= 2 && c.args().get(1) == null ? c.code(1) : null;
+    boolean hasPath = path != null || computed != null;
+    boolean editable = managed && computed == null;
     switch (c.method()) {
       case "addCostume" -> {
-        if (n == 6 && c.string(1) != null && c.number(2) != null && c.number(3) != null
+        if (n == 6 && hasPath && c.number(2) != null && c.number(3) != null
             && c.number(4) != null && c.number(5) != null) {
-          return new Entry(Kind.COSTUME, name, c.string(1), 0, managed, c.number(4),
-              c.number(5), 0, false, c.number(2), c.number(3));
+          return new Entry(Kind.COSTUME, name, path, 0, editable, c.number(4),
+              c.number(5), 0, false, c.number(2), c.number(3), computed);
         }
-        return n == 1 || n == 2 && c.string(1) != null
-            ? new Entry(Kind.COSTUME, name, n == 1 ? null : c.string(1), 0, managed) : null;
+        return n == 1 || n == 2 && hasPath
+            ? new Entry(Kind.COSTUME, name, path, 0, editable, 0, 0, 0, false, 0, 0, computed)
+            : null;
       }
       case "addSound" -> {
-        return n == 1 || n == 2 && c.string(1) != null
-            ? new Entry(Kind.SOUND, name, n == 1 ? null : c.string(1), 0, managed) : null;
+        return n == 1 || n == 2 && hasPath
+            ? new Entry(Kind.SOUND, name, path, 0, editable, 0, 0, 0, false, 0, 0, computed)
+            : null;
       }
       case "addCostumes" -> {
-        return n == 4 && c.string(1) != null && c.number(2) != null && c.number(3) != null
-            ? new Entry(Kind.SHEET, name, c.string(1), 0, managed, c.number(2), c.number(3), 0)
+        return n == 4 && hasPath && c.number(2) != null && c.number(3) != null
+            ? new Entry(Kind.SHEET, name, path, 0, editable, c.number(2), c.number(3), 0, false,
+                0, 0, computed)
             : null;
       }
       case "addAnimation" -> {
-        if (n == 3 && c.string(1) != null) {
-          return new Entry(Kind.ANIMATION, name, c.string(1),
-              c.number(2) == null ? 0 : c.number(2), managed);
+        if (n == 3 && hasPath) {
+          return new Entry(Kind.ANIMATION, name, path, c.number(2) == null ? 0 : c.number(2),
+              editable, 0, 0, 0, false, 0, 0, computed);
         }
-        if (n >= 5 && n <= 7 && c.string(1) != null && c.number(2) != null
+        if (n >= 5 && n <= 7 && hasPath && c.number(2) != null
             && c.number(3) != null && c.number(4) != null) {
           int index = n >= 6 && c.number(5) != null ? c.number(5) : 0;
-          return new Entry(Kind.ANIMATION, name, c.string(1), c.number(2), managed,
-              c.number(3), c.number(4), index, n == 7);
+          return new Entry(Kind.ANIMATION, name, path, c.number(2), editable,
+              c.number(3), c.number(4), index, n == 7, 0, 0, computed);
         }
         return null;
       }
@@ -238,7 +264,8 @@ public final class SpriteAssets {
     for (AssetCalls.Call c : AssetCalls.of(source)) {
       boolean inRegion = c.start() >= region.beginOffset() && c.end() <= region.endOffset();
       Entry found = inRegion ? entry(c, true) : null;
-      if (found != null && found.kind() == entry.kind() && found.name().equals(entry.name())
+      if (found != null && !found.isComputed() && found.kind() == entry.kind()
+          && found.name().equals(entry.name())
           && found.reference() == null && c.args().size() == 1) {
         return source.substring(0, c.start()) + "this." + c.method() + "(\"" + entry.name()
             + "\", \"" + path + "\")" + source.substring(c.end());
@@ -269,7 +296,8 @@ public final class SpriteAssets {
     for (AssetCalls.Call c : AssetCalls.of(source)) {
       boolean inRegion = c.start() >= region.beginOffset() && c.end() <= region.endOffset();
       Entry found = inRegion ? entry(c, true) : null;
-      if (found != null && found.kind() == entry.kind() && found.name().equals(entry.name())
+      if (found != null && !found.isComputed() && found.kind() == entry.kind()
+          && found.name().equals(entry.name())
           && java.util.Objects.equals(found.reference(), entry.reference())) {
         int from = source.lastIndexOf('\n', c.start() - 1) + 1;
         int to = source.indexOf('\n', c.end());
@@ -293,7 +321,8 @@ public final class SpriteAssets {
     for (AssetCalls.Call c : AssetCalls.of(source)) {
       boolean inRegion = c.start() >= region.beginOffset() && c.end() <= region.endOffset();
       Entry found = inRegion ? entry(c, true) : null;
-      if (found != null && found.kind() == entry.kind() && found.name().equals(entry.name())
+      if (found != null && !found.isComputed() && found.kind() == entry.kind()
+          && found.name().equals(entry.name())
           && java.util.Objects.equals(found.reference(), entry.reference())) {
         // the whole line(s) of the call, with the statement's semicolon
         int from = source.lastIndexOf('\n', c.start() - 1) + 1;

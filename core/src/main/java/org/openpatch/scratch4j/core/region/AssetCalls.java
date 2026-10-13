@@ -33,8 +33,21 @@ import java.util.Set;
  */
 public final class AssetCalls {
 
-  /** One call: the method, its literal arguments, and where it is (offsets, 1-based line). */
-  public record Call(String method, List<Object> args, int start, int end, long line) {
+  /**
+   * One call: the method, its literal arguments, where it is (offsets, 1-based line),
+   * and each argument as written ({@code bild} for a variable).
+   */
+  public record Call(String method, List<Object> args, int start, int end, long line,
+      List<String> code) {
+
+    public Call(String method, List<Object> args, int start, int end, long line) {
+      this(method, args, start, end, line, List.of());
+    }
+
+    /** Argument {@code i} as written in the source, or null. */
+    public String code(int i) {
+      return i < code.size() ? code.get(i) : null;
+    }
 
     public String string(int i) {
       return i < args.size() && args.get(i) instanceof String s ? s : null;
@@ -82,12 +95,16 @@ public final class AssetCalls {
             if (Boolean.TRUE.equals(inConstructor) && name != null && METHODS.contains(name)
                 && onThis(call)) {
               List<Object> args = new ArrayList<>();
+              List<String> code = new ArrayList<>();
               for (ExpressionTree arg : call.getArguments()) {
                 args.add(literal(arg));
+                code.add(source.substring((int) positions.getStartPosition(unit, arg),
+                    (int) positions.getEndPosition(unit, arg)));
               }
               int start = (int) positions.getStartPosition(unit, call);
               int end = (int) positions.getEndPosition(unit, call);
-              out.add(new Call(name, args, start, end, unit.getLineMap().getLineNumber(start)));
+              out.add(new Call(name, args, start, end, unit.getLineMap().getLineNumber(start),
+                  code));
             }
             return super.visitMethodInvocation(call, inConstructor);
           }

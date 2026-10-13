@@ -43,6 +43,39 @@ class SpriteAssetsTest {
   }
 
   @Test
+  void pathsTheCodeWorksOutAreListedReadOnly() {
+    // the Spielwerkstatt's player: the sheet depends on a constructor parameter
+    String source = """
+        public class Spieler extends AnimatedSprite {
+          public Spieler(String pFigur) {
+            String bild = "assets/actor/character/" + pFigur + "/sprite-sheet.png";
+            this.addAnimation("unten", bild, 4, 16, 16, 0, true);
+            this.addAnimation("oben", bild, 4, 16, 16, 1, true);
+            this.addSound("schritt", "assets/audio/step.ogg");
+            this.addCostume("bild", pFigur + ".png");
+          }
+        }
+        """;
+    var entries = SpriteAssets.list(source);
+    assertThat(entries).extracting(SpriteAssets.Entry::name)
+        .containsExactly("unten", "oben", "schritt", "bild");
+    var unten = entries.get(0);
+    assertThat(unten.isComputed()).isTrue();
+    assertThat(unten.computed()).isEqualTo("bild");
+    assertThat(unten.reference()).isNull();
+    assertThat(unten.managed()).isFalse();
+    assertThat(unten.isSheetAnimation()).isTrue();
+    assertThat(unten.frames()).isEqualTo(4);
+    assertThat(unten.row()).isEqualTo(0);
+    assertThat(unten.columns()).isTrue();
+    assertThat(entries.get(1).row()).isEqualTo(1);
+    assertThat(entries.get(2).isComputed()).isFalse();
+    assertThat(entries.get(3).computed()).isEqualTo("pFigur + \".png\"");
+    assertThatThrownBy(() -> SpriteAssets.remove(source, unten))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void rejectsDuplicateNamesAndInvalidAnimations() {
     assertThatThrownBy(() -> SpriteAssets.add(SOURCE, SpriteAssets.Kind.COSTUME,
         "original", null, 0)).isInstanceOf(IllegalArgumentException.class);

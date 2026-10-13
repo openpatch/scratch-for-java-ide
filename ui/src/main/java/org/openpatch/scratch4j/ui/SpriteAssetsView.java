@@ -210,8 +210,8 @@ final class SpriteAssetsView extends BorderPane {
         }
         String ref = switch (entry.kind()) {
           case COSTUME -> AssetPreview.costumeRef(entry);
-          case SHEET -> entry.reference() + "#0,0," + entry.tileWidth() + ","
-              + entry.tileHeight();
+          case SHEET -> entry.isComputed() ? null : entry.reference() + "#0,0,"
+              + entry.tileWidth() + "," + entry.tileHeight();
           default -> null;
         };
         if (ref != null && !images.contains(ref)) {
@@ -307,7 +307,8 @@ final class SpriteAssetsView extends BorderPane {
         setGraphic(empty || entry == null ? null : AssetPreview.thumbnail(entry, project.root()));
         setGraphicTextGap(10);
         setText(empty || entry == null ? null : entry.name()
-            + (entry.reference() == null ? "" : "  ·  " + entry.reference())
+            + (entry.isComputed() ? "  ·  " + I18n.t("spriteassets.computed", entry.computed())
+                : entry.reference() == null ? "" : "  ·  " + entry.reference())
             + (entry.kind() == SpriteAssets.Kind.ANIMATION
                 ? "  ·  " + I18n.t("spriteassets.frames", entry.frames()) : "")
             + (entry.tileWidth() > 0 ? "  ·  " + I18n.t("spriteassets.tiles",
@@ -325,7 +326,9 @@ final class SpriteAssetsView extends BorderPane {
     remove.setOnAction(e -> {
       SpriteAssets.Entry selected = list.getSelectionModel().getSelectedItem();
       if (selected != null) {
-        if (!selected.managed()) {
+        if (selected.isComputed()) {
+          inform(I18n.t("spriteassets.computed.warning", selected.computed()));
+        } else if (!selected.managed()) {
           alert(I18n.t("spriteassets.handwritten.warning"));
         } else {
           write(source -> SpriteAssets.remove(source, selected));
@@ -499,6 +502,10 @@ final class SpriteAssetsView extends BorderPane {
    */
   void edit(SpriteAssets.Entry entry) {
     if (entry == null) return;
+    if (entry.isComputed()) {
+      inform(I18n.t("spriteassets.computed.warning", entry.computed()));
+      return;
+    }
     if (entry.isSheetAnimation() || entry.isSheetCostume()
         || entry.kind() == SpriteAssets.Kind.SHEET) {
       editSheet(entry.reference(), entry.kind() == SpriteAssets.Kind.ANIMATION
@@ -942,5 +949,13 @@ final class SpriteAssetsView extends BorderPane {
     Alert alert = new Alert(Alert.AlertType.ERROR, message, I18n.ok());
     Theme.style(alert);
     alert.showAndWait();
+  }
+
+  /** Not an error: why an entry is read-only here. */
+  private void inform(String message) {
+    Alert info = new Alert(Alert.AlertType.INFORMATION, message, I18n.ok());
+    info.setHeaderText(null);
+    Theme.style(info);
+    info.showAndWait();
   }
 }

@@ -77,6 +77,11 @@ final class AssetPreview extends VBox {
       caption.setText(I18n.t("spriteassets.preview.none"));
       return;
     }
+    if (entry.isComputed()) {
+      // the path is worked out when the program runs: nothing to draw yet
+      caption.setText(I18n.t("spriteassets.computed.preview", entry.computed()));
+      return;
+    }
     switch (entry.kind()) {
       case COSTUME, SHEET -> {
         Image image = CostumeView.costume(costumeRef(entry), root);
@@ -142,6 +147,9 @@ final class AssetPreview extends VBox {
   // --- what an entry shows --------------------------------------------------------------
 
   static String costumeRef(SpriteAssets.Entry entry) {
+    if (entry.isComputed()) {
+      return null;
+    }
     if (entry.kind() == SpriteAssets.Kind.SHEET) {
       return entry.reference();
     }
@@ -196,6 +204,7 @@ final class AssetPreview extends VBox {
   }
 
   private SoundClip loadSound(SpriteAssets.Entry entry) {
+    if (entry.isComputed()) return null;
     try {
       if (entry.reference() != null) {
         Path file = root.resolve(entry.reference()).normalize();
