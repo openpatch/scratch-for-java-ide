@@ -118,6 +118,10 @@ final class DiagramView extends BorderPane {
 
     ScrollPane scroll = new ScrollPane(canvas);
     scroll.getStyleClass().add("paint-scroll");
+    // drag the diagram around; double-click still opens a class
+    scroll.setPannable(true);
+    scroll.viewportBoundsProperty().addListener((o, old, bounds) ->
+        canvas.setWrapWidth(bounds.getWidth()));
     scroll.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
       if (e.isShortcutDown() && e.getDeltaY() != 0) {
         canvas.setZoom(canvas.zoom() * (e.getDeltaY() > 0 ? 1.15 : 1 / 1.15));

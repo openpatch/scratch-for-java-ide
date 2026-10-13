@@ -335,6 +335,32 @@ class LayoutIT {
       UiSmokeIT.snapshot(diagrams.canvas(), Path.of("target/object-diagram.png"));
       diagrams.writePng(tmp.resolve("objects.png"));
       assertThat(tmp.resolve("objects.png")).exists();
+
+      // forty coins nobody references: one layer, wrapped at the visible width
+      List<org.openpatch.scratch4j.runner.Debugger.ObjectNode> coins =
+          new java.util.ArrayList<>();
+      for (long id = 10; id < 50; id++) {
+        coins.add(new org.openpatch.scratch4j.runner.Debugger.ObjectNode(id, "Coin",
+            List.of(new org.openpatch.scratch4j.runner.Debugger.Variable("row", "int",
+                String.valueOf(id))), List.of()));
+      }
+      diagrams.canvas().setWrapWidth(1000);
+      diagrams.showObjects(coins, null);
+      double right = diagrams.canvas().placed().values().stream()
+          .mapToDouble(r -> r[0] + r[2]).max().orElse(0);
+      long lines = diagrams.canvas().placed().values().stream().mapToDouble(r -> r[1])
+          .distinct().count();
+      assertThat(right).isLessThanOrEqualTo(1000);
+      assertThat(lines).isGreaterThan(1);
+
+      // a world holding one of them comes first in its layer, before the loose coins
+      coins.add(new org.openpatch.scratch4j.runner.Debugger.ObjectNode(99, "World", List.of(),
+          List.of(new org.openpatch.scratch4j.runner.Debugger.Reference("grid[1][7]", 10))));
+      diagrams.showObjects(coins, null);
+      double[] world = diagrams.canvas().placed().get("99");
+      assertThat(world[0]).isEqualTo(20);
+      assertThat(world[1]).isEqualTo(20);
+      UiSmokeIT.snapshot(diagrams.canvas(), Path.of("target/object-diagram-wrapped.png"));
     });
     // the sprite editor: previews of animations (sheet in columns), costumes and sounds
     String sound = org.openpatch.scratch4j.core.assets.BuiltinAssetIndex.get().sounds().get(0);

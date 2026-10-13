@@ -37,6 +37,8 @@ final class UmlCanvas extends Canvas {
   private static final double LINE = 17;
   private static final double GAP_X = 48;
   private static final double GAP_Y = 110;
+  /** Between the lines of one wrapped layer of objects. */
+  private static final double GAP_WRAP = 44;
   private final Font font = Font.font("System", 12.5);
   private final Font titleFont = Font.font("System", FontWeight.BOLD, 13);
   private final Font italicTitle = Font.font("System", FontWeight.BOLD, FontPosture.ITALIC, 13);
@@ -45,6 +47,8 @@ final class UmlCanvas extends Canvas {
   private List<Edge> edges = List.of();
   private final Map<String, double[]> placed = new LinkedHashMap<>();
   private double zoom = 1;
+  /** Visible width in screen pixels; a layer of objects wider than this wraps (0: never). */
+  private double wrapWidth;
   /** Lanes already used below each row (y -> count) and per inheritance parent. */
   private final Map<Long, Integer> lanes = new HashMap<>();
   private final Map<String, Double> parentLanes = new HashMap<>();
@@ -71,7 +75,18 @@ final class UmlCanvas extends Canvas {
 
   void setZoom(double next) {
     zoom = Math.max(0.3, Math.min(3, next));
+    if (wrapWidth > 0) layout(); // more or fewer objects fit on a line
     draw();
+  }
+
+  /** The width the diagram may use before a layer of objects wraps onto the next line. */
+  void setWrapWidth(double width) {
+    if (Math.abs(width - wrapWidth) < 1) return;
+    wrapWidth = width;
+    if (boxes.stream().anyMatch(b -> b.kind() == BoxKind.OBJECT)) {
+      layout();
+      draw();
+    }
   }
 
   double zoom() {
@@ -121,6 +136,11 @@ final class UmlCanvas extends Canvas {
       // objects: the first reference to an object decides where it hangs
       if (e.kind() == EdgeKind.ASSOCIATION) parentOf.putIfAbsent(e.to(), e.from());
     }
+    // objects that reference others (the stage) come before the ones that do not (walls)
+    java.util.Set<String> referencing = new java.util.HashSet<>();
+    for (Edge e : edges) {
+      if (e.kind() == EdgeKind.ASSOCIATION && !e.from().equals(e.to())) referencing.add(e.from());
+    }
     double y = 20;
     for (int layer = 0; layer <= maxLayer; layer++) {
       List<Box> row = new ArrayList<>();
@@ -130,16 +150,27 @@ final class UmlCanvas extends Canvas {
         if (a.faded() != b.faded()) return a.faded() ? -1 : 1;
         double pa = parentX(parentOf.get(a.id()));
         double pb = parentX(parentOf.get(b.id()));
-        return pa != pb ? Double.compare(pa, pb) : a.title().compareTo(b.title());
+        if (pa != pb) return Double.compare(pa, pb);
+        boolean ra = a.kind() == BoxKind.OBJECT && referencing.contains(a.id());
+        boolean rb = b.kind() == BoxKind.OBJECT && referencing.contains(b.id());
+        return ra != rb ? (ra ? -1 : 1) : a.title().compareTo(b.title());
       });
       double x = 20;
       double rowHeight = 0;
+      // objects wrap at the visible width; classes keep one line under their parents
+      double limit = wrapWidth > 0 && row.stream().anyMatch(b -> b.kind() == BoxKind.OBJECT)
+          ? Math.max(wrapWidth / zoom - 20, 200) : Double.MAX_VALUE;
       for (Box b : row) {
         double[] s = size.get(b.id());
         // under the parent when there is room
         double wanted = parentOf.containsKey(b.id()) && placed.containsKey(parentOf.get(b.id()))
             ? parentX(parentOf.get(b.id())) - s[0] / 2 : x;
         x = Math.max(x, wanted);
+        if (x + s[0] > limit && x > 20) {
+          y += rowHeight + GAP_WRAP;
+          x = 20;
+          rowHeight = 0;
+        }
         placed.put(b.id(), new double[] {x, y, s[0], s[1]});
         x += s[0] + GAP_X;
         rowHeight = Math.max(rowHeight, s[1]);
