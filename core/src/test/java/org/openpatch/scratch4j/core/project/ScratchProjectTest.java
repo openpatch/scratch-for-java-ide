@@ -63,6 +63,45 @@ class ScratchProjectTest {
   }
 
   @Test
+  void stagesAndSpritesMayInheritThroughProjectClasses() throws IOException {
+    // the shape of the Spielwerkstatt: a main class shows World, World extends Level extends Stage
+    Files.createDirectories(tmp.resolve("game"));
+    Path root = tmp.resolve("game");
+    Files.writeString(root.resolve("Main.java"), """
+        void main() {
+           Window window = new Window(768, 432);
+           window.setStage(new World());
+        }
+        """);
+    Files.writeString(root.resolve("Level.java"), "public class Level extends Stage {}");
+    Files.writeString(root.resolve("World.java"), "public class World extends Level {}");
+    Files.writeString(root.resolve("Cave.java"), "public class Cave extends Level {}");
+    Files.writeString(root.resolve("Item.java"),
+        "public abstract class Item extends AnimatedSprite {}");
+    Files.writeString(root.resolve("Coin.java"), "public class Coin extends Item {}");
+    Files.writeString(root.resolve("Rock.java"),
+        "public class Rock extends org.openpatch.scratch.Sprite {}");
+    Files.writeString(root.resolve("Tree.java"), "public class Tree<T> extends Rock {}");
+    Files.writeString(root.resolve("Score.java"), "public class Score extends Object {}");
+    ScratchProject project = ScratchProject.open(root);
+    project.settings().startStage = "Main";
+
+    assertThat(project.stageClasses()).containsExactly("Cave", "Level", "World");
+    assertThat(project.spriteClasses()).containsExactly("Coin", "Item", "Rock", "Tree");
+    assertThat(project.startStage()).isEqualTo("Main");
+    // the stage main shows, not the alphabetically first one
+    assertThat(project.firstStage()).isEqualTo("World");
+
+    // the start star rewrites main's setStage; the program still starts in Main
+    project.setStartStage("Cave");
+    assertThat(Files.readString(root.resolve("Main.java")))
+        .contains("window.setStage(new Cave());")
+        .contains("new Window(768, 432)");
+    assertThat(project.startStage()).isEqualTo("Main");
+    assertThat(project.firstStage()).isEqualTo("Cave");
+  }
+
+  @Test
   void ignoresGeneratedAndBuildDirsWhenScanning() throws IOException {
     NewProject.create(ProjectTemplate.IMPERATIVE, tmp, "proj", null);
     Path root = tmp.resolve("proj");

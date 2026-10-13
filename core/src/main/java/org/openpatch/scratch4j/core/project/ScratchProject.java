@@ -6,7 +6,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.MatchResult;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -22,13 +26,16 @@ public final class ScratchProject {
   private static final List<String> EXCLUDED_DIRS =
       List.of(".scratch4j", "+libs", "build", "target", ".git", ".vscode", "assets", "export");
 
-  // Class discovery uses a light regex scan for the shapes used by the templates.
-  private static final Pattern STAGE_CLASS =
-      Pattern.compile("\\bclass\\s+(\\w+)\\s+extends\\s+Stage\\b");
-  private static final Pattern WINDOW_CLASS =
-      Pattern.compile("\\bclass\\s+(\\w+)\\s+extends\\s+Window\\b");
-  private static final Pattern SPRITE_CLASS =
-      Pattern.compile("\\bclass\\s+(\\w+)\\s+extends\\s+(?:AnimatedSprite|UISprite|Sprite)\\b");
+  // Class discovery uses a light regex scan: every "class Name extends Super", followed
+  // through the project's own classes, so World extends Level extends Stage is a stage too.
+  private static final Pattern CLASS_EXTENDS =
+      Pattern.compile("\\bclass\\s+(\\w+)\\s*(?:<[^>{]*>)?\\s+extends\\s+(?:\\w+\\.)*(\\w+)");
+  private static final Set<String> STAGE_ROOTS = Set.of("Stage");
+  private static final Set<String> WINDOW_ROOTS = Set.of("Window");
+  private static final Set<String> SPRITE_ROOTS = Set.of("AnimatedSprite", "UISprite", "Sprite");
+  /** The stage a start class with {@code main} shows: {@code setStage(new Level1())}. */
+  private static final Pattern SET_STAGE =
+      Pattern.compile("\\bsetStage\\s*\\(\\s*new\\s+(\\w+)\\s*\\(");
 
   private final Path root;
   private final String name;
@@ -116,30 +123,40 @@ public final class ScratchProject {
     }
   }
 
-  /** Simple names of the project's {@code Stage} subclasses, sorted. */
+  /** Simple names of the project's {@code Stage} subclasses, direct or not, sorted. */
   public List<String> stageClasses() throws IOException {
-    return scan(STAGE_CLASS);
+    return subclassesOf(STAGE_ROOTS);
   }
 
-  /** Simple names of the project's {@code Window} subclasses, sorted. */
+  /** Simple names of the project's {@code Window} subclasses, direct or not, sorted. */
   public List<String> windowClasses() throws IOException {
-    return scan(WINDOW_CLASS);
+    return subclassesOf(WINDOW_ROOTS);
   }
 
-  /** Simple names of the project's Sprite subclasses, sorted. */
+  /** Simple names of the project's Sprite subclasses, direct or not, sorted. */
   public List<String> spriteClasses() throws IOException {
-    return scan(SPRITE_CLASS);
+    return subclassesOf(SPRITE_ROOTS);
   }
 
-  private List<String> scan(Pattern pattern) throws IOException {
-    List<String> found = new ArrayList<>();
+  /** Classes whose chain of superclasses within the project ends in one of {@code roots}. */
+  private List<String> subclassesOf(Set<String> roots) throws IOException {
+    Map<String, String> superclass = new HashMap<>();
     for (Path source : javaSources()) {
-      String text = Files.readString(source, StandardCharsets.UTF_8);
-      Matcher m = pattern.matcher(text);
+      Matcher m = CLASS_EXTENDS.matcher(Files.readString(source, StandardCharsets.UTF_8));
       while (m.find()) {
-        if (!found.contains(m.group(1))) {
-          found.add(m.group(1));
+        superclass.putIfAbsent(m.group(1), m.group(2));
+      }
+    }
+    List<String> found = new ArrayList<>();
+    for (String name : superclass.keySet()) {
+      String next = superclass.get(name);
+      // a cycle does not compile, but must not hang the scan either
+      for (int depth = 0; next != null && depth < superclass.size(); depth++) {
+        if (roots.contains(next)) {
+          found.add(name);
+          break;
         }
+        next = superclass.get(next);
       }
     }
     found.sort(Comparator.naturalOrder());
@@ -206,7 +223,8 @@ public final class ScratchProject {
 
   /**
    * The stage the program shows first: the managed window's {@code setStage},
-   * otherwise the start class when it is a stage, otherwise the first stage.
+   * otherwise the start class when it is a stage, otherwise the stage a start
+   * class with {@code main} passes to {@code setStage}, otherwise the first stage.
    */
   public String firstStage() throws IOException {
     String window = windowClass();
@@ -223,13 +241,39 @@ public final class ScratchProject {
     }
     String start = startStage();
     List<String> stages = stageClasses();
-    return stages.contains(start) ? start : stages.isEmpty() ? "" : stages.get(0);
+    if (stages.contains(start)) {
+      return start;
+    }
+    ShownStage shown = stageShownBy(start);
+    if (shown != null && stages.contains(shown.name())) {
+      return shown.name();
+    }
+    return stages.isEmpty() ? "" : stages.get(0);
+  }
+
+  /** The one {@code setStage(new X(...))} in a start class's source. */
+  private record ShownStage(Path file, String source, MatchResult match) {
+    String name() {
+      return match.group(1);
+    }
+  }
+
+  /** The start class's only {@code setStage(new X(...))}, or null when it has none or several. */
+  private ShownStage stageShownBy(String startClass) throws IOException {
+    Path file = startClass.isBlank() ? null : sourceOf(startClass);
+    if (file == null) {
+      return null;
+    }
+    String source = Files.readString(file, StandardCharsets.UTF_8);
+    List<MatchResult> found = SET_STAGE.matcher(source).results().toList();
+    return found.size() == 1 ? new ShownStage(file, source, found.get(0)) : null;
   }
 
   /**
    * Makes {@code stageClass} the first stage: the managed window class's
-   * {@code setStage} line (the program's start stays the window), or the start
-   * class in {@code .scratch4j/project.json} when there is no such window.
+   * {@code setStage} line (the program's start stays the window), the
+   * {@code setStage} line of a start class with {@code main} (it keeps its window
+   * settings), or else the start class in {@code .scratch4j/project.json}.
    */
   public void setStartStage(String stageClass) throws IOException {
     String window = windowClass();
@@ -240,6 +284,14 @@ public final class ScratchProject {
       org.openpatch.scratch4j.core.io.LocalHistory.writeString(root, file,
           org.openpatch.scratch4j.core.region.WindowDocument.write(source,
               settings.withStartStage(stageClass)));
+      return;
+    }
+    String start = startStage();
+    ShownStage shown = stageClasses().contains(start) ? null : stageShownBy(start);
+    if (shown != null) {
+      MatchResult m = shown.match();
+      org.openpatch.scratch4j.core.io.LocalHistory.writeString(root, shown.file(),
+          shown.source().substring(0, m.start(1)) + stageClass + shown.source().substring(m.end(1)));
       return;
     }
     settings.startStage = stageClass;
