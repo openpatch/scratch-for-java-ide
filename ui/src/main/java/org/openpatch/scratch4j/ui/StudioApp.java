@@ -37,6 +37,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
+import javafx.stage.WindowEvent;
 import org.openpatch.scratch4j.core.api.ApiIndex;
 import org.openpatch.scratch4j.core.api.ApiMethod;
 import org.openpatch.scratch4j.core.io.LocalHistory;
@@ -119,6 +120,7 @@ public class StudioApp extends javafx.application.Application {
 
   private Stage stage;
   private Scene scene;
+  private WindowChrome windowChrome;
 
   // rebuilt on a language switch
   private BorderPane root;
@@ -178,6 +180,8 @@ public class StudioApp extends javafx.application.Application {
    * drivers), and the programs it starts use Mesa's software renderer.
    */
   public static void prepareGraphics() {
+    // JavaFX 25's native HeaderBar and extended stage style are preview APIs.
+    System.setProperty("javafx.enablePreview", "true");
     if (Prefs.compatibilityGraphics()) {
       System.setProperty("prism.order", "sw");
     }
@@ -191,6 +195,7 @@ public class StudioApp extends javafx.application.Application {
   @Override
   public void start(Stage stage) {
     this.stage = stage;
+    windowChrome = new WindowChrome(stage);
     org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(
         Prefs.compatibilityGraphics());
     I18n.set(Prefs.language());
@@ -208,10 +213,11 @@ public class StudioApp extends javafx.application.Application {
     // Sizes are in logical pixels: with display scaling (150% on a 1080p screen
     // leaves about 1280x690) a fixed size would push the window off the screen.
     javafx.geometry.Rectangle2D screen = javafx.stage.Screen.getPrimary().getVisualBounds();
-    double frame = 40; // title bar and borders, which the scene size leaves out
+    double frame = 40; // leave space around the window on smaller displays
     double width = Math.min(1360, screen.getWidth() - frame);
     double height = Math.min(840, screen.getHeight() - frame);
     scene = new Scene(root, width, height);
+    windowChrome.installResize(scene);
     Theme.apply(scene);
     installEditorShortcuts();
     checkDelay.setOnFinished(e -> checkProject());
@@ -220,7 +226,6 @@ public class StudioApp extends javafx.application.Application {
     stage.setScene(scene);
     stage.setMinWidth(Math.min(900, screen.getWidth()));
     stage.setMinHeight(Math.min(600, screen.getHeight()));
-    if (width < 1360 || height < 840) stage.setMaximized(true);
     stage.setOnCloseRequest(e -> {
       if (editor != null && !editor.confirmUnsavedHitboxes()) {
         e.consume();
@@ -230,6 +235,7 @@ public class StudioApp extends javafx.application.Application {
       stopProgram();
     });
     stage.show();
+    if (width < 1360 || height < 840) windowChrome.maximize();
     // null when started without Application.launch (layout tests)
     List<String> startupArgs = getParameters() == null ? List.of() : getParameters().getRaw();
     if (startupArgs.size() == 2 && startupArgs.get(0).equals("--smoke")) {
@@ -303,6 +309,7 @@ public class StudioApp extends javafx.application.Application {
 
     root = new BorderPane();
     root.getStyleClass().add("studio");
+    if (!windowChrome.isExtended()) root.getStyleClass().add("custom-chrome");
     root.setTop(header());
 
     sidebar = new TabPane();
@@ -493,32 +500,32 @@ public class StudioApp extends javafx.application.Application {
     runningBar.managedProperty().bind(running);
     HBox bar = new HBox(6, logo, menus, compactMenu, left, projectTitle, right, run, stop,
         debugToggle, runningBar,
-        new javafx.scene.control.Separator(Orientation.VERTICAL), paletteToggle, theme);
+        new javafx.scene.control.Separator(Orientation.VERTICAL), paletteToggle, theme,
+        new javafx.scene.control.Separator(Orientation.VERTICAL), windowChrome.controls(this::exitApp));
     bar.setAlignment(Pos.CENTER_LEFT);
     bar.getStyleClass().add("header");
     bar.setMinWidth(0);
-    double[] expandedWidth = {0};
-    bar.widthProperty().addListener((o, old, width) -> {
+    double[] menuWidth = {0};
+    Runnable updateMenus = () -> {
       boolean compact = compactMenu.isVisible();
-      if (!compact) {
-        // what the header needs with the menus spelled out
-        double needed = 0;
-        for (Node child : bar.getChildren()) {
-          if (child.isManaged() && child != left && child != right && child != projectTitle) {
-            needed += child.prefWidth(-1) + bar.getSpacing();
-          }
+      if (!compact) menuWidth[0] = menus.prefWidth(-1);
+      // Keep the expanded menu width while its items live in the compact button.
+      double needed = menuWidth[0] + bar.getSpacing();
+      for (Node child : bar.getChildren()) {
+        if (child.isManaged() && child != menus && child != compactMenu
+            && child != left && child != right && child != projectTitle) {
+          needed += child.prefWidth(-1) + bar.getSpacing();
         }
-        needed += bar.getInsets().getLeft() + bar.getInsets().getRight() + 40;
-        if (width.doubleValue() < needed) {
-          expandedWidth[0] = needed;
-          compactMenu.getItems().setAll(menus.getMenus());
-          menus.getMenus().clear();
-          menus.setVisible(false);
-          menus.setManaged(false);
-          compactMenu.setVisible(true);
-          compactMenu.setManaged(true);
-        }
-      } else if (width.doubleValue() >= expandedWidth[0]) {
+      }
+      needed += bar.getInsets().getLeft() + bar.getInsets().getRight() + 40;
+      if (!compact && bar.getWidth() < needed) {
+        compactMenu.getItems().setAll(menus.getMenus());
+        menus.getMenus().clear();
+        menus.setVisible(false);
+        menus.setManaged(false);
+        compactMenu.setVisible(true);
+        compactMenu.setManaged(true);
+      } else if (compact && bar.getWidth() >= needed) {
         List<Menu> all = new ArrayList<>();
         for (var item : compactMenu.getItems()) all.add((Menu) item);
         compactMenu.getItems().clear();
@@ -528,8 +535,10 @@ public class StudioApp extends javafx.application.Application {
         compactMenu.setVisible(false);
         compactMenu.setManaged(false);
       }
-    });
-    return bar;
+    };
+    bar.widthProperty().addListener((o, old, width) -> updateMenus.run());
+    runningBar.managedProperty().addListener((o, was, managed) -> Platform.runLater(updateMenus));
+    return windowChrome.header(bar, left, projectTitle, right);
   }
 
   /** Shows a bottom tab the project needs now (only Problems and Console are always there). */
@@ -4242,10 +4251,7 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void exitApp() {
-    if (editor != null && !editor.confirmUnsavedHitboxes()) return;
-    saveAll();
-    stopProgram();
-    stage.hide();
+    stage.fireEvent(new WindowEvent(stage, WindowEvent.WINDOW_CLOSE_REQUEST));
   }
 
   private void alert(String message) {

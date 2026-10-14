@@ -73,6 +73,10 @@
 
 /* ---------- header ---------- */
 
+.studio-header {
+  -fx-background-color: -s-header-bg;
+}
+
 .header {
   -fx-background-color: -s-header-bg;
   -fx-padding: 4 10 4 10;
@@ -80,7 +84,7 @@
 }
 
 /* explicit as well as via the token: the header must never stay Scratch-blue in dark mode */
-.root.dark .header {
+.root.dark .studio-header, .root.dark .header {
   -fx-background-color: #1f2a44;
 }
 
@@ -134,6 +138,22 @@
 .header-icon:hover,
 .header-icon:selected {
   -fx-background-color: -s-header-hover;
+}
+
+.window-button {
+  -fx-min-width: 32;
+  -fx-pref-width: 32;
+  -fx-min-height: 30;
+  -fx-pref-height: 30;
+  -fx-padding: 6;
+}
+
+#window-close:hover {
+  -fx-background-color: #c42b1c;
+}
+
+#window-close:hover .ikonli-font-icon {
+  -fx-icon-color: white;
 }
 
 .run-button, .stop-button {
@@ -190,6 +210,11 @@
 
 .studio {
   -fx-background-color: -color-bg-default;
+}
+
+.studio.custom-chrome {
+  /* Reserve the resize edges so they do not overlap editor or scrollbar input. */
+  -fx-padding: 5;
 }
 
 .work-area {

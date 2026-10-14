@@ -29,6 +29,7 @@ class LayoutIT {
   Path tmp;
 
   static void startFx() {
+    StudioApp.prepareGraphics();
     try {
       Platform.startup(() -> { });
     } catch (IllegalStateException alreadyRunning) {
@@ -113,6 +114,16 @@ class LayoutIT {
       // the slim header fits 900px spelled out, so the menus need not fold here
       // every header control is inside the window
       Node header = scene.getRoot().lookup(".header");
+      assertThat(window.get().getStyle()).isEqualTo(
+          javafx.application.Platform.isSupported(javafx.application.ConditionalFeature.EXTENDED_WINDOW)
+              ? javafx.stage.StageStyle.EXTENDED : javafx.stage.StageStyle.UNDECORATED);
+      for (String id : List.of("window-minimize", "window-maximize", "window-close")) {
+        Node control = header.lookup("#" + id);
+        assertThat(control).as("%s remains available in the small window", id).isNotNull();
+        var bounds = control.localToScene(control.getBoundsInLocal());
+        assertThat(bounds.getMinX()).isGreaterThanOrEqualTo(0);
+        assertThat(bounds.getMaxX()).isLessThanOrEqualTo(width + 1);
+      }
       for (Node child : ((Parent) header).getChildrenUnmodifiable()) {
         if (!child.isVisible()) continue;
         var bounds = child.localToScene(child.getBoundsInLocal());
