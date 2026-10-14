@@ -14,7 +14,8 @@ import java.util.stream.Stream;
  * are hidden. In {@code assets}, a folder with nothing to show is hidden, and
  * so is {@code assets} itself when all of its folders are empty: a new
  * project shows only its code. Dot files there (.gitkeep) do not count.
- * Folders the student just made stay visible while still empty.
+ * Folders the student just made stay visible while still empty. Folders
+ * start closed and stay as the student left them across reloads.
  */
 final class ProjectTree {
 
@@ -32,10 +33,8 @@ final class ProjectTree {
   private static TreeItem<Path> build(Path dir, Set<Path> expanded, boolean isRoot,
       boolean inAssets, Set<Path> keepVisible) {
     TreeItem<Path> item = new TreeItem<>(dir);
-    String name = dir.getFileName() == null ? "" : dir.getFileName().toString();
-    // libraries collapsed by default; everything else open on first show
-    item.setExpanded(isRoot || expanded.contains(dir)
-        || expanded.isEmpty() && !name.equals("+libs"));
+    // folders start closed; the root (not shown) always lists its children
+    item.setExpanded(isRoot || expanded.contains(dir));
     try (Stream<Path> children = Files.list(dir)) {
       children.filter(p -> !HIDDEN.contains(p.getFileName().toString()))
           .filter(p -> !inAssets || !p.getFileName().toString().startsWith("."))

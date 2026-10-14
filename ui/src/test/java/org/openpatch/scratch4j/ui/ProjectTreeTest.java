@@ -52,4 +52,30 @@ class ProjectTreeTest {
     assertThat(tree(Set.of(levels.toAbsolutePath().normalize())))
         .containsExactly("assets", "assets/levels");
   }
+
+  private static TreeItem<Path> child(TreeItem<Path> item, String name) {
+    return item.getChildren().stream()
+        .filter(c -> c.getValue().getFileName().toString().equals(name))
+        .findFirst().orElseThrow();
+  }
+
+  @Test
+  void foldersStartClosedAndStayOpenOnceOpened() throws Exception {
+    Files.writeString(root.resolve("MyStage.java"), "");
+    Files.createDirectories(root.resolve("assets/images"));
+    Files.writeString(root.resolve("assets/images/cat.png"), "");
+    Files.createDirectories(root.resolve("+libs"));
+    Files.createDirectories(root.resolve("notes"));
+
+    TreeItem<Path> first = ProjectTree.build(root, Set.of(), Set.of());
+    assertThat(first.isExpanded()).as("the root lists the project").isTrue();
+    assertThat(first.getChildren()).filteredOn(c -> Files.isDirectory(c.getValue()))
+        .hasSize(3).noneMatch(TreeItem::isExpanded);
+
+    Path assets = root.resolve("assets");
+    TreeItem<Path> reloaded = ProjectTree.build(root, Set.of(root, assets), Set.of());
+    assertThat(child(reloaded, "assets").isExpanded()).isTrue();
+    assertThat(child(child(reloaded, "assets"), "images").isExpanded()).isFalse();
+    assertThat(child(reloaded, "notes").isExpanded()).isFalse();
+  }
 }
