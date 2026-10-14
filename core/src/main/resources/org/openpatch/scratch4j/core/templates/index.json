@@ -286,6 +286,22 @@
     "requiredSheets": []
   },
   {
+    "id": "demo-saveSlots",
+    "kind": "demo",
+    "title": "Save Slots",
+    "startClass": "SaveSlotGame",
+    "files": [
+      "README.md",
+      "SaveSlotGame.java",
+      "SaveSlotProgress.java",
+      "SaveSlotStage.java"
+    ],
+    "requiredSheets": [
+      "platformer",
+      "tappy_plane"
+    ]
+  },
+  {
     "id": "demo-saving",
     "kind": "demo",
     "title": "Saving",

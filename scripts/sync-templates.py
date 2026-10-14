@@ -30,6 +30,7 @@ SKIP_SUFFIXES = {".class", ".ctxt"}
 SKIP_NAMES = {".gitkeep", ".DS_Store", "package.bluej"}
 CLASS = re.compile(r"\bclass\s+(\w+)\s+extends\s+(Window|Stage)\b")
 MAIN = re.compile(r"static\s+void\s+main\s*\(")
+SET_STAGE = re.compile(r"\.setStage\s*\(\s*new\s+\w+\s*\(")
 
 
 def copy_tree(src: Path, dst: Path, convert=None):
@@ -54,8 +55,10 @@ def copy_tree(src: Path, dst: Path, convert=None):
 
 def start_class(folder: Path):
     """A Window subclass wins (it creates the window and picks the stage),
-    then a stage with main, then any stage, then any class with main."""
-    windows, stages_main, stages, mains = [], [], [], []
+    then a stage with main, then a main that shows a stage (Studio starts it
+    before that stage, see ScratchProject.startStage), then any stage, then
+    any class with main."""
+    windows, stages_main, mains_showing, stages, mains = [], [], [], [], []
     for f in sorted(folder.glob("*.java")):
         text = f.read_text(encoding="utf-8")
         has_main = bool(MAIN.search(text))
@@ -70,7 +73,9 @@ def start_class(folder: Path):
                 stages.append(name)
         if has_main:
             mains.append(f.stem)
-    for group in (windows, stages_main, stages, mains):
+            if SET_STAGE.search(text):
+                mains_showing.append(f.stem)
+    for group in (windows, stages_main, mains_showing, stages, mains):
         if group:
             return group[0]
     return ""
