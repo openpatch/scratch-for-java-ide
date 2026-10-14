@@ -146,4 +146,39 @@ class ScratchProjectTest {
     assertThat(loaded.debugOnStart).isTrue();
     assertThat(loaded.splashLogo).isEqualTo("assets/images/logo.png");
   }
+
+  @Test
+  void aCompactMainStartsBeforeTheStageItShows() throws IOException {
+    Path root = tmp.resolve("compact");
+    Files.createDirectories(root);
+    Files.writeString(root.resolve("Main.java"), """
+        void main() {
+          Window fenster = new Window(768, 432);
+          fenster.setStage(new Welt());
+        }
+        """);
+    Files.writeString(root.resolve("Welt.java"),
+        "public class Welt extends org.openpatch.scratch.Stage {}");
+    Files.writeString(root.resolve("Level2.java"),
+        "public class Level2 extends org.openpatch.scratch.Stage {}");
+    // nothing chosen: main, not the first stage
+    assertThat(ScratchProject.open(root).startStage()).isEqualTo("Main");
+
+    // the stage main shows was saved as the start: main still sets up the window
+    ScratchProject project = ScratchProject.open(root);
+    project.settings().startStage = "Welt";
+    project.settings().save(root);
+    assertThat(project.startStage()).isEqualTo("Main");
+    assertThat(project.firstStage()).isEqualTo("Welt");
+
+    project.setStartStage("Level2");
+    assertThat(root.resolve("Main.java")).content().contains("setStage(new Level2())");
+    ScratchProject reloaded = ScratchProject.open(root);
+    assertThat(reloaded.startStage()).isEqualTo("Main");
+    assertThat(reloaded.firstStage()).isEqualTo("Level2");
+
+    // a stage main does not show stays the start
+    reloaded.settings().startStage = "Welt";
+    assertThat(reloaded.startStage()).isEqualTo("Welt");
+  }
 }

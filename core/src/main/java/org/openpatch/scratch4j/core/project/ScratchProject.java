@@ -165,35 +165,53 @@ public final class ScratchProject {
 
   /**
    * The class Run and Export start: the one from {@code .scratch4j/project.json}
-   * if it names a real stage or {@code Window} subclass, otherwise a
-   * {@code Window} subclass (it creates the window and picks the first stage,
-   * like the tutorials' {@code DodgeWindow}), otherwise the first stage. Empty
-   * when the project has neither.
+   * if it names a real stage or {@code Window} subclass or a class with
+   * {@code main}, otherwise a {@code Window} subclass (it creates the window and
+   * picks the first stage, like the tutorials' {@code DodgeWindow}), otherwise a
+   * class with {@code main}, otherwise the first stage. A saved stage gives way to
+   * the {@code main} that shows it, which sets up the window first. Empty when the
+   * project has none of these.
    */
   public String startStage() throws IOException {
     List<String> stages = stageClasses();
     List<String> windows = windowClasses();
+    List<String> mains = mainClasses();
     String chosen = settings.startStage;
+    if (!chosen.isBlank() && stages.contains(chosen) && windows.isEmpty()) {
+      for (String main : mains) {
+        ShownStage shown = stageShownBy(main);
+        if (!main.equals(chosen) && shown != null && shown.name().equals(chosen)) {
+          return main;
+        }
+      }
+    }
     if (!chosen.isBlank() && (stages.contains(chosen) || windows.contains(chosen)
-        || hasMain(chosen))) {
+        || mains.contains(chosen))) {
       return chosen;
     }
     if (!windows.isEmpty()) {
       return windows.get(0);
     }
+    if (!mains.isEmpty()) {
+      return mains.get(0);
+    }
     return stages.isEmpty() ? "" : stages.get(0);
   }
 
-  /** Whether {@code ClassName.java} declares a {@code static void main}. */
-  private boolean hasMain(String className) throws IOException {
+  /** Classes whose {@code Name.java} declares a {@code main}: {@code Main} first, then by name. */
+  private List<String> mainClasses() throws IOException {
+    List<String> found = new ArrayList<>();
     for (Path source : javaSources()) {
-      if (source.getFileName().toString().equals(className + ".java")) {
-        return Pattern.compile("\\bvoid\\s+main\\s*\\(")
-            .matcher(Files.readString(source, StandardCharsets.UTF_8)).find();
+      if (MAIN.matcher(Files.readString(source, StandardCharsets.UTF_8)).find()) {
+        found.add(source.getFileName().toString().replaceFirst("\\.java$", ""));
       }
     }
-    return false;
+    found.sort(Comparator.comparing((String name) -> !name.equals("Main"))
+        .thenComparing(Comparator.naturalOrder()));
+    return found;
   }
+
+  private static final Pattern MAIN = Pattern.compile("\\bvoid\\s+main\\s*\\(");
 
   /**
    * The project's window class whose managed regions hold the global settings
@@ -292,6 +310,11 @@ public final class ScratchProject {
       MatchResult m = shown.match();
       org.openpatch.scratch4j.core.io.LocalHistory.writeString(root, shown.file(),
           shown.source().substring(0, m.start(1)) + stageClass + shown.source().substring(m.end(1)));
+      if (!settings.startStage.equals(start)) {
+        // a saved stage would win again once main shows another one
+        settings.startStage = start;
+        settings.save(root);
+      }
       return;
     }
     settings.startStage = stageClass;
