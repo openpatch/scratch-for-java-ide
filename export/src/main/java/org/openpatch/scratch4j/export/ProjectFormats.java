@@ -141,6 +141,9 @@ public final class ProjectFormats {
         }
       }
     }
+    if (files > PortableProject.MAX_FILES) {
+      throw new IOException(String.format(java.util.Locale.ROOT, "Archive has %,d files; at most %,d can be imported", files, PortableProject.MAX_FILES));
+    }
     String base = PortableProject.path(zipFile.getFileName().toString().replaceFirst("(?i)\\.zip$", ""));
     Path root;
     Path target;
@@ -170,7 +173,7 @@ public final class ProjectFormats {
           if (!names.add(normalized.toLowerCase(java.util.Locale.ROOT))) throw new IOException("Conflicting project filename: " + name);
           Path file = staging.resolve(normalized);
           if (entry.isDirectory()) { Files.createDirectories(file); continue; }
-          if (++count > 2000) throw new IOException("Archive has more than 2,000 files");
+          if (++count > files) throw new IOException("Archive changed while importing");
           progress.step(normalized, count - 1, files);
           Files.createDirectories(file.getParent());
           long size = 0;

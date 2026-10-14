@@ -16,6 +16,8 @@ public final class PortableProject {
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final long MAX_FILE = 16L * 1024 * 1024;
   private static final long MAX_TOTAL = 64L * 1024 * 1024;
+  /** Most files (and, in workspace JSON, folders) one imported project may hold; the byte limits are the real guard. */
+  public static final int MAX_FILES = 20_000;
   private PortableProject() {}
 
   public static String path(String name) throws IOException {
@@ -41,9 +43,12 @@ public final class PortableProject {
       }
       JsonNode modules = workspace.get("modules");
       JsonNode settings = workspace.get("settings");
-      if (modules == null || !modules.isArray() || modules.isEmpty() || modules.size() > 2000
+      if (modules == null || !modules.isArray() || modules.isEmpty()
           || settings == null || !"Java".equals(settings.path("language").asText())) {
-        throw new IOException("Expected a Java workspace with 1–2,000 files");
+        throw new IOException("Expected a Java workspace with at least one file");
+      }
+      if (modules.size() > MAX_FILES) {
+        throw new IOException(String.format(java.util.Locale.ROOT, "Workspace has %,d files and folders; at most %,d can be imported", modules.size(), MAX_FILES));
       }
       if (!workspace.path("spritesheetBase64").asText("").isBlank()) {
         throw new IOException("Extract the legacy spritesheet into image files before importing. The original JSON is unchanged.");

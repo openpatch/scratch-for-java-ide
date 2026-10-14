@@ -46,6 +46,21 @@ class PortableProjectTest {
   }
 
   @Test
+  void workspacesWithThousandsOfAssetsImport() throws Exception {
+    var modules = new StringBuilder("{\"id\":1,\"name\":\"Main.java\",\"text\":\"void main() {}\"}");
+    for (int i = 0; i < 2700; i++) {
+      modules.append(",{\"id\":").append(i + 2).append(",\"name\":\"a").append(i)
+          .append(".png\",\"text\":\"data:image/png;base64,AA==\"}");
+    }
+    Path input = tmp.resolve("big.json");
+    Files.writeString(input, """
+        {"settings":{"language":"Java","libraries":["scratch"]},"modules":[%s]}
+        """.formatted(modules));
+    Path root = PortableProject.importWorkspace(input, tmp.resolve("projects"));
+    assertThat(root.resolve("a2699.png")).exists();
+  }
+
+  @Test
   void nrwImportsKeepCourseListSelectionAndRejectUnadaptedLibraries() throws Exception {
     Path input = tmp.resolve("nrw.json");
     Files.writeString(input, """

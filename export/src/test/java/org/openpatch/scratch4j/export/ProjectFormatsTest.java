@@ -154,6 +154,40 @@ class ProjectFormatsTest {
   }
 
   @Test
+  void projectsWithThousandsOfAssetsImport() throws Exception {
+    Path archive = tmp.resolve("big.zip");
+    writeZipWithAssets(archive, 2700);
+    Path imported = ProjectFormats.importZip(archive, tmp.resolve("imported"));
+    try (var files = Files.walk(imported)) {
+      assertThat(files.filter(Files::isRegularFile).count()).isEqualTo(2701);
+    }
+  }
+
+  @Test
+  void tooManyFilesFailBeforeUnpackingAnything() throws Exception {
+    Path archive = tmp.resolve("huge.zip");
+    writeZipWithAssets(archive, org.openpatch.scratch4j.core.project.PortableProject.MAX_FILES);
+    org.assertj.core.api.Assertions.assertThatIOException()
+        .isThrownBy(() -> ProjectFormats.importZip(archive, tmp.resolve("imported"),
+            (item, done, total) -> { throw new AssertionError("unpacked " + item); }))
+        .withMessageContaining("20,001 files");
+    assertThat(tmp.resolve("imported")).doesNotExist();
+  }
+
+  private static void writeZipWithAssets(Path archive, int assets) throws IOException {
+    try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
+      zip.putNextEntry(new java.util.zip.ZipEntry("game/MyStage.java"));
+      zip.write("class MyStage {}".getBytes(StandardCharsets.UTF_8));
+      zip.closeEntry();
+      for (int i = 0; i < assets; i++) {
+        zip.putNextEntry(new java.util.zip.ZipEntry("game/assets/" + (i / 500) + "/a" + i + ".png"));
+        zip.write('x');
+        zip.closeEntry();
+      }
+    }
+  }
+
+  @Test
   void unsafeOrBrokenArchivesNeverPublishPartialProjects() throws Exception {
     Path archive = tmp.resolve("bad.zip");
     try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
