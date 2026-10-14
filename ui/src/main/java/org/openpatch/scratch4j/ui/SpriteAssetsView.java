@@ -173,6 +173,15 @@ final class SpriteAssetsView extends BorderPane {
           .filter(e -> e.kind() == SpriteAssets.Kind.SOUND).toList());
       animations.getItems().setAll(entries.stream()
           .filter(e -> e.kind() == SpriteAssets.Kind.ANIMATION).toList());
+      // equal entries keep their cells: redraw them, a picture may have been repainted
+      costumes.refresh();
+      animations.refresh();
+      for (var kind : List.of(SpriteAssets.Kind.COSTUME, SpriteAssets.Kind.ANIMATION)) {
+        AssetPreview preview = previews.get(kind);
+        if (preview != null) {
+          preview.show(list(kind).getSelectionModel().getSelectedItem());
+        }
+      }
       hitboxReadOnly = SpriteAssets.hasUnmanagedHitbox(source);
       if (!hitboxDirty) {
         vertices.clear();

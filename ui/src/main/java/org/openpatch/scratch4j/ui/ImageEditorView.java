@@ -53,20 +53,22 @@ import java.util.List;
  * Java tools: the rotation centre and the hitbox polygon, which write their
  * result into a sprite class's setup region.
  */
-final class ImageEditorView extends BorderPane {
+final class ImageEditorView extends BorderPane implements SavableTool {
 
   private final ScratchProject project;
   private final Path file;
   private WritableImage image;
   /** One view per layer, bottom first; the overlay sits on top. */
-  private final StackPane layerViews = new StackPane();
+  // layers are painted on a canvas: an ImageView of a WritableImage smooths
+  // when scaled even with setSmooth(false), a canvas follows setImageSmoothing
+  private final javafx.scene.canvas.Canvas layerCanvas = new javafx.scene.canvas.Canvas();
   private final List<WritableImage> layers = new ArrayList<>();
   private final List<Boolean> layerVisible = new ArrayList<>();
   private int activeLayer;
   private final javafx.scene.control.ListView<Integer> layerList =
       new javafx.scene.control.ListView<>();
   private final javafx.scene.canvas.Canvas overlay = new javafx.scene.canvas.Canvas();
-  private final StackPane stack = new StackPane(layerViews, overlay);
+  private final StackPane stack = new StackPane(layerCanvas, overlay);
   private final ScratchColorPicker colorPicker = new ScratchColorPicker(Color.BLACK);
   private final ComboBox<Integer> brushSize = new ComboBox<>();
 
@@ -76,6 +78,7 @@ final class ImageEditorView extends BorderPane {
   private enum SelectDrag { NONE, AREA, MOVE, SCALE }
 
   private Tool tool = Tool.PENCIL;
+  private final java.util.Map<Tool, ToggleButton> toolButtons = new java.util.EnumMap<>(Tool.class);
   private double zoom = 4;
   private Point2D dragStart;
   private Point2D rotationCenter;
@@ -97,6 +100,10 @@ final class ImageEditorView extends BorderPane {
   private double moveDY;
   private final Button cropButton = new Button();
   private java.util.function.Consumer<Path> onSpriteWritten = file -> { };
+  private java.util.function.Consumer<Path> onSaved = file -> { };
+  // edits since the last save: the tab shows a marker
+  private final javafx.beans.property.BooleanProperty dirty =
+      new javafx.beans.property.SimpleBooleanProperty();
   /** The previous frame of a numbered sequence (walk2.png -> walk1.png), drawn faintly. */
   private Image onionSkin;
   private boolean showOnionSkin;
@@ -112,6 +119,8 @@ final class ImageEditorView extends BorderPane {
   private final Label status = new Label();
   private final Button applyToSprite = new Button();
   private boolean showPixelGrid;
+  // smooth zoomed pixels like the game window does, unless it is set to pixel art
+  private boolean smooth;
   private boolean showFacingGuide;
   private boolean fitted;
 
@@ -124,6 +133,7 @@ final class ImageEditorView extends BorderPane {
         (int) Math.max(1, loaded.getWidth()), (int) Math.max(1, loaded.getHeight()));
     layers.add(image);
     layerVisible.add(true);
+    smooth = !windowUsesPixelArt(project);
 
     stack.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
     stack.setBackground(new Background(new BackgroundFill(checkerboard(), null, null)));
@@ -134,6 +144,7 @@ final class ImageEditorView extends BorderPane {
         selectPress(e.getX() / zoom, e.getY() / zoom);
       } else {
         press(toPixel(e.getX(), e.getY()));
+        redrawOverlay();
       }
     });
     stack.setOnMouseDragged(e -> {
@@ -151,24 +162,6 @@ final class ImageEditorView extends BorderPane {
       }
     });
     stack.setFocusTraversable(true);
-    stack.setOnKeyPressed(e -> {
-      if (tool != Tool.SELECT || selection == null) {
-        return;
-      }
-      switch (e.getCode()) {
-        case DELETE, BACK_SPACE -> {
-          deleteSelection();
-          e.consume();
-        }
-        case ENTER, ESCAPE -> {
-          commitFloating();
-          selection = null;
-          redrawOverlay();
-          e.consume();
-        }
-        default -> { }
-      }
-    });
     stack.setCursor(javafx.scene.Cursor.CROSSHAIR);
 
     StackPane holder = new StackPane(stack);
@@ -197,15 +190,10 @@ final class ImageEditorView extends BorderPane {
     HBox bottom = new HBox(8, status, spacer, credits);
     bottom.getStyleClass().add("editor-status");
     setBottom(bottom);
-    // Ctrl+Z / Ctrl+Y (Cmd on macOS) anywhere in the editor; text fields keep their own
+    // the usual shortcuts anywhere in the editor (Ctrl is Cmd on macOS)
     addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
-      if (!e.isShortcutDown()
-          || e.getTarget() instanceof javafx.scene.control.TextInputControl) return;
-      if (e.getCode() == javafx.scene.input.KeyCode.Z) {
-        if (e.isShiftDown()) redo(); else undo();
-        e.consume();
-      } else if (e.getCode() == javafx.scene.input.KeyCode.Y) {
-        redo();
+      if (EditorKeys.isEditorKey(e)
+          && shortcut(e.getCode(), e.isShortcutDown(), e.isShiftDown())) {
         e.consume();
       }
     });
@@ -283,6 +271,21 @@ final class ImageEditorView extends BorderPane {
     updateApplyButton();
   }
 
+  @Override
+  public javafx.beans.property.ReadOnlyBooleanProperty dirtyProperty() {
+    return dirty;
+  }
+
+  @Override
+  public String unsavedCloseQuestion() {
+    return I18n.t("imageeditor.close.unsaved");
+  }
+
+  /** Called after the picture was written to its file (previews elsewhere re-read it). */
+  void setOnSaved(java.util.function.Consumer<Path> action) {
+    onSaved = action;
+  }
+
   /** Called after a tool wrote into a sprite class (the host reloads code and designers). */
   void setOnSpriteWritten(java.util.function.Consumer<Path> action) {
     this.onSpriteWritten = action;
@@ -302,6 +305,23 @@ final class ImageEditorView extends BorderPane {
     String previous = m.group(1) + (index - 1) + m.group(3);
     Path candidate = file.resolveSibling(previous);
     return Files.isRegularFile(candidate) ? candidate : null;
+  }
+
+  /** Whether the game window draws pictures crisp ({@code TextureSampling.POINT}). */
+  private static boolean windowUsesPixelArt(ScratchProject project) {
+    if (project == null) {
+      return false;
+    }
+    try {
+      String window = project.windowClass();
+      if (window != null) {
+        return org.openpatch.scratch4j.core.region.WindowDocument.read(
+            Files.readString(project.sourceOf(window), StandardCharsets.UTF_8)).pixelArt();
+      }
+    } catch (IOException | RuntimeException ignored) {
+      // hand-written window regions: fall back to the project setting
+    }
+    return project.settings().pixelArt;
   }
 
   private static Image loadImage(Path file) throws IOException {
@@ -327,15 +347,8 @@ final class ImageEditorView extends BorderPane {
   }
 
   private void applyZoom() {
-    layerViews.getChildren().clear();
-    for (int i = 0; i < layers.size(); i++) {
-      ImageView view = new ImageView(layers.get(i));
-      view.setSmooth(false);
-      view.setFitWidth(image.getWidth() * zoom);
-      view.setFitHeight(image.getHeight() * zoom);
-      view.setVisible(layerVisible.get(i));
-      layerViews.getChildren().add(view);
-    }
+    layerCanvas.setWidth(Math.max(1, image.getWidth() * zoom));
+    layerCanvas.setHeight(Math.max(1, image.getHeight() * zoom));
     stack.setPrefSize(image.getWidth() * zoom, image.getHeight() * zoom);
     zoomLabel.setText(Math.round(zoom * 100) + "%");
     syncOverlay();
@@ -354,6 +367,18 @@ final class ImageEditorView extends BorderPane {
     redrawOverlay();
   }
 
+  /** Paints the visible layers, bottom first, at the current zoom. */
+  private void paintLayers() {
+    var g = layerCanvas.getGraphicsContext2D();
+    g.clearRect(0, 0, layerCanvas.getWidth(), layerCanvas.getHeight());
+    g.setImageSmoothing(smooth);
+    for (int i = 0; i < layers.size(); i++) {
+      if (layerVisible.get(i)) {
+        g.drawImage(layers.get(i), 0, 0, image.getWidth() * zoom, image.getHeight() * zoom);
+      }
+    }
+  }
+
   private void syncOverlay() {
     overlay.setWidth(Math.max(1, image.getWidth() * zoom));
     overlay.setHeight(Math.max(1, image.getHeight() * zoom));
@@ -361,23 +386,20 @@ final class ImageEditorView extends BorderPane {
 
   private Node toolRail() {
     ToggleGroup group = new ToggleGroup();
+    toolButtons.clear();
     VBox rail = new VBox(4);
     rail.getStyleClass().add("tool-rail");
     for (Tool t : Tool.values()) {
       ToggleButton button = new ToggleButton(null, Icons.of(toolIcon(t), 18));
-      button.setTooltip(new javafx.scene.control.Tooltip(toolLabel(t)));
+      javafx.scene.input.KeyCode key = toolKey(t);
+      button.setTooltip(new javafx.scene.control.Tooltip(
+          toolLabel(t) + (key == null ? "" : " (" + key.getName() + ")")));
       button.getStyleClass().add("tool-button");
       button.setToggleGroup(group);
       button.setUserData(t);
       button.setSelected(t == Tool.PENCIL);
-      button.setOnAction(e -> {
-        if (t != Tool.SELECT) {
-          commitFloating();
-          selection = null;
-        }
-        tool = t;
-        updateApplyButton();
-      });
+      button.setOnAction(e -> chooseTool(t));
+      toolButtons.put(t, button);
       if (t == Tool.CENTER) {
         rail.getChildren().add(new Separator());
       }
@@ -389,6 +411,178 @@ final class ImageEditorView extends BorderPane {
       }
     });
     return rail;
+  }
+
+  private void chooseTool(Tool t) {
+    if (t != Tool.SELECT) {
+      commitFloating();
+      selection = null;
+    }
+    tool = t;
+    ToggleButton button = toolButtons.get(t);
+    if (button != null) button.setSelected(true);
+    updateApplyButton();
+    redrawOverlay();
+  }
+
+  /** The letter that picks a tool, as in most paint programs; null for none. */
+  private static javafx.scene.input.KeyCode toolKey(Tool tool) {
+    return switch (tool) {
+      case SELECT -> javafx.scene.input.KeyCode.M;
+      case PENCIL -> javafx.scene.input.KeyCode.B;
+      case ERASER -> javafx.scene.input.KeyCode.E;
+      case FILL -> javafx.scene.input.KeyCode.G;
+      case LINE -> javafx.scene.input.KeyCode.L;
+      case RECT -> javafx.scene.input.KeyCode.R;
+      case ELLIPSE -> javafx.scene.input.KeyCode.O;
+      case TEXT -> javafx.scene.input.KeyCode.T;
+      case PICKER -> javafx.scene.input.KeyCode.I;
+      default -> null;
+    };
+  }
+
+  /** What the image editor copied last (also put on the system clipboard). */
+  private static WritableImage clipboard;
+
+  /**
+   * One shortcut (Ctrl is Cmd on macOS); returns whether it was handled.
+   * Save, undo/redo, select all, copy/cut/paste, zoom; Delete, Enter/Escape and
+   * the arrow keys for the selection; a letter per tool; [ and ] for the brush.
+   */
+  boolean shortcut(javafx.scene.input.KeyCode code, boolean ctrl, boolean shift) {
+    if (ctrl) {
+      switch (code) {
+        case S -> save();
+        case Z -> {
+          if (shift) redo(); else undo();
+        }
+        case Y -> redo();
+        case A -> selectAll();
+        case C -> copySelection();
+        case X -> {
+          if (copySelection()) deleteSelection();
+        }
+        case V -> paste();
+        case PLUS, EQUALS, ADD -> setZoom(zoom * 1.5);
+        case MINUS, SUBTRACT -> setZoom(zoom / 1.5);
+        case DIGIT0, NUMPAD0 -> fitZoom();
+        default -> {
+          return false;
+        }
+      }
+      return true;
+    }
+    switch (code) {
+      case DELETE, BACK_SPACE -> {
+        if (tool != Tool.SELECT || selection == null) return false;
+        deleteSelection();
+      }
+      case ENTER, ESCAPE -> {
+        if (tool != Tool.SELECT || selection == null) return false;
+        commitFloating();
+        selection = null;
+        updateApplyButton();
+        redrawOverlay();
+      }
+      case LEFT, RIGHT, UP, DOWN -> {
+        if (tool != Tool.SELECT || selection == null) return false;
+        int step = shift ? 10 : 1;
+        lift();
+        switch (code) {
+          case LEFT -> floatX -= step;
+          case RIGHT -> floatX += step;
+          case UP -> floatY -= step;
+          default -> floatY += step;
+        }
+        redrawOverlay();
+      }
+      case OPEN_BRACKET, CLOSE_BRACKET -> {
+        List<Integer> sizes = brushSize.getItems();
+        int at = Math.max(0, sizes.indexOf(brushSize.getValue()));
+        at = Math.max(0, Math.min(sizes.size() - 1,
+            at + (code == javafx.scene.input.KeyCode.OPEN_BRACKET ? -1 : 1)));
+        brushSize.setValue(sizes.get(at));
+      }
+      default -> {
+        for (Tool t : Tool.values()) {
+          if (toolKey(t) == code) {
+            chooseTool(t);
+            return true;
+          }
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Ctrl+A: the whole picture becomes the selection. */
+  private void selectAll() {
+    chooseTool(Tool.SELECT);
+    commitFloating();
+    selection = new javafx.geometry.Rectangle2D(0, 0, image.getWidth(), image.getHeight());
+    updateApplyButton();
+    redrawOverlay();
+  }
+
+  /** Ctrl+C: the selected pixels (as moved or scaled); false without a selection. */
+  private boolean copySelection() {
+    if (tool != Tool.SELECT || selection == null) {
+      status.setText(I18n.t("imageeditor.copy.noselection"));
+      return false;
+    }
+    WritableImage copied;
+    if (floating != null) {
+      // as it shows: scaled nearest neighbour like commitFloating stamps it
+      int w = (int) floatW;
+      int h = (int) floatH;
+      copied = new WritableImage(w, h);
+      PixelReader reader = floating.getPixelReader();
+      for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+          copied.getPixelWriter().setArgb(x, y, reader.getArgb(
+              (int) Math.min(floating.getWidth() - 1, x * floating.getWidth() / w),
+              (int) Math.min(floating.getHeight() - 1, y * floating.getHeight() / h)));
+        }
+      }
+    } else {
+      copied = new WritableImage(image.getPixelReader(), (int) selection.getMinX(),
+          (int) selection.getMinY(), (int) selection.getWidth(), (int) selection.getHeight());
+    }
+    clipboard = copied;
+    var content = new javafx.scene.input.ClipboardContent();
+    content.putImage(copied);
+    javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+    return true;
+  }
+
+  /** Ctrl+V: the copied picture floats at the top left (or the selection) to be placed. */
+  private void paste() {
+    Image pasted = null;
+    var system = javafx.scene.input.Clipboard.getSystemClipboard();
+    if (system.hasImage()) {
+      pasted = system.getImage();
+    }
+    if (pasted == null || pasted.getWidth() < 1) {
+      pasted = clipboard;
+    }
+    if (pasted == null) {
+      return;
+    }
+    double x = selection == null ? 0 : selection.getMinX();
+    double y = selection == null ? 0 : selection.getMinY();
+    chooseTool(Tool.SELECT);
+    commitFloating();
+    pushUndo();
+    floating = new WritableImage(pasted.getPixelReader(),
+        (int) pasted.getWidth(), (int) pasted.getHeight());
+    floatX = x;
+    floatY = y;
+    floatW = floating.getWidth();
+    floatH = floating.getHeight();
+    selection = new javafx.geometry.Rectangle2D(x, y, floatW, floatH);
+    updateApplyButton();
+    redrawOverlay();
   }
 
   private Node topBar() {
@@ -404,6 +598,7 @@ final class ImageEditorView extends BorderPane {
     Button save = new Button(I18n.t("imageeditor.save"), Icons.of("fth-save"));
     save.getStyleClass().add("success");
     save.setOnAction(e -> save());
+    save.setTooltip(new javafx.scene.control.Tooltip(I18n.t("editor.save.tooltip")));
     save.setMinWidth(Region.USE_PREF_SIZE);
     applyToSprite.setMinWidth(Region.USE_PREF_SIZE);
     ToggleButton pixelGrid = new ToggleButton(null, Icons.of("fth-grid"));
@@ -418,6 +613,16 @@ final class ImageEditorView extends BorderPane {
     facesRight.setTooltip(new javafx.scene.control.Tooltip(I18n.t("imageeditor.facing.tooltip")));
     facesRight.setOnAction(e -> {
       showFacingGuide = facesRight.isSelected();
+      redrawOverlay();
+    });
+    ToggleButton smoothing = new ToggleButton(null, Icons.of("fth-aperture"));
+    smoothing.getStyleClass().addAll("button-icon", "flat");
+    smoothing.setTooltip(new javafx.scene.control.Tooltip(
+        I18n.t("imageeditor.smooth.tooltip")));
+    smoothing.setSelected(smooth);
+    smoothing.setOnAction(e -> {
+      smooth = smoothing.isSelected();
+      applyZoom();
       redrawOverlay();
     });
     ToggleButton onion = new ToggleButton(null, Icons.of("fth-copy"));
@@ -457,7 +662,7 @@ final class ImageEditorView extends BorderPane {
         zoomLabel,
         Icons.button("fth-zoom-in", I18n.t("designer.zoomin"), () -> setZoom(zoom * 1.5)),
         Icons.button("fth-maximize", I18n.t("designer.fit"), this::fitZoom),
-        pixelGrid, facesRight, onion, slice,
+        pixelGrid, smoothing, facesRight, onion, slice,
         spacer, cropButton, applyToSprite, save);
     cropButton.setText(I18n.t("imageeditor.crop"));
     cropButton.setGraphic(Icons.of("fth-crop"));
@@ -958,11 +1163,12 @@ final class ImageEditorView extends BorderPane {
   }
 
   private void redrawOverlay() {
+    paintLayers();
     var g = overlay.getGraphicsContext2D();
     g.clearRect(0, 0, overlay.getWidth(), overlay.getHeight());
     if (showOnionSkin && onionSkin != null) {
       g.setGlobalAlpha(0.3);
-      g.setImageSmoothing(false);
+      g.setImageSmoothing(smooth);
       g.drawImage(onionSkin, 0, 0, onionSkin.getWidth() * zoom, onionSkin.getHeight() * zoom);
       g.setGlobalAlpha(1);
     }
@@ -1008,7 +1214,7 @@ final class ImageEditorView extends BorderPane {
       g.setLineWidth(1);
     }
     if (floating != null) {
-      g.setImageSmoothing(false);
+      g.setImageSmoothing(smooth);
       g.drawImage(floating, floatX * zoom, floatY * zoom, floatW * zoom, floatH * zoom);
     }
     if (selection != null && tool == Tool.SELECT) {
@@ -1215,6 +1421,7 @@ final class ImageEditorView extends BorderPane {
   }
 
   private void pushUndo() {
+    dirty.set(true);
     undoStack.push(snapshot());
     if (undoStack.size() > 40) {
       undoStack.removeLast();
@@ -1231,6 +1438,7 @@ final class ImageEditorView extends BorderPane {
       return;
     }
     Snapshot previous = undoStack.pop();
+    dirty.set(true);
     redoStack.push(snapshot());
     restore(previous);
   }
@@ -1240,6 +1448,7 @@ final class ImageEditorView extends BorderPane {
       return;
     }
     Snapshot next = redoStack.pop();
+    dirty.set(true);
     undoStack.push(snapshot());
     restore(next);
   }
@@ -1263,7 +1472,7 @@ final class ImageEditorView extends BorderPane {
         visible.setOnAction(e -> {
           pushUndo();
           layerVisible.set(index, visible.isSelected());
-          applyZoom();
+          redrawOverlay();
         });
         ImageView thumb = new ImageView(layers.get(index));
         thumb.setFitWidth(28);
@@ -1411,7 +1620,8 @@ final class ImageEditorView extends BorderPane {
   // --- persistence ---------------------------------------------------------
 
   /** PNG save via a temp file and an atomic move: a failed encode never destroys the costume. */
-  private void save() {
+  @Override
+  public void save() {
     commitFloating();
     try {
       // layers are an editing aid: the costume is the visible layers flattened
@@ -1434,6 +1644,8 @@ final class ImageEditorView extends BorderPane {
         Files.deleteIfExists(temp);
       }
       status.setText(I18n.t("status.saved"));
+      dirty.set(false);
+      onSaved.accept(file);
     } catch (IOException e) {
       alert(I18n.t("error.save", e.getMessage()));
     }

@@ -459,6 +459,11 @@ final class CodeEditor extends BorderPane {
     return file;
   }
 
+  /** Rebuilds the gutter, so line previews re-read images saved elsewhere. */
+  void refreshPreviews() {
+    area.setParagraphGraphicFactory(gutter());
+  }
+
   CodeArea area() {
     return area;
   }

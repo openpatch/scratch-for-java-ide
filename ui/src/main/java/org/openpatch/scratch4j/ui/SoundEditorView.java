@@ -37,7 +37,7 @@ import java.util.Deque;
  * faster/slower, undo/redo, microphone recording, WAV save. MP3 files open
  * for editing and save as WAV (the library cannot play MP3).
  */
-final class SoundEditorView extends BorderPane {
+final class SoundEditorView extends BorderPane implements SavableTool {
 
   private final Path file;
   private final Path projectRoot;
@@ -54,6 +54,9 @@ final class SoundEditorView extends BorderPane {
 
   private final Deque<SoundClip> undoStack = new ArrayDeque<>();
   private final Deque<SoundClip> redoStack = new ArrayDeque<>();
+  // edits since the last save: the tab shows a marker
+  private final javafx.beans.property.BooleanProperty dirty =
+      new javafx.beans.property.SimpleBooleanProperty();
 
   /** Selection in canvas x coordinates while dragging. */
   private double dragStartX = -1;
@@ -64,15 +67,10 @@ final class SoundEditorView extends BorderPane {
     this.clip = SoundIO.decode(file);
     getStyleClass().add("sound-editor");
 
-    // Ctrl+Z / Ctrl+Y (Cmd on macOS) anywhere in the editor; text fields keep their own
+    // the usual shortcuts anywhere in the editor (Ctrl is Cmd on macOS)
     addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
-      if (!e.isShortcutDown()
-          || e.getTarget() instanceof javafx.scene.control.TextInputControl) return;
-      if (e.getCode() == javafx.scene.input.KeyCode.Z) {
-        if (e.isShiftDown()) redo(); else undo();
-        e.consume();
-      } else if (e.getCode() == javafx.scene.input.KeyCode.Y) {
-        redo();
+      if (EditorKeys.isEditorKey(e)
+          && shortcut(e.getCode(), e.isShortcutDown(), e.isShiftDown())) {
         e.consume();
       }
     });
@@ -136,6 +134,7 @@ final class SoundEditorView extends BorderPane {
     Button play = new Button(I18n.t("soundeditor.play"), Icons.of("fth-play"));
     play.getStyleClass().add("success");
     play.setOnAction(e -> play());
+    play.setTooltip(new Tooltip(I18n.t("soundeditor.play.tooltip")));
     Button stop = new Button(null, Icons.of("fth-square"));
     stop.setTooltip(new Tooltip(I18n.t("soundeditor.stop")));
     stop.setOnAction(e -> {
@@ -153,6 +152,7 @@ final class SoundEditorView extends BorderPane {
     Button save = new Button(I18n.t("soundeditor.save"), Icons.of("fth-save"));
     save.getStyleClass().add("accent");
     save.setOnAction(e -> save());
+    save.setTooltip(new Tooltip(I18n.t("editor.save.tooltip")));
     Region spacer = new Region();
     HBox.setHgrow(spacer, Priority.ALWAYS);
     for (Button b : List.of(play, record, save)) {
@@ -192,20 +192,10 @@ final class SoundEditorView extends BorderPane {
 
   private List<Button> effectButtons() {
     List<Button> buttons = new ArrayList<>();
-    buttons.add(effect("soundeditor.cut", "fth-scissors", () -> withSelection(sel -> {
-      clipboard = SoundEffects.copy(clip, sel);
-      setClip(SoundEffects.cut(clip, sel), true);
-    })));
-    buttons.add(effect("soundeditor.copy", "fth-copy", () -> withSelection(sel ->
-        clipboard = SoundEffects.copy(clip, sel))));
-    buttons.add(effect("soundeditor.paste", "fth-clipboard", () -> {
-      if (clipboard != null) {
-        int at = selection == null ? clip.sampleCount() : selection.start();
-        setClip(SoundEffects.paste(clip, at, clipboard), true);
-      }
-    }));
-    buttons.add(effect("soundeditor.delete", "fth-trash-2", () -> withSelection(sel ->
-        setClip(SoundEffects.delete(clip, sel), true))));
+    buttons.add(effect("soundeditor.cut", "fth-scissors", () -> withSelection(this::cut)));
+    buttons.add(effect("soundeditor.copy", "fth-copy", () -> withSelection(this::copy)));
+    buttons.add(effect("soundeditor.paste", "fth-clipboard", this::paste));
+    buttons.add(effect("soundeditor.delete", "fth-trash-2", () -> withSelection(this::delete)));
     buttons.add(effect("soundeditor.trim", "fth-crop", () -> withSelection(sel ->
         setClip(SoundEffects.trim(clip, sel), true))));
     buttons.add(effect("soundeditor.silence", "fth-volume-x", () -> {
@@ -235,6 +225,85 @@ final class SoundEditorView extends BorderPane {
     return buttons;
   }
 
+  private void cut(SoundEffects.Selection sel) {
+    clipboard = SoundEffects.copy(clip, sel);
+    setClip(SoundEffects.cut(clip, sel), true);
+  }
+
+  private void copy(SoundEffects.Selection sel) {
+    clipboard = SoundEffects.copy(clip, sel);
+  }
+
+  /** Pastes at the selection's start, or at the end without a selection. */
+  private void paste() {
+    if (clipboard != null) {
+      int at = selection == null ? clip.sampleCount() : selection.start();
+      setClip(SoundEffects.paste(clip, at, clipboard), true);
+    }
+  }
+
+  private void delete(SoundEffects.Selection sel) {
+    setClip(SoundEffects.delete(clip, sel), true);
+  }
+
+  /**
+   * One shortcut (Ctrl is Cmd on macOS); returns whether it was handled.
+   * Save, undo/redo, select all, copy/cut/paste; Space plays or stops, Delete
+   * removes the selection, Escape stops and clears it. The keys that change
+   * the sound need a selection: a button press applies to the whole sound.
+   */
+  boolean shortcut(javafx.scene.input.KeyCode code, boolean ctrl, boolean shift) {
+    if (ctrl) {
+      switch (code) {
+        case S -> save();
+        case Z -> {
+          if (shift) redo(); else undo();
+        }
+        case Y -> redo();
+        case A -> {
+          if (clip.sampleCount() > 1) {
+            selection = new SoundEffects.Selection(0, clip.sampleCount() - 1);
+            redraw();
+          }
+        }
+        case C -> {
+          if (selection != null) copy(selection);
+        }
+        case X -> {
+          if (selection != null) cut(selection);
+        }
+        case V -> paste();
+        default -> {
+          return false;
+        }
+      }
+      return true;
+    }
+    switch (code) {
+      case SPACE -> {
+        if (player.isPlaying()) {
+          player.stop();
+          status.setText("");
+        } else {
+          play();
+        }
+      }
+      case DELETE, BACK_SPACE -> {
+        if (selection == null) return false;
+        delete(selection);
+      }
+      case ESCAPE -> {
+        player.stop();
+        selection = null;
+        redraw();
+      }
+      default -> {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** One effect button; empty sounds have nothing to edit. */
   private Button effect(String key, String icon, Runnable action) {
     Button button = new Button(I18n.t(key), Icons.of(icon));
@@ -262,9 +331,20 @@ final class SoundEditorView extends BorderPane {
 
   // --- clip state ----------------------------------------------------------
 
+  @Override
+  public javafx.beans.property.ReadOnlyBooleanProperty dirtyProperty() {
+    return dirty;
+  }
+
+  @Override
+  public String unsavedCloseQuestion() {
+    return I18n.t("soundeditor.close.unsaved");
+  }
+
   private void setClip(SoundClip next, boolean pushUndo) {
     player.stop();
     if (pushUndo) {
+      dirty.set(true);
       undoStack.push(clip);
       if (undoStack.size() > 40) {
         undoStack.removeLast();
@@ -281,6 +361,7 @@ final class SoundEditorView extends BorderPane {
       return;
     }
     player.stop();
+    dirty.set(true);
     redoStack.push(clip);
     clip = undoStack.pop();
     selection = null;
@@ -292,6 +373,7 @@ final class SoundEditorView extends BorderPane {
       return;
     }
     player.stop();
+    dirty.set(true);
     undoStack.push(clip);
     clip = redoStack.pop();
     selection = null;
@@ -324,7 +406,8 @@ final class SoundEditorView extends BorderPane {
     }
   }
 
-  private void save() {
+  @Override
+  public void save() {
     try {
       Path target = file.toString().toLowerCase().endsWith(".wav")
           ? file
@@ -339,6 +422,7 @@ final class SoundEditorView extends BorderPane {
       } finally {
         java.nio.file.Files.deleteIfExists(temp);
       }
+      dirty.set(false);
       boolean converted = !target.equals(file);
       status.setText(converted ? I18n.t("soundeditor.mp3.saved") : I18n.t("imageeditor.save"));
     } catch (IOException e) {

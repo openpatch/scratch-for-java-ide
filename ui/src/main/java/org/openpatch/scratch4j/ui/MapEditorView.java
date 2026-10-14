@@ -58,7 +58,7 @@ import java.util.function.Consumer;
  * and properties on object layers, manage layers and tilesets, resize the map.
  * It saves Tiled's own format in the form every Scratch for Java version loads.
  */
-final class MapEditorView extends BorderPane {
+final class MapEditorView extends BorderPane implements SavableTool {
 
   private enum Tool { PAINT, ERASE, FILL, RECTANGLE, PICK, SELECT_TILES, SELECT, NEW_RECTANGLE,
     NEW_ELLIPSE, NEW_POINT, NEW_POLYGON }
@@ -101,7 +101,8 @@ final class MapEditorView extends BorderPane {
   private TmxDocument.MapObject selectedObject;
   private double[] objectDragOffset;
   private final List<double[]> polygon = new ArrayList<>();
-  private boolean dirty;
+  private final javafx.beans.property.BooleanProperty dirty =
+      new javafx.beans.property.SimpleBooleanProperty();
   private boolean strokeRecorded;
   private boolean spaceDown;
   private double[] dragHere;
@@ -209,7 +210,17 @@ final class MapEditorView extends BorderPane {
   }
 
   boolean isDirty() {
+    return dirty.get();
+  }
+
+  @Override
+  public javafx.beans.property.ReadOnlyBooleanProperty dirtyProperty() {
     return dirty;
+  }
+
+  @Override
+  public String unsavedCloseQuestion() {
+    return I18n.t("map.close.unsaved");
   }
 
   TmxDocument document() {
@@ -218,18 +229,6 @@ final class MapEditorView extends BorderPane {
 
   Canvas canvas() {
     return canvas;
-  }
-
-  /** Asked when the tab closes with unsaved changes. */
-  boolean confirmClose() {
-    if (!dirty) {
-      return true;
-    }
-    Alert ask = new Alert(Alert.AlertType.CONFIRMATION, I18n.t("map.close.unsaved"),
-        I18n.ok(), I18n.cancel());
-    ask.setHeaderText(null);
-    Theme.style(ask);
-    return ask.showAndWait().orElse(null) == I18n.ok();
   }
 
   // --- layout ------------------------------------------------------------------------
@@ -637,7 +636,7 @@ final class MapEditorView extends BorderPane {
   }
 
   private void changed() {
-    dirty = true;
+    dirty.set(true);
     layerList.refresh();
     redraw();
     drawMinimap();
@@ -1277,7 +1276,7 @@ final class MapEditorView extends BorderPane {
       Button convert = Icons.labeled("fth-check", I18n.t("map.convert"), () -> {
         record();
         TmxCompatibility.convert(doc);
-        dirty = true;
+        dirty.set(true);
         save();
       });
       banner.getChildren().add(convert);
@@ -1297,7 +1296,7 @@ final class MapEditorView extends BorderPane {
       default -> active instanceof TmxDocument.TileLayer ? "" : I18n.t("map.hint.tilelayer");
     };
     status.setText(I18n.t("map.status", doc.width, doc.height, doc.tileWidth, doc.tileHeight)
-        + where + (dirty ? "  \u00b7  " + I18n.t("map.unsaved") : "")
+        + where + (dirty.get() ? "  \u00b7  " + I18n.t("map.unsaved") : "")
         + (hint.isEmpty() ? "" : "  \u00b7  " + hint));
   }
 
@@ -1614,7 +1613,7 @@ final class MapEditorView extends BorderPane {
       doc.layers.add(at, layer);
       active = layer;
       reloadAll();
-      dirty = true;
+      dirty.set(true);
     });
   }
 
@@ -1626,7 +1625,7 @@ final class MapEditorView extends BorderPane {
     record();
     java.util.Collections.swap(doc.layers, i, j);
     reloadAll();
-    dirty = true;
+    dirty.set(true);
   }
 
   private void renameLayer() {
@@ -1648,7 +1647,7 @@ final class MapEditorView extends BorderPane {
     doc.layers.remove(active);
     active = null;
     reloadAll();
-    dirty = true;
+    dirty.set(true);
   }
 
   /** A project image cut into tiles becomes a tileset (the slicer's size guess). */
@@ -1683,7 +1682,7 @@ final class MapEditorView extends BorderPane {
             (int) loaded.getHeight(), w, h);
         reloadAll();
         tilesetBox.setValue(t);
-        dirty = true;
+        dirty.set(true);
       } catch (NumberFormatException e) {
         alert(I18n.t("map.tileset.size"));
       }
@@ -1755,16 +1754,17 @@ final class MapEditorView extends BorderPane {
     selectedObject = null;
     active = activeIndex >= 0 && activeIndex < doc.layers.size()
         ? doc.layers.get(activeIndex) : null;
-    dirty = true;
+    dirty.set(true);
     reloadAll();
     selectObject(null);
   }
 
-  void save() {
+  @Override
+  public void save() {
     try {
       String xml = doc.toXml();
       LocalHistory.writeString(project.root(), file, xml);
-      dirty = false;
+      dirty.set(false);
       // reopen: the elements are now the saved ones
       doc = TmxDocument.open(file);
       active = null;
@@ -1782,7 +1782,7 @@ final class MapEditorView extends BorderPane {
    * managed setup region (outside it, with the user's consent via this button).
    */
   private void useInStage() {
-    if (dirty) save();
+    if (dirty.get()) save();
     List<String> stages;
     try {
       stages = project.stageClasses();

@@ -1185,6 +1185,7 @@ public class StudioApp extends javafx.application.Application {
         try {
           ImageEditorView paint = new ImageEditorView(project.get(), file);
           paint.setOnSpriteWritten(this::afterSpriteClassWritten);
+          paint.setOnSaved(saved -> afterImageSaved());
           return paint;
         } catch (IOException e) {
           alert(I18n.t("error.openfile", e.getMessage()), e);
@@ -2612,6 +2613,10 @@ public class StudioApp extends javafx.application.Application {
   /** Ctrl+S: everything autosaves anyway; this saves now and checks now. */
   private void saveAndCheck() {
     saveAll();
+    Tab shown = editor == null ? null : editor.getSelectionModel().getSelectedItem();
+    if (shown != null && shown.getContent() instanceof SavableTool tool) {
+      tool.save();
+    }
     reloadDesigners();
     checkProject();
     setStatus(I18n.t("status.saved"));
@@ -2624,6 +2629,16 @@ public class StudioApp extends javafx.application.Application {
       selector.refresh();
     }
     scheduleCheck();
+  }
+
+  /** A repainted picture: animation, sprite and stage previews and code lines re-read it. */
+  private void afterImageSaved() {
+    reloadDesigners();
+    for (Tab tab : editor.getTabs()) {
+      if (tab.getContent() instanceof CodeEditor code) {
+        code.refreshPreviews();
+      }
+    }
   }
 
   private void reloadDesigners() {

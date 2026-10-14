@@ -204,9 +204,11 @@ final class EditorTabs extends TabPane {
         tab.setOnCloseRequest(e -> {
           if (!assets.confirmClose()) e.consume();
         });
-      } else if (content instanceof MapEditorView map) {
+      } else if (content instanceof SavableTool savable) {
+        tab.textProperty().bind(Bindings.when(savable.dirtyProperty())
+            .then(title + "  ●").otherwise(title));
         tab.setOnCloseRequest(e -> {
-          if (!map.confirmClose()) e.consume();
+          if (!savable.confirmClose()) e.consume();
         });
       }
       tab.setOnClosed(e -> toolTabs.remove(key, created));
@@ -488,7 +490,7 @@ final class EditorTabs extends TabPane {
       if (tab.getContent() instanceof SpriteAssetsView assets && !assets.confirmClose()) {
         return false;
       }
-      if (tab.getContent() instanceof MapEditorView map && !map.confirmClose()) {
+      if (tab.getContent() instanceof SavableTool savable && !savable.confirmClose()) {
         return false;
       }
       if (tab.getContent() instanceof CodeEditor code
