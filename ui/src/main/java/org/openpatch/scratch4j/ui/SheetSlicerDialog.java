@@ -195,8 +195,8 @@ final class SheetSlicerDialog {
         LocalHistory.writeString(project.root(), classFile, updated);
         onWritten.accept(classFile);
       } catch (IOException | RuntimeException e) {
-        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
-            javafx.scene.control.Alert.AlertType.ERROR, e.getMessage(), I18n.ok());
+        javafx.scene.control.Alert alert = ErrorDetails.attach(new javafx.scene.control.Alert(
+            javafx.scene.control.Alert.AlertType.ERROR, e.getMessage(), I18n.ok()), e);
         alert.setHeaderText(null);
         Theme.style(alert);
         alert.showAndWait();

@@ -594,6 +594,20 @@
   -fx-font-style: italic;
 }
 
+.problem-trace-toggle {
+  -fx-text-fill: -color-accent-fg;
+  -fx-cursor: hand;
+}
+
+.problem-trace-toggle .ikonli-font-icon {
+  -fx-icon-color: -color-accent-fg;
+}
+
+.problem-trace {
+  -fx-font-family: "monospace";
+  -fx-font-size: 11px;
+}
+
 .problems-empty {
   -fx-text-fill: -color-fg-muted;
 }

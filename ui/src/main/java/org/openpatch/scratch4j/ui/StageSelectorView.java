@@ -257,8 +257,8 @@ final class StageSelectorView extends BorderPane {
   }
 
   private void showError(Exception e) {
-    javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
-        javafx.scene.control.Alert.AlertType.ERROR, e.getMessage(), I18n.ok());
+    javafx.scene.control.Alert alert = ErrorDetails.attach(new javafx.scene.control.Alert(
+        javafx.scene.control.Alert.AlertType.ERROR, e.getMessage(), I18n.ok()), e);
     alert.setHeaderText(null);
     alert.show();
   }
@@ -434,9 +434,9 @@ final class StageSelectorView extends BorderPane {
         stages.getSelectionModel().select(name);
         onOpenDesigner.accept(name);
       } catch (IOException | RuntimeException e) {
-        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
+        javafx.scene.control.Alert alert = ErrorDetails.attach(new javafx.scene.control.Alert(
             javafx.scene.control.Alert.AlertType.ERROR, e.getMessage(),
-            I18n.ok());
+            I18n.ok()), e);
         alert.setHeaderText(null);
         alert.show();
       }

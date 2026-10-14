@@ -398,8 +398,8 @@ final class DiagramView extends BorderPane {
     try {
       writePng(target.toPath());
     } catch (IOException e) {
-      new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
-          e.getMessage()).showAndWait();
+      ErrorDetails.attach(new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.ERROR,
+          e.getMessage()), e).showAndWait();
     }
   }
 

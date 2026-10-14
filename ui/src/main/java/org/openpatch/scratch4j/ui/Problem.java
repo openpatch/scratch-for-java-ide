@@ -7,15 +7,29 @@ import java.util.List;
  * One problem in the problems pane (compiler diagnostic or asset lint).
  * {@code original} is javac's message under a friendly headline (null if
  * none); a {@code followUp} may go away once the error above it is fixed.
+ * {@code trace} is a stack trace, shown only when the problem is expanded.
  */
 record Problem(Path file, long line, long column, String message, String explanation,
     List<String> suggestions, boolean error, String fix, String original, boolean followUp,
-    String fixData) {
+    String fixData, String trace) {
+
+  Problem(Path file, long line, long column, String message, String explanation,
+      List<String> suggestions, boolean error, String fix, String original, boolean followUp,
+      String fixData) {
+    this(file, line, column, message, explanation, suggestions, error, fix, original, followUp,
+        fixData, null);
+  }
 
   Problem(Path file, long line, long column, String message, String explanation,
       List<String> suggestions, boolean error, String fix, String original, boolean followUp) {
     this(file, line, column, message, explanation, suggestions, error, fix, original, followUp,
         null);
+  }
+
+  /** Something failed: {@code message} as the headline, {@code e}'s stack trace behind it. */
+  static Problem crash(String message, Throwable e) {
+    return new Problem(null, 0, 0, message, null, List.of(), true, null, null, false, null,
+        ErrorDetails.trace(e));
   }
 
   Problem(Path file, long line, long column, String message, String explanation,

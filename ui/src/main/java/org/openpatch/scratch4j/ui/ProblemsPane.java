@@ -20,7 +20,8 @@ import java.util.function.Consumer;
  * lints (with "did you mean"). Clicking a problem jumps to its line. The
  * placeholder says what to do next while the list is empty, and a bar above
  * the list offers the last version that ran when the project has been broken
- * for a while.
+ * for a while. A problem with a stack trace keeps it folded away until it is
+ * clicked (or Enter is pressed), then shows it with a button to copy it.
  */
 final class ProblemsPane extends BorderPane {
 
@@ -31,6 +32,8 @@ final class ProblemsPane extends BorderPane {
       Icons.of("fth-rotate-ccw"));
   private final HBox stuckBar = new HBox(10, stuck, restore);
   private Consumer<Problem> onFix = p -> { };
+  /** Problems whose stack trace is showing. */
+  private final java.util.Set<Problem> expanded = new java.util.HashSet<>();
 
   ProblemsPane(Consumer<Problem> onOpen) {
     getStyleClass().add("problems-pane");
@@ -93,6 +96,16 @@ final class ProblemsPane extends BorderPane {
           followUp.setMinHeight(Region.USE_PREF_SIZE);
           text.getChildren().add(followUp);
         }
+        if (problem.trace() != null) {
+          boolean open = expanded.contains(problem);
+          Label toggle = new Label(I18n.t(open ? "problems.trace.hide" : "problems.trace.show"),
+              Icons.of(open ? "fth-chevron-down" : "fth-chevron-right", 14));
+          toggle.getStyleClass().add("problem-trace-toggle");
+          text.getChildren().add(toggle);
+          if (open) {
+            text.getChildren().add(ErrorDetails.box(problem.trace()));
+          }
+        }
         if (problem.fix() != null) {
           Button fix = new Button(problem.fixLabel(), Icons.of("fth-tool"));
           fix.getStyleClass().add("problem-fix");
@@ -113,8 +126,19 @@ final class ProblemsPane extends BorderPane {
     });
     list.setOnMouseClicked(e -> {
       Problem problem = list.getSelectionModel().getSelectedItem();
-      if (problem != null && problem.file() != null && Files.isRegularFile(problem.file())) {
+      if (problem != null && problem.trace() != null) {
+        toggle(problem);
+      } else if (problem != null && problem.file() != null && Files.isRegularFile(problem.file())) {
         onOpen.accept(problem);
+      }
+    });
+    list.setOnKeyPressed(e -> {
+      Problem problem = list.getSelectionModel().getSelectedItem();
+      if (problem != null && problem.trace() != null && e.getTarget() == list
+          && (e.getCode() == javafx.scene.input.KeyCode.ENTER
+              || e.getCode() == javafx.scene.input.KeyCode.SPACE)) {
+        toggle(problem);
+        e.consume();
       }
     });
 
@@ -131,12 +155,20 @@ final class ProblemsPane extends BorderPane {
     setCenter(list);
   }
 
+  private void toggle(Problem problem) {
+    if (!expanded.remove(problem)) {
+      expanded.add(problem);
+    }
+    list.refresh();
+  }
+
   /** Runs a problem's fix (the button under it). */
   void setOnFix(Consumer<Problem> action) {
     this.onFix = action;
   }
 
   void setProblems(List<Problem> problems) {
+    expanded.retainAll(problems);
     list.getItems().setAll(problems);
   }
 

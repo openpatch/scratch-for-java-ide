@@ -293,9 +293,9 @@ final class NewProjectDialog {
     return name;
   }
 
-  static void showError(String message) {
-    Alert alert = new Alert(Alert.AlertType.ERROR,
-        message == null ? I18n.t("wizard.error.exists") : message, I18n.ok());
+  static void showError(String message, Throwable e) {
+    Alert alert = ErrorDetails.attach(new Alert(Alert.AlertType.ERROR,
+        message == null ? I18n.t("wizard.error.exists") : message, I18n.ok()), e);
     alert.setHeaderText(null);
     alert.showAndWait();
   }

@@ -235,7 +235,7 @@ final class SpriteAssetsView extends BorderPane {
       drawHitbox();
       refreshPoints();
     } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -550,7 +550,7 @@ final class SpriteAssetsView extends BorderPane {
       }
       onEditFile.accept(copy);
     } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -930,7 +930,7 @@ final class SpriteAssetsView extends BorderPane {
       if (!updated.equals(source)) onSaved.run();
       reload();
     } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -946,7 +946,11 @@ final class SpriteAssetsView extends BorderPane {
   }
 
   private void alert(String message) {
-    Alert alert = new Alert(Alert.AlertType.ERROR, message, I18n.ok());
+    alert(message, null);
+  }
+
+  private void alert(String message, Throwable e) {
+    Alert alert = ErrorDetails.attach(new Alert(Alert.AlertType.ERROR, message, I18n.ok()), e);
     Theme.style(alert);
     alert.showAndWait();
   }

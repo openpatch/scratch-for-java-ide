@@ -206,7 +206,7 @@ final class AnimationEditorView extends BorderPane {
     try {
       change.run();
     } catch (IOException | RuntimeException e) {
-      Alert alert = new Alert(Alert.AlertType.ERROR, e.getMessage(), I18n.ok());
+      Alert alert = ErrorDetails.attach(new Alert(Alert.AlertType.ERROR, e.getMessage(), I18n.ok()), e);
       alert.setHeaderText(null);
       Theme.style(alert);
       alert.showAndWait();

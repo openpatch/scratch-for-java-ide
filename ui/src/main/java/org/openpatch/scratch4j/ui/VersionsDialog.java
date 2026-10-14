@@ -158,7 +158,7 @@ final class VersionsDialog {
         onRestored.run();
         dialog.close();
       } catch (IOException ex) {
-        error(ex.getMessage());
+        error(ex.getMessage(), ex);
       }
     });
     restoreFile.setOnAction(e -> {
@@ -178,7 +178,7 @@ final class VersionsDialog {
         list.getSelectionModel().clearSelection();
         list.getSelectionModel().select(index);
       } catch (IOException ex) {
-        error(ex.getMessage());
+        error(ex.getMessage(), ex);
       }
     });
 
@@ -212,8 +212,8 @@ final class VersionsDialog {
     return ask.showAndWait().orElse(null) == I18n.ok();
   }
 
-  private static void error(String text) {
-    Alert alert = new Alert(Alert.AlertType.ERROR, text, I18n.ok());
+  private static void error(String text, Throwable e) {
+    Alert alert = ErrorDetails.attach(new Alert(Alert.AlertType.ERROR, text, I18n.ok()), e);
     alert.setHeaderText(null);
     Theme.style(alert);
     alert.showAndWait();

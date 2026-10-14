@@ -33,10 +33,18 @@ public final class ProjectCheck {
    * syntax error in the same file and may go away with it. {@code fix} is the
    * id of a one-click fix (the region fixes here, or one of {@link QuickFixes})
    * and {@code fixData} what it needs (an import line, a replacement name).
+   * {@code trace} is the stack trace when the check itself failed (null otherwise).
    */
   public record Problem(Path file, long line, long column, String message,
       String explanation, List<String> suggestions, boolean error, String fix,
-      String original, boolean followUp, String fixData) {
+      String original, boolean followUp, String fixData, String trace) {
+
+    public Problem(Path file, long line, long column, String message, String explanation,
+        List<String> suggestions, boolean error, String fix, String original,
+        boolean followUp, String fixData) {
+      this(file, line, column, message, explanation, suggestions, error, fix, original,
+          followUp, fixData, null);
+    }
 
     public Problem(Path file, long line, long column, String message, String explanation,
         List<String> suggestions, boolean error, String fix, String original,
@@ -53,6 +61,14 @@ public final class ProjectCheck {
     public Problem(Path file, long line, long column, String message, String explanation,
         List<String> suggestions, boolean error) {
       this(file, line, column, message, explanation, suggestions, error, null);
+    }
+
+    /** The check could not run: {@code message} as the headline, {@code e}'s stack trace under it. */
+    public static Problem crash(String message, Throwable e) {
+      var trace = new java.io.StringWriter();
+      e.printStackTrace(new java.io.PrintWriter(trace));
+      return new Problem(null, 0, 0, message, null, List.of(), true, null, null, false, null,
+          trace.toString());
     }
   }
 
@@ -118,8 +134,7 @@ public final class ProjectCheck {
     try (Cache cache = new Cache(project.root())) {
       return check(project, language, cache);
     } catch (IOException e) {
-      return List.of(new Problem(null, 0, 0, "Could not check the project: " + e.getMessage(),
-          null, List.of(), true));
+      return List.of(Problem.crash("Could not check the project: " + e.getMessage(), e));
     }
   }
 
@@ -257,8 +272,7 @@ public final class ProjectCheck {
         }
       }
     } catch (IOException e) {
-      problems.add(new Problem(null, 0, 0, "Could not check the project: " + e.getMessage(),
-          null, List.of(), true));
+      problems.add(Problem.crash("Could not check the project: " + e.getMessage(), e));
     }
     problems.sort(Comparator
         .comparing((Problem p) -> p.file() == null ? "" : p.file().toString())

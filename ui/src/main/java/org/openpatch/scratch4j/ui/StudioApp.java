@@ -868,11 +868,11 @@ public class StudioApp extends javafx.application.Application {
           onCodeSaved(file);
           setStatus(I18n.t("history.restored"));
         } catch (IOException e) {
-          alert(I18n.t("error.save", e.getMessage()));
+          alert(I18n.t("error.save", e.getMessage()), e);
         }
       });
     } catch (IOException e) {
-      alert(I18n.t("error.openfile", e.getMessage()));
+      alert(I18n.t("error.openfile", e.getMessage()), e);
     }
   }
 
@@ -936,7 +936,7 @@ public class StudioApp extends javafx.application.Application {
         }
         openProjectAt(result.parentDir().resolve(result.name()));
       } catch (IOException e) {
-        NewProjectDialog.showError(e.getMessage());
+        NewProjectDialog.showError(e.getMessage(), e);
       }
     });
   }
@@ -1028,7 +1028,7 @@ public class StudioApp extends javafx.application.Application {
         Platform.runLater(() -> {
           progress.close();
           setStatus(I18n.t("import.failed"));
-          alert(failed.apply(message));
+          alert(failed.apply(message), e);
         });
       }
     }, "project-import");
@@ -1050,7 +1050,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       open(ScratchProject.open(dir));
     } catch (IOException e) {
-      alert(I18n.t("error.open", dir, e.getMessage()));
+      alert(I18n.t("error.open", dir, e.getMessage()), e);
     }
   }
 
@@ -1178,7 +1178,7 @@ public class StudioApp extends javafx.application.Application {
           paint.setOnSpriteWritten(this::afterSpriteClassWritten);
           return paint;
         } catch (IOException e) {
-          alert(I18n.t("error.openfile", e.getMessage()));
+          alert(I18n.t("error.openfile", e.getMessage()), e);
           return null;
         }
       });
@@ -1187,7 +1187,7 @@ public class StudioApp extends javafx.application.Application {
         try {
           return new SoundEditorView(project.get().root(), file);
         } catch (IOException e) {
-          alert(I18n.t("error.openfile", e.getMessage()));
+          alert(I18n.t("error.openfile", e.getMessage()), e);
           return null;
         }
       });
@@ -1203,7 +1203,7 @@ public class StudioApp extends javafx.application.Application {
         }
         openByType(png);
       } catch (IOException e) {
-        alert(I18n.t("error.openfile", e.getMessage()));
+        alert(I18n.t("error.openfile", e.getMessage()), e);
       }
     } else if (name.matches(".*\\.(ttf|otf)$")) {
       editor.openTool("font:" + file, file.getFileName().toString(), "fth-type", () -> {
@@ -1214,7 +1214,7 @@ public class StudioApp extends javafx.application.Application {
             else setStatus(I18n.t("font.open.code"));
           });
         } catch (IOException e) {
-          alert(I18n.t("error.openfile", e.getMessage()));
+          alert(I18n.t("error.openfile", e.getMessage()), e);
           return null;
         }
       });
@@ -1228,7 +1228,7 @@ public class StudioApp extends javafx.application.Application {
             scheduleCheck();
           }, () -> editor.open(file));
         } catch (IOException e) {
-          alert(I18n.t("error.openfile", e.getMessage()));
+          alert(I18n.t("error.openfile", e.getMessage()), e);
           // an unreadable map still opens as XML
           editor.open(file);
           return null;
@@ -1238,7 +1238,7 @@ public class StudioApp extends javafx.application.Application {
       try {
         editor.open(file);
       } catch (java.io.UncheckedIOException e) {
-        alert(I18n.t("error.openfile", e.getMessage()));
+        alert(I18n.t("error.openfile", e.getMessage()), e);
       }
     }
   }
@@ -1373,7 +1373,7 @@ public class StudioApp extends javafx.application.Application {
       scheduleCheck();
       setStatus(I18n.t("problems.fixed.quick"));
     } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -1390,7 +1390,7 @@ public class StudioApp extends javafx.application.Application {
       scheduleCheck();
       setStatus(I18n.t("problems.fixed.promote"));
     } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -1545,7 +1545,7 @@ public class StudioApp extends javafx.application.Application {
       return folder.resolve(p.name().replaceAll("[^A-Za-z0-9_-]", "") + "-" + stamp + "."
           + extension);
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return null;
     }
   }
@@ -1697,7 +1697,7 @@ public class StudioApp extends javafx.application.Application {
         });
         return view;
       } catch (IOException e) {
-        alert(I18n.t("error.designer", e.getMessage()));
+        alert(I18n.t("error.designer", e.getMessage()), e);
         return null;
       }
     });
@@ -1725,7 +1725,7 @@ public class StudioApp extends javafx.application.Application {
       Theme.style(dialog);
       dialog.showAndWait().ifPresent(this::openSpriteAssets);
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -1751,7 +1751,7 @@ public class StudioApp extends javafx.application.Application {
             view.setOnEditFile(this::openByType);
             return view;
           } catch (IOException e) {
-            alert(I18n.t("error.openfile", e.getMessage()));
+            alert(I18n.t("error.openfile", e.getMessage()), e);
             return null;
           }
         });
@@ -1778,7 +1778,7 @@ public class StudioApp extends javafx.application.Application {
         }
         scheduleCheck();
       } catch (IOException | RuntimeException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
     });
   }
@@ -1878,7 +1878,7 @@ public class StudioApp extends javafx.application.Application {
       openByType(file);
       setStatus(I18n.t("asset.new.created", file.getFileName()));
     } catch (IOException | NumberFormatException e) {
-      alert(I18n.t("asset.new.error", e.getMessage()));
+      alert(I18n.t("asset.new.error", e.getMessage()), e);
     }
   }
 
@@ -1916,7 +1916,7 @@ public class StudioApp extends javafx.application.Application {
         setStatus(I18n.t("asset.renamed", renamed.getFileName()));
         showLeftUsages(p, file, usages, mode);
       } catch (IOException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
     });
   }
@@ -1949,7 +1949,7 @@ public class StudioApp extends javafx.application.Application {
             scheduleCheck();
             setStatus(I18n.t("class.renamed", oldName, name));
           } catch (IOException e) {
-            alert(e.getMessage());
+            alert(e.getMessage(), e);
           }
         });
   }
@@ -2021,7 +2021,7 @@ public class StudioApp extends javafx.application.Application {
             setStatus(I18n.t("file.renamed", renamed.getFileName()));
             showLeftUsages(p, file, usages, mode);
           } catch (IOException e) {
-            alert(e.getMessage());
+            alert(e.getMessage(), e);
           }
         });
   }
@@ -2049,7 +2049,7 @@ public class StudioApp extends javafx.application.Application {
           .sorted()
           .forEach(folders::add);
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     if (folders.isEmpty()) {
@@ -2089,7 +2089,7 @@ public class StudioApp extends javafx.application.Application {
       setStatus(I18n.t("file.moved", moved.getFileName(),
           where.isEmpty() ? I18n.t("move.projectfolder") : where.replace('\\', '/')));
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -2152,7 +2152,7 @@ public class StudioApp extends javafx.application.Application {
         openByType(copy);
         setStatus(I18n.t("file.duplicated", copy.getFileName()));
       } catch (IOException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
     });
   }
@@ -2222,7 +2222,7 @@ public class StudioApp extends javafx.application.Application {
           askSymbolName(p, source, offset, symbol);
         });
       } catch (IOException | RuntimeException e) {
-        Platform.runLater(() -> alert(e.getMessage()));
+        Platform.runLater(() -> alert(e.getMessage(), e));
       }
     }, "rename");
     worker.setDaemon(true);
@@ -2249,7 +2249,7 @@ public class StudioApp extends javafx.application.Application {
               Platform.runLater(() -> applyRename(p, source, caret, symbol, name, texts,
                   changed));
             } catch (IOException | RuntimeException e) {
-              Platform.runLater(() -> alert(e.getMessage()));
+              Platform.runLater(() -> alert(e.getMessage(), e));
             }
           }, "rename");
           worker.setDaemon(true);
@@ -2282,7 +2282,7 @@ public class StudioApp extends javafx.application.Application {
           e.addSuppressed(rollback);
         }
       }
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     for (Path file : changed.keySet()) editor.reloadIfOpen(file);
@@ -2315,7 +2315,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       texts = javaTexts(p);
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     Path key = sourceKey(texts, source.file());
@@ -2387,7 +2387,7 @@ public class StudioApp extends javafx.application.Application {
             showTab(searchTab, true);
           });
         } catch (IOException e) {
-          Platform.runLater(() -> alert(e.getMessage()));
+          Platform.runLater(() -> alert(e.getMessage(), e));
         }
       }, "find-in-project");
       worker.setDaemon(true);
@@ -2400,7 +2400,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       return FileUsages.find(p, path);
     } catch (IOException | RuntimeException e) {
-      alert(I18n.t("usages.error", e.getMessage()));
+      alert(I18n.t("usages.error", e.getMessage()), e);
       return null;
     }
   }
@@ -2521,7 +2521,7 @@ public class StudioApp extends javafx.application.Application {
       scheduleCheck();
       setStatus(I18n.t("file.deleted", file.getFileName()));
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -2541,7 +2541,7 @@ public class StudioApp extends javafx.application.Application {
         fileTree.selectPath(created);
         setStatus(I18n.t("folder.created", created.getFileName()));
       } catch (IOException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
     });
   }
@@ -2566,7 +2566,7 @@ public class StudioApp extends javafx.application.Application {
         setStatus(I18n.t("folder.renamed", renamed.getFileName()));
         showLeftUsages(p, folder, usages, mode);
       } catch (IOException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
     });
   }
@@ -2583,7 +2583,7 @@ public class StudioApp extends javafx.application.Application {
       scheduleCheck();
       setStatus(I18n.t("folder.deleted", folder.getFileName()));
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -2596,7 +2596,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       editor.saveAll();
     } catch (IOException e) {
-      alert(I18n.t("error.save", e.getMessage()));
+      alert(I18n.t("error.save", e.getMessage()), e);
     }
   }
 
@@ -2658,10 +2658,10 @@ public class StudioApp extends javafx.application.Application {
         found = ProjectCheck.check(p, language, cache).stream()
             .map(pr -> new Problem(pr.file(), pr.line(), pr.column(), pr.message(),
                 pr.explanation(), pr.suggestions(), pr.error(), pr.fix(), pr.original(),
-                pr.followUp(), pr.fixData()))
+                pr.followUp(), pr.fixData(), pr.trace()))
             .toList();
       } catch (RuntimeException e) {
-        found = List.of(new Problem(null, 0, 0, e.toString(), null, List.of(), true));
+        found = List.of(Problem.crash(e.toString(), e));
       } finally {
         if (cache != checkCache) {
           closeQuietly(cache); // the project changed while this check ran
@@ -2834,7 +2834,7 @@ public class StudioApp extends javafx.application.Application {
         javaFiles.add(source.getFileName().toString());
       }
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     String newId = "lesson-" + p.root().getFileName().toString().toLowerCase(java.util.Locale.ROOT)
@@ -2868,7 +2868,7 @@ public class StudioApp extends javafx.application.Application {
         setStatus(I18n.t("lessoneditor.removed"));
       }
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     openLesson(p);
@@ -2971,7 +2971,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       runStage(p.startStage());
     } catch (IOException e) {
-      alert(I18n.t("error.open", p.root(), e.getMessage()));
+      alert(I18n.t("error.open", p.root(), e.getMessage()), e);
     }
   }
 
@@ -2984,7 +2984,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       runStage(p.startStage(), true);
     } catch (IOException e) {
-      alert(I18n.t("error.open", p.root(), e.getMessage()));
+      alert(I18n.t("error.open", p.root(), e.getMessage()), e);
     }
   }
 
@@ -3251,7 +3251,7 @@ public class StudioApp extends javafx.application.Application {
               console.info("\u26A1 " + I18n.t("hotswap.enhanced.ready") + " (" + got + ")");
             });
           } catch (IOException e) {
-            Platform.runLater(() -> alert(I18n.t("hotswap.enhanced.failed", e.getMessage())));
+            Platform.runLater(() -> alert(I18n.t("hotswap.enhanced.failed", e.getMessage()), e));
           }
         }, "runtime-download");
         download.setDaemon(true);
@@ -3306,7 +3306,7 @@ public class StudioApp extends javafx.application.Application {
       afterRestore();
       setStatus(I18n.t("versions.restored", when));
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -3534,7 +3534,7 @@ public class StudioApp extends javafx.application.Application {
                   .toString()));
         });
       } catch (IOException | RuntimeException e) {
-        Platform.runLater(() -> alert(I18n.t("export.failed", e.getMessage())));
+        Platform.runLater(() -> alert(I18n.t("export.failed", e.getMessage()), e));
       }
     }, "scratch4j-export");
     worker.setDaemon(true);
@@ -3622,7 +3622,7 @@ public class StudioApp extends javafx.application.Application {
         importAbiturklassen();
       }
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     checkLibrary(p, true);
@@ -3681,7 +3681,7 @@ public class StudioApp extends javafx.application.Application {
       try {
         if (status.version() != null) LibraryCheck.pin(p, status);
       } catch (IOException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
       return;
     }
@@ -3697,7 +3697,7 @@ public class StudioApp extends javafx.application.Application {
           scheduleCheck();
         });
       } catch (IOException e) {
-        Platform.runLater(() -> alert(e.getMessage()));
+        Platform.runLater(() -> alert(e.getMessage(), e));
       }
     }, "library-install");
     worker.setDaemon(true);
@@ -3715,7 +3715,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       present = org.openpatch.scratch4j.core.project.Abiturklassen.present(p);
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
       return;
     }
     var choice = AbiturklassenDialog.show(present).orElse(null);
@@ -3761,7 +3761,7 @@ public class StudioApp extends javafx.application.Application {
         Platform.runLater(() -> {
           setStatus(I18n.t("abitur.failed.short"));
           alert(I18n.t("abitur.failed", e.getMessage(),
-              org.openpatch.scratch4j.core.project.Abiturklassen.URL));
+              org.openpatch.scratch4j.core.project.Abiturklassen.URL), e);
         });
       }
     }, "scratch4j-abiturklassen");
@@ -3807,7 +3807,7 @@ public class StudioApp extends javafx.application.Application {
                   scheduleCheck();
                 });
               } catch (IOException e) {
-                Platform.runLater(() -> alert(e.getMessage()));
+                Platform.runLater(() -> alert(e.getMessage(), e));
               }
             }, "library-download");
             download.setDaemon(true);
@@ -3832,7 +3832,7 @@ public class StudioApp extends javafx.application.Application {
       fileTree.reload();
       setStatus(I18n.t("export.done", zip));
     } catch (IOException e) {
-      alert(I18n.t("export.failed", e.getMessage()));
+      alert(I18n.t("export.failed", e.getMessage()), e);
     }
   }
 
@@ -3894,7 +3894,7 @@ public class StudioApp extends javafx.application.Application {
           alert(I18n.t("project.transfer.nrw"));
         }
       } catch (IOException e) {
-        alert(e.getMessage());
+        alert(e.getMessage(), e);
       }
     }, message -> message);
   }
@@ -3908,7 +3908,7 @@ public class StudioApp extends javafx.application.Application {
           p.root().resolve("export").resolve(p.name() + "-browser.zip"));
       fileTree.reload();
       setStatus(I18n.t("export.done", zip));
-    } catch (IOException e) { alert(I18n.t("export.failed", e.getMessage())); }
+    } catch (IOException e) { alert(I18n.t("export.failed", e.getMessage()), e); }
   }
 
   /** Online IDE / docs example: paste it, get normal classes. */
@@ -3938,7 +3938,7 @@ public class StudioApp extends javafx.application.Application {
       scheduleCheck();
       setStatus(I18n.t("snippet.done", imported.files().size(), imported.startClass()));
     } catch (IOException | RuntimeException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -3959,7 +3959,7 @@ public class StudioApp extends javafx.application.Application {
       fileTree.reload();
       setStatus(I18n.t("snippet.exported", file.getFileName()));
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -4006,7 +4006,7 @@ public class StudioApp extends javafx.application.Application {
     } catch (NumberFormatException e) {
       alert(I18n.t("map.new.numbers"));
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -4097,7 +4097,7 @@ public class StudioApp extends javafx.application.Application {
     try {
       p.settings().save(p.root());
     } catch (IOException e) {
-      alert(e.getMessage());
+      alert(e.getMessage(), e);
     }
   }
 
@@ -4250,6 +4250,13 @@ public class StudioApp extends javafx.application.Application {
 
   private void alert(String message) {
     Alert alert = new Alert(Alert.AlertType.ERROR, message, I18n.ok());
+    alert.setHeaderText(null);
+    alert.showAndWait();
+  }
+
+  /** An error with {@code e}'s stack trace folded under "Show details". */
+  private void alert(String message, Throwable e) {
+    Alert alert = ErrorDetails.attach(new Alert(Alert.AlertType.ERROR, message, I18n.ok()), e);
     alert.setHeaderText(null);
     alert.showAndWait();
   }
