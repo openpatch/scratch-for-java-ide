@@ -55,6 +55,24 @@ class LayoutIT {
     }
   }
 
+  /** Presses the primary button at one point of a node, drags to another and lets go. */
+  static void drag(Node node, double x1, double y1, double x2, double y2) {
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_PRESSED, x1, y1, true);
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, (x1 + x2) / 2, (y1 + y2) / 2, true);
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, x2, y2, true);
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_RELEASED, x2, y2, false);
+  }
+
+  private static void mouse(Node node,
+      javafx.event.EventType<javafx.scene.input.MouseEvent> type, double x, double y,
+      boolean down) {
+    var scene = node.localToScene(x, y);
+    javafx.event.Event.fireEvent(node, new javafx.scene.input.MouseEvent(type, scene.getX(),
+        scene.getY(), 0, 0, javafx.scene.input.MouseButton.PRIMARY, 1, false, false, false,
+        false, down, false, false, false, false,
+        type == javafx.scene.input.MouseEvent.MOUSE_PRESSED, null));
+  }
+
   interface ThrowingRunnable {
     void run() throws Exception;
   }
@@ -321,6 +339,33 @@ class LayoutIT {
       assertThat(diagrams.canvas().placed().get("Stage")[1])
           .isLessThan(diagrams.canvas().placed().get("World")[1]);
       UiSmokeIT.snapshot(diagrams.canvas(), Path.of("target/class-diagram.png"));
+
+      // Player dragged aside stays there, also in a new view, until arranged again;
+      // the view itself does not scroll along
+      UmlCanvas classes = diagrams.canvas();
+      var scroll = (javafx.scene.control.ScrollPane) diagrams.lookup(".paint-scroll");
+      // dragging the free space above the boxes pans
+      drag(classes, 400, 5, 300, 5);
+      assertThat(scroll.getHvalue()).isGreaterThan(0);
+      assertThat(classes.arrangedByHand()).isFalse();
+      // from the middle, so a pan either way would show
+      scroll.setHvalue(0.5);
+      double scrolled = scroll.getHvalue();
+      double[] player = classes.placed().get("Player").clone();
+      drag(classes, player[0] + 20, player[1] + 10, player[0] + 170, player[1] + 50);
+      assertThat(classes.placed().get("Player")[0]).isEqualTo(player[0] + 150);
+      assertThat(classes.placed().get("Player")[1]).isEqualTo(player[1] + 40);
+      assertThat(scroll.getHvalue()).isEqualTo(scrolled);
+      assertThat(classes.placed().get("World")).startsWith(classes.pinned().get("World"));
+      assertThat(tiled.resolve(".scratch4j/diagram.json")).exists();
+      DiagramView reopened = new DiagramView(
+          org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), () -> null, f -> { });
+      assertThat(reopened.canvas().placed().get("Player")[0])
+          .isEqualTo((double) Math.round(player[0] + 150));
+      UiSmokeIT.snapshot(classes, Path.of("target/class-diagram-moved.png"));
+      classes.arrangeAutomatically();
+      assertThat(classes.placed().get("Player")).startsWith(player[0], player[1]);
+      assertThat(tiled.resolve(".scratch4j/diagram.json")).doesNotExist();
       diagrams.showObjects(List.of(
           new org.openpatch.scratch4j.runner.Debugger.ObjectNode(1, "World",
               List.of(new org.openpatch.scratch4j.runner.Debugger.Variable("items", "List",

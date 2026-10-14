@@ -21,6 +21,7 @@ import javafx.util.Duration;
 import org.openpatch.scratch4j.core.project.Abiturklassen;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.uml.ClassModel;
+import org.openpatch.scratch4j.core.uml.DiagramPositions;
 import org.openpatch.scratch4j.runner.Debugger;
 
 import java.io.IOException;
@@ -59,10 +60,15 @@ final class DiagramView extends BorderPane {
   private final CheckBox abitur = new CheckBox(I18n.t("diagram.abitur"));
   private final CheckBox live = new CheckBox(I18n.t("diagram.live"));
   private final Button snapshot = new Button(I18n.t("diagram.snapshot"), Icons.of("fth-camera"));
+  /** Shown once boxes were dragged: lays the diagram out by itself again. */
+  private final Button arrange = new Button(I18n.t("diagram.arrange"), Icons.of("fth-grid"));
   private final Label message = new Label();
   private final StackPane center;
   private final Timeline liveTimer;
   private ClassModel.Model model;
+  /** Where the classes were dragged (kept in the project) and the objects (this session). */
+  private Map<String, double[]> classPositions;
+  private Map<String, double[]> objectPositions = new HashMap<>();
   private Set<String> abiturPresent = Set.of();
   private boolean reading;
 
@@ -91,6 +97,10 @@ final class DiagramView extends BorderPane {
       box.setOnAction(e -> refresh());
     }
     snapshot.setOnAction(e -> readObjects());
+    classPositions = DiagramPositions.load(project.root());
+    arrange.setTooltip(new javafx.scene.control.Tooltip(I18n.t("diagram.arrange.tooltip")));
+    arrange.setOnAction(e -> canvas.arrangeAutomatically());
+    canvas.setOnArranged(this::arranged);
     live.setTooltip(new javafx.scene.control.Tooltip(I18n.t("diagram.live.tooltip")));
     liveTimer = new Timeline(new KeyFrame(Duration.seconds(1), e -> {
       if (live.isSelected() && objectsMode.isSelected()) readObjects();
@@ -106,6 +116,7 @@ final class DiagramView extends BorderPane {
         javafx.geometry.Orientation.VERTICAL), attributes, methods, library, abitur, snapshot,
         live,
         spacer,
+        arrange,
         Icons.button("fth-zoom-out", I18n.t("designer.zoomout"),
             () -> canvas.setZoom(canvas.zoom() / 1.25)),
         Icons.button("fth-zoom-in", I18n.t("designer.zoomin"),
@@ -163,10 +174,32 @@ final class DiagramView extends BorderPane {
     snapshot.setManaged(objects);
     live.setManaged(objects);
     if (objects) {
+      canvas.setPinned(objectPositions);
       readObjects();
     } else {
       showClasses();
     }
+    showArrange();
+  }
+
+  /** After a drag (all positions) or after arranging automatically (none). */
+  private void arranged(Map<String, double[]> positions) {
+    if (objectsMode.isSelected()) {
+      objectPositions = new HashMap<>(positions);
+    } else {
+      classPositions = new HashMap<>(positions);
+      try {
+        DiagramPositions.save(project.root(), classPositions);
+      } catch (IOException e) {
+        // the arrangement lasts until the IDE closes
+      }
+    }
+    showArrange();
+  }
+
+  private void showArrange() {
+    arrange.setVisible(canvas.arrangedByHand());
+    arrange.setManaged(arrange.isVisible());
   }
 
   private void open(String id) {
@@ -192,13 +225,28 @@ final class DiagramView extends BorderPane {
     }
     message.setVisible(model.classes().isEmpty());
     message.setText(I18n.t("diagram.noclasses"));
-    Map<String, Integer> depth = new HashMap<>();
     List<UmlCanvas.Box> boxes = new ArrayList<>();
     List<UmlCanvas.Edge> edges = new ArrayList<>();
     Set<String> hidden = abitur.isSelected() ? Set.of() : abiturPresent;
+    List<ClassModel.UmlClass> shown = new ArrayList<>();
     for (ClassModel.UmlClass c : model.classes()) {
       if (c.library() && !library.isSelected()) continue;
       if (hidden.contains(c.name())) continue;
+      shown.add(c);
+    }
+    List<String> names = shown.stream().map(ClassModel.UmlClass::name).toList();
+    Map<String, String> parentOf = new HashMap<>();
+    for (ClassModel.UmlClass c : shown) {
+      if (c.superclass() != null && names.contains(c.superclass())) {
+        parentOf.put(c.name(), c.superclass());
+      }
+    }
+    List<ClassModel.Association> associations = model.associations().stream()
+        .filter(a -> names.contains(a.from()) && names.contains(a.to())).toList();
+    Map<String, Integer> layers = DiagramLayers.of(names, parentOf, associations.stream()
+        .map(a -> new String[] {a.from(), a.to()}).toList());
+    canvas.setPinned(classPositions);
+    for (ClassModel.UmlClass c : shown) {
       List<List<String>> sections = new ArrayList<>();
       if (!c.library()) {
         if (attributes.isSelected()) {
@@ -210,34 +258,18 @@ final class DiagramView extends BorderPane {
       }
       String title = (c.isInterface() ? "«interface» " : "") + c.name();
       boxes.add(new UmlCanvas.Box(c.name(), UmlCanvas.BoxKind.CLASS, title,
-          c.isAbstract() || c.isInterface(), false, c.library(), sections, depth(c, depth)));
-      if (c.superclass() != null && model.byName(c.superclass()) != null
-          && !hidden.contains(c.superclass())
-          && (library.isSelected() || !model.byName(c.superclass()).library())) {
+          c.isAbstract() || c.isInterface(), false, c.library(), sections,
+          layers.get(c.name())));
+      if (parentOf.containsKey(c.name())) {
         edges.add(new UmlCanvas.Edge(c.name(), c.superclass(),
             UmlCanvas.EdgeKind.INHERITANCE, ""));
       }
     }
-    for (ClassModel.Association a : model.associations()) {
-      if (hidden.contains(a.from()) || hidden.contains(a.to())) continue;
+    for (ClassModel.Association a : associations) {
       edges.add(new UmlCanvas.Edge(a.from(), a.to(), UmlCanvas.EdgeKind.ASSOCIATION,
           a.role() + (a.many() ? " *" : "")));
     }
     canvas.show(boxes, edges);
-  }
-
-  /** Inheritance depth: library base classes on top, then their subclasses. */
-  private int depth(ClassModel.UmlClass c, Map<String, Integer> memo) {
-    Integer known = memo.get(c.name());
-    if (known != null) return known;
-    memo.put(c.name(), 0);
-    ClassModel.UmlClass parent = c.superclass() == null ? null : model.byName(c.superclass());
-    int d = 0;
-    if (parent != null && (library.isSelected() || !parent.library())) {
-      d = depth(parent, memo) + 1;
-    }
-    memo.put(c.name(), d);
-    return d;
   }
 
   // --- object diagram ----------------------------------------------------------------------
@@ -296,6 +328,12 @@ final class DiagramView extends BorderPane {
     }
     message.setVisible(objects.isEmpty());
     message.setText(I18n.t("diagram.noobjects"));
+    // objects moved by hand keep their place while they exist
+    Set<String> alive = new HashSet<>();
+    for (Debugger.ObjectNode o : objects) alive.add(String.valueOf(o.id()));
+    objectPositions.keySet().retainAll(alive);
+    canvas.setPinned(objectPositions);
+    showArrange();
     // names: the attribute that references an object ("player : Player")
     Map<Long, String> name = new HashMap<>();
     Map<Long, Set<Long>> children = new HashMap<>();
