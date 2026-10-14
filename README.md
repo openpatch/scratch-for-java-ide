@@ -55,6 +55,9 @@ scripts/package-ide.sh msi        # Windows installer, on Windows
 scripts/package-ide.sh dmg        # macOS disk image, on macOS
 ```
 
+The MSI adds a desktop shortcut and a Start menu entry in a "Scratch for Java"
+folder; the DEB adds an applications menu entry under Development and Education.
+
 Outputs are written to `target/package/`. The GitHub Actions
 [`Package IDE`](.github/workflows/package.yml) workflow builds platform
 artifacts when run manually or when an alpha tag is pushed. Packaging may

@@ -107,7 +107,17 @@ else
   NATIVE_ACCESS='ALL-UNNAMED'
 fi
 
+# Installers add the IDE to the applications menu (Start menu on Windows) and,
+# on Windows, to the desktop. jpackage rejects these options for app images.
+SHORTCUTS=()
+case "$TYPE" in
+  msi|exe) SHORTCUTS=(--win-shortcut --win-menu --win-menu-group "Scratch for Java") ;;
+  deb|rpm) SHORTCUTS=(--linux-shortcut --linux-menu-group "Development;Education;") ;;
+esac
+
+# ${SHORTCUTS[@]+...} keeps an empty array safe under set -u in macOS's bash 3.2
 jpackage --verbose --type "$TYPE" \
+  ${SHORTCUTS[@]+"${SHORTCUTS[@]}"} \
   --name "$NAME" \
   --app-version "$VERSION" \
   --vendor "OpenPatch" \

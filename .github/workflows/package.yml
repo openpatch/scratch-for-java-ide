@@ -103,6 +103,22 @@ jobs:
             done
           done
 
+      - name: Install the MSI and check its shortcuts
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem dist\*.msi).FullName
+          $install = Start-Process msiexec.exe -ArgumentList "/i `"$msi`" /qn /norestart" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "msiexec exited with $($install.ExitCode)" }
+          # a per-machine install puts them in the folders shared by all users
+          $shortcuts = @(
+            (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Scratch for Java Studio.lnk'),
+            (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Scratch for Java\Scratch for Java Studio.lnk'))
+          foreach ($shortcut in $shortcuts) {
+            if (-not (Test-Path $shortcut)) { throw "Shortcut missing: $shortcut" }
+            Write-Host "Found $shortcut"
+          }
+
       - name: Sign and notarize (macOS, when the secrets exist)
         if: runner.os == 'macOS' && env.HAS_MAC_CERT == 'true'
         env:
