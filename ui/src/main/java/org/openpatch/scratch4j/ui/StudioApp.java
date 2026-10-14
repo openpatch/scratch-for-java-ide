@@ -3280,7 +3280,7 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /** Project > Back to the last version that worked (one click, undoable). */
-  private void restoreLastWorking() {
+  void restoreLastWorking() {
     ScratchProject p = project.get();
     if (p == null) return;
     saveAll();
@@ -3310,7 +3310,11 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
-  /** Files changed on disk: every view catches up. */
+  /**
+   * Files changed on disk: every view catches up. The crashes of the last run
+   * were the replaced code's, so they go too, and a running program gets the
+   * restored code like a save.
+   */
   private void afterRestore() {
     for (Path open : editor.openFiles()) {
       if (java.nio.file.Files.exists(open)) {
@@ -3322,6 +3326,9 @@ public class StudioApp extends javafx.application.Application {
     fileTree.reload();
     reloadDesigners();
     if (selector != null) selector.refresh();
+    crashProblems.clear();
+    showProblems(checkedProblems);
+    scheduleHotSwap();
     scheduleCheck();
   }
 
@@ -3342,7 +3349,7 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /** A crash of the running program: in the problems, at its line, in the console. */
-  private void showCrash(org.openpatch.scratch4j.core.lint.RuntimeErrors.Explanation e) {
+  void showCrash(org.openpatch.scratch4j.core.lint.RuntimeErrors.Explanation e) {
     Platform.runLater(() -> {
       String where = e.file() == null ? "" : " (" + e.file().getFileName() + ":" + e.line() + ")";
       Problem problem = new Problem(e.file(), Math.max(0, e.line()), 0,
