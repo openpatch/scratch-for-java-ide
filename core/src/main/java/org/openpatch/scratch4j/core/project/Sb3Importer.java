@@ -66,6 +66,16 @@ public final class Sb3Importer {
    */
   public static Result importProject(Path sb3, Path parentDir, String name, Path libraryJar,
       Function<Path, Path> mp3ToWav) throws IOException {
+    return importProject(sb3, parentDir, name, libraryJar, mp3ToWav, ImportProgress.NONE);
+  }
+
+  /**
+   * Like {@link #importProject(Path, Path, String, Path, Function)}, telling
+   * {@code progress} about each costume and sound (drawing and converting
+   * them is what takes the time).
+   */
+  public static Result importProject(Path sb3, Path parentDir, String name, Path libraryJar,
+      Function<Path, Path> mp3ToWav, ImportProgress progress) throws IOException {
     Path root = parentDir.resolve(name);
     if (Files.exists(root)) {
       throw new IOException("Folder already exists: " + root);
@@ -84,7 +94,7 @@ public final class Sb3Importer {
       // clones convert only for a library that has them (whenStartsAsClone)
       boolean clones = libraryJar != null && org.openpatch.scratch4j.core.lint.LibraryCallbacks
           .of(List.of(libraryJar)).sprite().containsKey("whenStartsAsClone");
-      Importer importer = new Importer(zip, root, mp3ToWav, clones);
+      Importer importer = new Importer(zip, root, mp3ToWav, clones, progress);
       Result result = importer.run(project);
       Path libs = root.resolve("+libs");
       Files.createDirectories(libs);
@@ -105,6 +115,9 @@ public final class Sb3Importer {
     private final Path root;
     private final Function<Path, Path> mp3ToWav;
     private final boolean clones;
+    private final ImportProgress progress;
+    private int assetsDone;
+    private int assets;
     private final List<String> notes = new ArrayList<>();
     private final Set<String> usedFiles = new HashSet<>();
     private final Set<String> classNames = new HashSet<>(Set.of("Stage", "Sprite", "Window",
@@ -114,11 +127,18 @@ public final class Sb3Importer {
     private final List<ScratchMigration.Task> tasks = new ArrayList<>();
     private boolean concurrentTargets;
 
-    Importer(ZipFile zip, Path root, Function<Path, Path> mp3ToWav, boolean clones) {
+    Importer(ZipFile zip, Path root, Function<Path, Path> mp3ToWav, boolean clones,
+        ImportProgress progress) {
       this.zip = zip;
       this.root = root;
       this.mp3ToWav = mp3ToWav;
       this.clones = clones;
+      this.progress = progress;
+    }
+
+    /** One more costume or sound: the steps the progress bar counts. */
+    private void nextAsset(String owner, String name) {
+      progress.step(owner + ": " + name, assetsDone++, assets);
     }
 
     private record Costume(String name, String path, double centerX, double centerY,
@@ -127,6 +147,9 @@ public final class Sb3Importer {
     private record SoundFile(String name, String path) {}
 
     Result run(JsonNode project) throws IOException {
+      for (JsonNode target : project.path("targets")) {
+        assets += target.path("costumes").size() + target.path("sounds").size();
+      }
       int flags = 0;
       for (JsonNode target : project.path("targets")) for (var entry : target.path("blocks").properties()) {
         if (entry.getValue().path("opcode").asText().equals("event_whenflagclicked")
@@ -409,6 +432,7 @@ public final class Sb3Importer {
         // quotes and backslashes would need escapes the designer's subset does not read
         String name = costume.path("name").asString("costume").replace('"', '\'')
             .replace('\\', '/');
+        nextAsset(owner, name);
         String asset = costume.path("md5ext").asString(costume.path("assetId").asString("")
             + "." + costume.path("dataFormat").asString("png"));
         String format = costume.path("dataFormat").asString(
@@ -455,6 +479,7 @@ public final class Sb3Importer {
       for (JsonNode sound : target.path("sounds")) {
         String name = sound.path("name").asString("sound").replace('"', '\'')
             .replace('\\', '/');
+        nextAsset(owner, name);
         String asset = sound.path("md5ext").asString(sound.path("assetId").asString("")
             + "." + sound.path("dataFormat").asString("wav"));
         String format = sound.path("dataFormat").asString(

@@ -972,11 +972,8 @@ public class StudioApp extends javafx.application.Application {
       projectName = name + i;
     }
     String target = projectName;
-    setStatus(I18n.t("sb3.importing", sb3.getName()));
-    Thread worker = new Thread(() -> {
-      try {
-        var result = org.openpatch.scratch4j.core.project.Sb3Importer.importProject(
-            sb3.toPath(), folder.toPath(), target,
+    importing(sb3.getName(), progress -> org.openpatch.scratch4j.core.project.Sb3Importer
+        .importProject(sb3.toPath(), folder.toPath(), target,
             LibraryJarSource.allJar(bundledLibraryDir()), mp3 -> {
               try {
                 Path wav = mp3.resolveSibling(mp3.getFileName().toString()
@@ -987,19 +984,54 @@ public class StudioApp extends javafx.application.Application {
               } catch (IOException | RuntimeException e) {
                 return null;
               }
-            });
-        Platform.runLater(() -> {
+            }, progress),
+        result -> {
           openProjectAt(result.root());
           console.info("\u2714 " + I18n.t("sb3.done", result.spriteClasses().size()));
           for (String note : result.notes()) {
             console.info("\u2022 " + note);
           }
           bottomTabs.getSelectionModel().select(consoleTab);
+        },
+        message -> I18n.t("sb3.failed", message));
+  }
+
+  /** An import for {@link #importing}: runs on a worker thread and reports its steps. */
+  private interface ImportJob<T> {
+    T run(org.openpatch.scratch4j.core.project.ImportProgress progress) throws IOException;
+  }
+
+  /**
+   * Runs an import of {@code fileName} on a worker thread behind a progress
+   * window, so a large project does not look like a hung IDE; then
+   * {@code done} with the result on the FX thread, or an alert with the
+   * error message as {@code failed} words it.
+   */
+  private <T> void importing(String fileName, ImportJob<T> job,
+      java.util.function.Consumer<T> done,
+      java.util.function.UnaryOperator<String> failed) {
+    String what = I18n.t("import.running", fileName);
+    setStatus(what);
+    ProgressWindow progress = new ProgressWindow(stage, what);
+    progress.show();
+    Thread worker = new Thread(() -> {
+      try {
+        T result = job.run(progress::step);
+        Platform.runLater(() -> {
+          progress.close();
+          setStatus(""); // opening the project says so
+          done.accept(result);
         });
-      } catch (IOException | RuntimeException e) {
-        Platform.runLater(() -> alert(I18n.t("sb3.failed", e.getMessage())));
+      } catch (IOException | RuntimeException | Error e) {
+        // an Error too (out of memory drawing costumes): the window must not stay
+        String message = e.getMessage() == null ? e.toString() : e.getMessage();
+        Platform.runLater(() -> {
+          progress.close();
+          setStatus(I18n.t("import.failed"));
+          alert(failed.apply(message));
+        });
       }
-    }, "sb3-import");
+    }, "project-import");
     worker.setDaemon(true);
     worker.start();
   }
@@ -3808,19 +3840,21 @@ public class StudioApp extends javafx.application.Application {
     parent.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File folder = parent.showDialog(stage);
     if (folder == null) return;
-    try {
+    importing(archive.getName(), progress -> {
       var libraries = new java.util.HashMap<String, Path>();
       for (LibraryFlavour flavour : LibraryFlavour.values()) {
         libraries.put(flavour.id(), LibraryJarSource.jar(flavour, libraryDirFor(flavour)));
       }
-      var imported = org.openpatch.scratch4j.export.CoursePack.importZip(archive.toPath(), folder.toPath(), libraries);
+      return org.openpatch.scratch4j.export.CoursePack.importZip(archive.toPath(), folder.toPath(),
+          libraries, progress);
+    }, imported -> {
       var names = imported.projects().stream().map(path -> imported.root().relativize(path).toString()).toList();
       javafx.scene.control.ChoiceDialog<String> choose = new javafx.scene.control.ChoiceDialog<>(names.get(0), names);
       choose.setTitle(I18n.t("menu.project.course"));
       choose.setHeaderText(I18n.t("course.choose"));
       Theme.style(choose);
       choose.showAndWait().ifPresent(name -> openProjectAt(imported.root().resolve(name)));
-    } catch (IOException e) { alert(e.getMessage()); }
+    }, message -> message);
   }
 
   private void openSharedZip() {
@@ -3839,20 +3873,23 @@ public class StudioApp extends javafx.application.Application {
 
   /** Imports a project ZIP or workspace JSON into a new folder in {@code parentDir} and opens it. */
   private void importShared(Path file, Path parentDir) {
-    try {
+    importing(file.getFileName().toString(), progress -> {
       Files.createDirectories(parentDir);
-      Path imported = SharedProjectFile.isJson(file)
+      return SharedProjectFile.isJson(file)
           ? org.openpatch.scratch4j.core.project.PortableProject.importWorkspace(file, parentDir)
-          : org.openpatch.scratch4j.export.ProjectFormats.importZip(file, parentDir);
+          : org.openpatch.scratch4j.export.ProjectFormats.importZip(file, parentDir, progress);
+    }, imported -> {
       openProjectAt(imported);
       ScratchProject opened = project.get();
-      if (opened != null && "nrw".equals(opened.settings().flavour)
-          && !org.openpatch.scratch4j.core.project.Abiturklassen.present(opened).contains("List")) {
-        alert(I18n.t("project.transfer.nrw"));
+      try {
+        if (opened != null && "nrw".equals(opened.settings().flavour)
+            && !org.openpatch.scratch4j.core.project.Abiturklassen.present(opened).contains("List")) {
+          alert(I18n.t("project.transfer.nrw"));
+        }
+      } catch (IOException e) {
+        alert(e.getMessage());
       }
-    } catch (IOException e) {
-      alert(e.getMessage());
-    }
+    }, message -> message);
   }
 
   private void shareBrowserZip() {

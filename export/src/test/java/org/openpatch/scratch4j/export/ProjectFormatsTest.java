@@ -136,6 +136,24 @@ class ProjectFormatsTest {
   }
 
   @Test
+  void importReportsEachFileItUnpacks() throws Exception {
+    Path archive = tmp.resolve("game.zip");
+    try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
+      for (String name : java.util.List.of("game/", "game/MyStage.java", "game/assets/",
+          "game/assets/cat.png", "__MACOSX/game/._MyStage.java")) {
+        zip.putNextEntry(new java.util.zip.ZipEntry(name));
+        if (!name.endsWith("/")) zip.write("x".getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+      }
+    }
+    var steps = new java.util.ArrayList<String>();
+    ProjectFormats.importZip(archive, tmp.resolve("imported"),
+        (item, done, total) -> steps.add(done + "/" + total + " " + item));
+    // folders and Finder's metadata are no steps
+    assertThat(steps).containsExactly("0/2 game/MyStage.java", "1/2 game/assets/cat.png");
+  }
+
+  @Test
   void unsafeOrBrokenArchivesNeverPublishPartialProjects() throws Exception {
     Path archive = tmp.resolve("bad.zip");
     try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {

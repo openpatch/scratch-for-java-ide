@@ -101,6 +101,18 @@ final class Theme {
     pane.setStyle("-fx-font-size: " + Math.round(14 * scale) + "px;");
   }
 
+  /** Styles another window's scene like the main window. */
+  static void style(Scene scene) {
+    scene.getStylesheets().addAll(stylesheets());
+    if (dark) {
+      scene.getRoot().getStyleClass().add("dark");
+    }
+    if (highContrast) {
+      scene.getRoot().getStyleClass().add("high-contrast");
+    }
+    scene.getRoot().setStyle("-fx-font-size: " + Math.round(14 * scale) + "px;");
+  }
+
   static void setScale(Scene scene, double next) {
     scale = next;
     Prefs.uiScale(next);

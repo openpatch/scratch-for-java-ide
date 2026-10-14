@@ -1,6 +1,7 @@
 package org.openpatch.scratch4j.export;
 
 import org.openpatch.scratch4j.core.compile.CompilerService;
+import org.openpatch.scratch4j.core.project.ImportProgress;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.project.PortableProject;
 import org.openpatch.scratch4j.core.project.ProjectSettings;
@@ -112,8 +113,15 @@ public final class ProjectFormats {
    * Returns the project root.
    */
   public static Path importZip(Path zipFile, Path parentDir) throws IOException {
+    return importZip(zipFile, parentDir, ImportProgress.NONE);
+  }
+
+  /** Like {@link #importZip(Path, Path)}, telling {@code progress} about each file it unpacks. */
+  public static Path importZip(Path zipFile, Path parentDir, ImportProgress progress)
+      throws IOException {
     java.util.Set<String> tops = new java.util.HashSet<>();
     boolean flat = false;
+    int files = 0;
     try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(zipFile))) {
       ZipEntry entry;
       while ((entry = zip.getNextEntry()) != null) {
@@ -122,6 +130,9 @@ public final class ProjectFormats {
           continue; // Finder's resource forks, not part of the project
         }
         PortableProject.path(name.endsWith("/") ? name.substring(0, name.length() - 1) : name);
+        if (!entry.isDirectory()) {
+          files++;
+        }
         int slash = name.indexOf('/');
         if (slash < 0) {
           flat = true;
@@ -160,6 +171,7 @@ public final class ProjectFormats {
           Path file = staging.resolve(normalized);
           if (entry.isDirectory()) { Files.createDirectories(file); continue; }
           if (++count > 2000) throw new IOException("Archive has more than 2,000 files");
+          progress.step(normalized, count - 1, files);
           Files.createDirectories(file.getParent());
           long size = 0;
           try (OutputStream output = Files.newOutputStream(file)) {

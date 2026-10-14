@@ -75,6 +75,16 @@ class Sb3ImporterTest {
   }
 
   @Test
+  void reportsEachCostumeAndSoundAsAStep() throws Exception {
+    List<String> steps = new java.util.ArrayList<>();
+    Sb3Importer.importProject(sb3(), tmp, "game", null, null,
+        (item, done, total) -> steps.add(done + "/" + total + " " + item));
+    // the stage first, then the sprites in layer order
+    assertThat(steps).containsExactly("0/6 Stage: backdrop1", "1/6 Stage: pop",
+        "2/6 ClassSprite: ball", "3/6 Cat2: cat-a", "4/6 Cat2: cat 'b'", "5/6 Cat2: Meow");
+  }
+
+  @Test
   void importsSpritesBackdropsSoundsAndPlacementsAsDesignerRegions() throws Exception {
     Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
     var result = Sb3Importer.importProject(sb3(), tmp, "game", jar, mp3 -> {

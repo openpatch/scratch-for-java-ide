@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.HashSet;
+import org.openpatch.scratch4j.core.project.ImportProgress;
 import org.openpatch.scratch4j.core.project.PortableProject;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 
@@ -16,13 +17,19 @@ public final class CoursePack {
   public record Imported(Path root, List<Path> projects) {}
 
   public static Imported importZip(Path archive, Path parent, Map<String, Path> libraries) throws IOException {
+    return importZip(archive, parent, libraries, ImportProgress.NONE);
+  }
+
+  /** Like {@link #importZip(Path, Path, Map)}, telling {@code progress} about each file it unpacks. */
+  public static Imported importZip(Path archive, Path parent, Map<String, Path> libraries,
+      ImportProgress progress) throws IOException {
     String name = PortableProject.path(archive.getFileName().toString().replaceFirst("(?i)\\.zip$", ""));
     Path root = parent.toAbsolutePath().resolve(name);
     if (Files.exists(root)) throw new IOException("Folder already exists: " + root);
     Files.createDirectories(parent);
     Path staging = Files.createTempDirectory(parent, ".scratch4j-course-");
     try {
-      Path unpacked = ProjectFormats.importZip(archive, staging);
+      Path unpacked = ProjectFormats.importZip(archive, staging, progress);
       Path manifestFile = unpacked.resolve(".scratch4j/course.json");
       if (!Files.isRegularFile(manifestFile)) throw new IOException("This ZIP has no course manifest");
       var manifest = tools.jackson.databind.json.JsonMapper.builder().build().readTree(manifestFile.toFile());
