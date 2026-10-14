@@ -226,8 +226,8 @@ public final class LauncherSource {
                 String path = line.substring("screenshot ".length());
                 TASKS.add(() -> {
                   try {
-                    Object applet = applet();
-                    applet.getClass().getMethod("save", String.class).invoke(applet, path);
+                    Object image = stageImage();
+                    image.getClass().getMethod("save", String.class).invoke(image, path);
                     System.err.println(MARK + "saved " + path);
                   } catch (ReflectiveOperationException e) {
                     System.err.println(MARK + "error " + e);
@@ -391,6 +391,44 @@ public final class LauncherSource {
               } catch (ReflectiveOperationException e) {
                 return null;
               }
+            }
+
+            /**
+             * The stage at its own size, without the bars around it: a window that is
+             * bigger than the stage (maximized) shows it letterboxed. Newer libraries
+             * cut it out themselves; for older ones it is cut out here, and the oldest
+             * ones, which do not tell the stage's size, give the whole window.
+             */
+            static Object stageImage() throws ReflectiveOperationException {
+              Object applet = applet();
+              Class<?> type = applet.getClass();
+              try {
+                return type.getMethod("getStageImage").invoke(applet);
+              } catch (NoSuchMethodException older) {
+                // cut out below
+              }
+              int stageWidth;
+              int stageHeight;
+              try {
+                stageWidth = (Integer) type.getMethod("getRenderWidth").invoke(applet);
+                stageHeight = (Integer) type.getMethod("getRenderHeight").invoke(applet);
+              } catch (NoSuchMethodException oldest) {
+                return applet;
+              }
+              int windowWidth = type.getField("width").getInt(applet);
+              int windowHeight = type.getField("height").getInt(applet);
+              float ratio = Math.min((float) windowWidth / stageWidth,
+                  (float) windowHeight / stageHeight);
+              int width = Math.round(stageWidth * ratio);
+              int height = Math.round(stageHeight * ratio);
+              Object area = type.getMethod("get", int.class, int.class, int.class, int.class)
+                  .invoke(applet, (windowWidth - width) / 2, (windowHeight - height) / 2,
+                      width, height);
+              if (width != stageWidth || height != stageHeight) {
+                area.getClass().getMethod("resize", int.class, int.class)
+                    .invoke(area, stageWidth, stageHeight);
+              }
+              return area;
             }
 
             static String recording_path(Object recorder) {

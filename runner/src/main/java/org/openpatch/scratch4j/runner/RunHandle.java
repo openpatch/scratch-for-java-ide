@@ -131,14 +131,19 @@ public final class RunHandle {
         StandardCharsets.UTF_8))) {
       String line;
       while ((line = reader.readLine()) != null) {
-        if (!isStdout && line.startsWith(CONTROL_MARK)) {
-          control(line.substring(CONTROL_MARK.length()), listener);
-          continue;
-        }
-        if (isStdout) {
-          listener.onStdout(line);
-        } else {
-          listener.onStderr(line);
+        try {
+          if (!isStdout && line.startsWith(CONTROL_MARK)) {
+            control(line.substring(CONTROL_MARK.length()), listener);
+          } else if (isStdout) {
+            listener.onStdout(line);
+          } else {
+            listener.onStderr(line);
+          }
+        } catch (RuntimeException e) {
+          // A line the IDE cannot handle must not end the reading: nobody would
+          // empty the pipe any more, and once it is full (a few KB on Windows) the
+          // program blocks on its next output - the heartbeat included.
+          e.printStackTrace();
         }
       }
     } catch (Exception ignored) {

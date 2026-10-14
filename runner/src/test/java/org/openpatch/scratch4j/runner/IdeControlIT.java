@@ -97,6 +97,108 @@ class IdeControlIT {
     }
   }
 
+  /** The library records the stage at its own size, not the window (newer versions). */
+  private static boolean libraryRecordsTheStage() {
+    try (var zip = new java.util.zip.ZipFile(allJar().toFile())) {
+      var entry = zip.getEntry("org/openpatch/scratch/internal/Applet.class");
+      return entry != null && new String(zip.getInputStream(entry).readAllBytes(),
+          java.nio.charset.StandardCharsets.ISO_8859_1).contains("getStageImage");
+    } catch (Exception e) {
+      return false;
+    }
+  }
+
+  /**
+   * Windows lets students maximize the window although it is not resizable: the
+   * program keeps drawing and answering, and screenshots (and GIFs, with a
+   * library that records the stage) show the stage at its own size, not the
+   * window with the bars around the stage.
+   */
+  @Test
+  void aMaximizedWindowKeepsTheChannelAndShowsTheStage() throws Exception {
+    NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "big", allJar());
+    Files.writeString(tmp.resolve("big/MyStage.java"), """
+        import org.openpatch.scratch.Sprite;
+        import org.openpatch.scratch.Stage;
+        import org.openpatch.scratch.internal.Applet;
+
+        public class MyStage extends Stage {
+          int ticks;
+          boolean told;
+
+          public MyStage() {
+            Sprite bunny = new Sprite();
+            bunny.addCostume("bunny1_stand");
+            this.add(bunny);
+          }
+
+          public void run() {
+            ticks++;
+            if (ticks == 30) {
+              // what maximizing does: the window grows, the stage stays 480x360
+              var window = (com.jogamp.newt.opengl.GLWindow) Applet.getInstance()
+                  .getSurface().getNative();
+              new Thread(() -> window.setSize(1000, 600)).start();
+            }
+            if (!told && Applet.getInstance().width == 1000) {
+              told = true;
+              System.out.println("window 1000x600");
+            }
+          }
+        }
+        """);
+    ScratchProject project = ScratchProject.open(tmp.resolve("big"));
+    AtomicLong frames = new AtomicLong(-2);
+    List<String> saved = new CopyOnWriteArrayList<>();
+    List<String> stdout = new CopyOnWriteArrayList<>();
+    List<String> stderr = new CopyOnWriteArrayList<>();
+    RunHandle handle = new ProjectRunner().run(project,
+        RunConfig.of("MyStage").withControl().withExitAfter(30),
+        new RunListener() {
+          @Override public void onFrames(long f) { frames.set(f); }
+          @Override public void onSaved(String path) { saved.add(path); }
+          @Override public void onStdout(String line) { stdout.add(line); }
+          @Override public void onStderr(String line) { stderr.add(line); }
+        });
+    try {
+      waitFor(() -> stdout.contains("window 1000x600"), 20000);
+      assertThat(stdout).as("the window grew; stderr %s", stderr).contains("window 1000x600");
+      long grown = frames.get();
+      Thread.sleep(2500);
+      assertThat(frames.get()).as("frames after the window grew").isGreaterThan(grown);
+
+      Path shot = tmp.resolve("big.png");
+      handle.send("screenshot " + shot);
+      waitFor(() -> Files.exists(shot) && !saved.isEmpty(), 5000);
+      var image = javax.imageio.ImageIO.read(shot.toFile());
+      assertThat(image.getWidth()).isEqualTo(480);
+      assertThat(image.getHeight()).isEqualTo(360);
+      // the stage reaches the left edge: no black bar from the window around it
+      java.awt.Color edge = new java.awt.Color(image.getRGB(2, 180));
+      assertThat(edge.getRed() + edge.getGreen() + edge.getBlue()).isGreaterThan(60);
+
+      Path gif = tmp.resolve("big.gif");
+      handle.send("gif start " + gif);
+      Thread.sleep(1500);
+      handle.send("gif stop");
+      waitFor(() -> saved.size() >= 2, 5000);
+      assertThat(gif).isRegularFile();
+      if (libraryRecordsTheStage()) {
+        var reader = javax.imageio.ImageIO.getImageReadersByFormatName("gif").next();
+        try (var in = javax.imageio.ImageIO.createImageInputStream(gif.toFile())) {
+          reader.setInput(in);
+          assertThat(reader.getWidth(0)).isEqualTo(480);
+          assertThat(reader.getHeight(0)).isEqualTo(360);
+        }
+      }
+      long before = frames.get();
+      Thread.sleep(1500);
+      assertThat(frames.get()).as("still drawing after the recording").isGreaterThan(before);
+    } finally {
+      handle.stop();
+    }
+  }
+
   /** A stage with one counting cat: per-sprite, shared and list variables. */
   private ScratchProject countingProject() throws Exception {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "count", allJar());
