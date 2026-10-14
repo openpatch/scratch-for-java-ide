@@ -116,4 +116,36 @@ class IncrementalCompilerTest {
       assertThat(compiler.lastStats().full()).isTrue();
     }
   }
+
+  @Test
+  void aLibraryJarReplacedOnDiskDoesNotBreakTheNextCompile() throws IOException {
+    Path oldJar = libraryJar("scratch-1.jar");
+    files.put("B", "public class B { Lib lib = new Lib(); }");
+    try (IncrementalCompiler compiler = new IncrementalCompiler(tmp.resolve("out"))) {
+      assertThat(compiler.compile(texts(), List.of(oldJar), Locale.ROOT).success()).isTrue();
+      // a library update deletes the old jar and puts a new one next to it
+      Files.delete(oldJar);
+      Path newJar = libraryJar("scratch-2.jar");
+      assertThat(compiler.compile(texts(), List.of(newJar), Locale.ROOT).success()).isTrue();
+    }
+  }
+
+  /** A jar in tmp/libs holding a public class Lib. */
+  private Path libraryJar(String name) throws IOException {
+    Path classes = tmp.resolve("lib-" + name);
+    Path source = classes.resolve("Lib.java");
+    Files.createDirectories(classes);
+    Files.writeString(source, "public class Lib { }");
+    try (IncrementalCompiler lib = new IncrementalCompiler(classes)) {
+      lib.compile(Map.of(source, "public class Lib { }"), List.of(), Locale.ROOT);
+    }
+    Path jar = tmp.resolve("libs").resolve(name);
+    Files.createDirectories(jar.getParent());
+    try (var out = new java.util.jar.JarOutputStream(Files.newOutputStream(jar))) {
+      out.putNextEntry(new java.util.jar.JarEntry("Lib.class"));
+      out.write(Files.readAllBytes(classes.resolve("Lib.class")));
+      out.closeEntry();
+    }
+    return jar;
+  }
 }

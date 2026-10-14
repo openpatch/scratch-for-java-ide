@@ -84,11 +84,24 @@ public final class IncrementalCompiler implements AutoCloseable {
   }
 
   @Override
-  public void close() throws IOException {
-    if (files != null) {
-      files.close();
-      files = null;
+  public void close() {
+    closeFiles();
+  }
+
+  /**
+   * Closes the file manager. A jar on its classpath may be gone by now (a library update
+   * replaces it), and closing its zip file system then throws although nothing is left open.
+   */
+  private void closeFiles() {
+    if (files == null) {
+      return;
     }
+    try {
+      files.close();
+    } catch (IOException ignored) {
+      // the archive was deleted underneath it; nothing more to release
+    }
+    files = null;
   }
 
   /** Forgets everything: the next compile is a full one. */
@@ -230,9 +243,7 @@ public final class IncrementalCompiler implements AutoCloseable {
     }
     DiagnosticCollector<FileObject> collector = new DiagnosticCollector<>();
     if (files == null || !fileManagerClasspath.equals(classpath)) {
-      if (files != null) {
-        files.close();
-      }
+      closeFiles();
       files = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8);
       files.setLocation(StandardLocation.CLASS_PATH,
           classpath.stream().map(Path::toFile).toList());
