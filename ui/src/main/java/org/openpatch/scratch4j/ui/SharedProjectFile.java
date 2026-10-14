@@ -6,7 +6,7 @@ import java.util.Locale;
 
 /**
  * A project someone handed over as one file: a project ZIP or an Online-IDE
- * workspace JSON. Project > Open project ZIP / workspace JSON imports it, and so
+ * workspace JSON. Project > Import project (ZIP / workspace JSON) imports it, and so
  * does starting Studio with the file as its first argument.
  */
 final class SharedProjectFile {

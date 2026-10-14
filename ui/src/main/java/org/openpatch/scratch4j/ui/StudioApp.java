@@ -616,7 +616,7 @@ public class StudioApp extends javafx.application.Application {
 
   private void showWelcome() {
     root.setCenter(new WelcomeView(this::createProject, this::openProject,
-        this::openProjectAt, this::browse));
+        this::openSharedZip, this::openProjectAt, this::browse));
   }
 
   /** The projects the start page lists, filled each time the File menu opens. */
@@ -913,7 +913,7 @@ public class StudioApp extends javafx.application.Application {
   /**
    * {@code Main <projectDir>} opens that project right away.
    * {@code Main <project.zip|workspace.json> [<parentDir>]} imports it first, like
-   * Project > Open project ZIP / workspace JSON, into parentDir or the projects folder.
+   * Project > Import project (ZIP / workspace JSON), into parentDir or the projects folder.
    */
   private void openFromArguments() {
     // null when started without Application.launch (layout tests)
@@ -3876,7 +3876,7 @@ public class StudioApp extends javafx.application.Application {
   private void openSharedZip() {
     javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
     chooser.setTitle(I18n.t("menu.project.openzip"));
-    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("Project ZIP / workspace JSON", "*.zip", "*.json"));
+    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(I18n.t("welcome.import.hint"), "*.zip", "*.json"));
     File zip = chooser.showOpenDialog(stage);
     if (zip == null) return;
     javafx.stage.DirectoryChooser parent = new javafx.stage.DirectoryChooser();

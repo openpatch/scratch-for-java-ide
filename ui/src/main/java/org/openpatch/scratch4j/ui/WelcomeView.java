@@ -1,5 +1,6 @@
 package org.openpatch.scratch4j.ui;
 
+import javafx.beans.binding.Bindings;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Button;
@@ -8,6 +9,7 @@ import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
@@ -17,12 +19,17 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * The start screen when no project is open: create, open, recent projects,
+ * The start screen when no project is open: create, open, import, recent projects,
  * and a link to the tutorials. Big targets, few words.
  */
 final class WelcomeView extends StackPane {
 
-  WelcomeView(Runnable onNew, Runnable onOpen, Consumer<Path> onOpenRecent,
+  private static final double CARD_WIDTH = 240;
+  private static final double CARD_GAP = 16;
+  /** Width of the text below the cards, kept narrower than the row of cards so it reads well. */
+  private static final double TEXT_WIDTH = 600;
+
+  WelcomeView(Runnable onNew, Runnable onOpen, Runnable onImport, Consumer<Path> onOpenRecent,
       Consumer<String> onLink) {
     getStyleClass().add("welcome");
 
@@ -41,17 +48,23 @@ final class WelcomeView extends StackPane {
     Label subtitle = new Label(I18n.t("welcome.subtitle"));
     subtitle.getStyleClass().add("welcome-subtitle");
     subtitle.setWrapText(true);
+    subtitle.setMaxWidth(TEXT_WIDTH);
 
     Button create = bigButton("fth-plus-square", I18n.t("welcome.new"),
         I18n.t("welcome.new.hint"), onNew);
     create.getStyleClass().add("primary-card");
     Button open = bigButton("fth-folder", I18n.t("welcome.open"),
         I18n.t("welcome.open.hint"), onOpen);
-    HBox actions = new HBox(16, create, open);
+    Button importProject = bigButton("fth-archive", I18n.t("welcome.import"),
+        I18n.t("welcome.import.hint"), onImport);
+    FlowPane actions = new FlowPane(CARD_GAP, CARD_GAP, create, open, importProject);
     actions.setAlignment(Pos.CENTER);
+    double cardsWidth = 3 * CARD_WIDTH + 2 * CARD_GAP;
+    actions.setPrefWrapLength(cardsWidth);
 
     VBox recentBox = new VBox(4);
     recentBox.getStyleClass().add("recent-box");
+    recentBox.setMaxWidth(TEXT_WIDTH);
     List<Path> recent = Prefs.recentProjects();
     if (!recent.isEmpty()) {
       Label heading = new Label(I18n.t("welcome.recent"));
@@ -75,7 +88,9 @@ final class WelcomeView extends StackPane {
 
     VBox column = new VBox(14, logo, title, subtitle, actions, recentBox, tutorials);
     column.setAlignment(Pos.TOP_CENTER);
-    column.setMaxWidth(640);
+    // The padding comes from studio.css, so it is only known once the stylesheet applies.
+    column.maxWidthProperty().bind(Bindings.createDoubleBinding(() -> cardsWidth
+        + column.getPadding().getLeft() + column.getPadding().getRight(), column.paddingProperty()));
     column.getStyleClass().add("welcome-column");
     ScrollPane scroll = new ScrollPane(new StackPane(column));
     scroll.setFitToWidth(true);
@@ -95,7 +110,7 @@ final class WelcomeView extends StackPane {
     Button button = new Button(null, text);
     button.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
     button.getStyleClass().add("card-button");
-    button.setPrefSize(240, 150);
+    button.setPrefSize(CARD_WIDTH, 150);
     button.setOnAction(e -> action.run());
     return button;
   }
