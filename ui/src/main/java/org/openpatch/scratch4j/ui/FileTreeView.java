@@ -8,9 +8,11 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 import javafx.scene.control.ContextMenu;
+import javafx.scene.control.IndexedCell;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.control.skin.VirtualFlow;
 
 /**
  * The project file tree with file-type icons. Generated/build folders are
@@ -288,8 +290,21 @@ final class FileTreeView extends TreeView<Path> {
       for (TreeItem<Path> parent = item.getParent(); parent != null;
            parent = parent.getParent()) parent.setExpanded(true);
       getSelectionModel().select(item);
-      scrollTo(getRow(item));
+      scrollIntoView(getRow(item));
     }
+  }
+
+  /** Scrolls only when {@code row} is off-screen, so a click does not jump the tree. */
+  private void scrollIntoView(int row) {
+    if (lookup(".virtual-flow") instanceof VirtualFlow<?> flow) {
+      IndexedCell<?> first = flow.getFirstVisibleCell();
+      IndexedCell<?> last = flow.getLastVisibleCell();
+      if (first != null && last != null
+          && row > first.getIndex() && row < last.getIndex()) {
+        return;
+      }
+    }
+    scrollTo(row);
   }
 
   private static TreeItem<Path> find(TreeItem<Path> item, Path path) {
