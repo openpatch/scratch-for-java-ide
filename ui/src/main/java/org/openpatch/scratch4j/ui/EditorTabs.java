@@ -74,6 +74,13 @@ final class EditorTabs extends TabPane {
     this.onFindInProject = action;
   }
 
+  private java.util.function.BiConsumer<CodeEditor, String> onBlockDropped = (e, snippet) -> { };
+
+  /** Told about every block dragged from the palette into a code editor. */
+  void setOnBlockDropped(java.util.function.BiConsumer<CodeEditor, String> action) {
+    this.onBlockDropped = action;
+  }
+
   /** Told about every gutter click (a running debug session updates its breakpoints). */
   private java.util.function.BiConsumer<Path, java.util.Set<Integer>> onBreakpointsChanged =
       (file, lines) -> { };
@@ -153,6 +160,7 @@ final class EditorTabs extends TabPane {
     editor.setOnRename(offset -> onRename.accept(codeEditor, offset));
     editor.setOnFindUsages(offset -> onFindUsages.accept(codeEditor, offset));
     editor.setOnFindInProject(query -> onFindInProject.accept(query));
+    editor.setOnBlockDropped(snippet -> onBlockDropped.accept(codeEditor, snippet));
     editor.setDiagnostics(diagnostics.getOrDefault(file, List.of()));
     editor.setFixes(fixes.getOrDefault(file, Map.of()));
     editor.setOnFix(line -> onFix.accept(file, line));

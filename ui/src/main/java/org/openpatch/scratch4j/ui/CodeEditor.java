@@ -94,9 +94,6 @@ final class CodeEditor extends BorderPane {
       });
 
   private static final String INDENT = "  ";
-  /** A method snippet from the block palette (an event block): its name. */
-  private static final java.util.regex.Pattern EVENT_METHOD = java.util.regex.Pattern.compile(
-      "^(?:public |protected |private )?void (\\w+)\\([^)]*\\) \\{\n");
   private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*$");
   private static final Pattern WORD = Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]{2,}\\b");
   private static final Pattern IMAGE_STRING = Pattern.compile(
@@ -198,7 +195,8 @@ final class CodeEditor extends BorderPane {
 
     findBar = new FindBar(area);
     setTop(findBar);
-    setCenter(new VirtualizedScrollPane<>(area));
+    // previews of blocks dragged in are drawn above the code
+    setCenter(new StackPane(new VirtualizedScrollPane<>(area), dropLayer));
     installLinks();
     installContextMenu();
     area.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, e -> {
@@ -546,7 +544,7 @@ final class CodeEditor extends BorderPane {
     }
     String body = snippet.substring(0, snippet.length() - 1);
     boolean multiLine = body.contains("\n");
-    var method = EVENT_METHOD.matcher(body);
+    var method = BlockDrop.EVENT_METHOD.matcher(body);
     if (method.find()) {
       // an event block is a method: it goes into the class body, not into a method
       int current = area.getCurrentParagraph();
@@ -973,6 +971,9 @@ final class CodeEditor extends BorderPane {
     if (region != null) styles.add(region);
     if (line == debugLine) styles.add("debug-line");
     if (linkedLines.contains(line)) styles.add("linked-line");
+    if (line - 1 == dropGapLine) {
+      styles.add((dropGapAbove ? "drop-gap-above-" : "drop-gap-below-") + dropGapRows);
+    }
     area.setParagraphStyle(line - 1, styles);
   }
 
@@ -1086,7 +1087,17 @@ final class CodeEditor extends BorderPane {
         }
         e.consume();
       });
-      return box;
+      if (line != dropGapLine) return box;
+      // a dragged block's preview opens lines here: the gutter stays beside the line's text
+      Region gap = new Region();
+      gap.getStyleClass().add("gutter");
+      double height = dropGapRows * gapStyleRow;
+      gap.setMinHeight(height);
+      gap.setPrefHeight(height);
+      gap.setMaxHeight(height);
+      box.setMaxHeight(Double.MAX_VALUE);
+      VBox.setVgrow(box, Priority.ALWAYS);
+      return dropGapAbove ? new VBox(gap, box) : new VBox(box, gap);
     };
   }
 
@@ -1467,26 +1478,365 @@ final class CodeEditor extends BorderPane {
     return delta;
   }
 
-  /** Blocks dragged from the palette drop in at the line under the pointer. */
+  // --- blocks dragged in ----------------------------------------------------------
+
+  /** Most lines a preview opens at once (a hat block with blank lines around it is five). */
+  private static final int MAX_GAP_ROWS = 12;
+  /** How far a preview's colour reaches left of its code. */
+  private static final double GHOST_INSET = 6;
+
+  /** The previews of blocks dragged over the code: their lines, a caret, or a note. */
+  private final javafx.scene.layout.Pane dropLayer = new javafx.scene.layout.Pane();
+  /** The drop the preview shows, for the block {@link #dropSnippet}; null without one. */
+  private BlockDrop.Target dropTarget;
+  private String dropSnippet;
+  /** The line the preview opens lines at (-1: none), above or below it, and how many. */
+  private int dropGapLine = -1;
+  private boolean dropGapAbove;
+  private int dropGapRows;
+  /** The line height the gap sizes in {@link #gapStyles} are made for. */
+  private double gapStyleRow = -1;
+  private String gapStyles;
+  private java.util.function.Consumer<String> onBlockDropped = snippet -> { };
+
+  /** Told about every block dropped in from the palette (it adds the imports it needs). */
+  void setOnBlockDropped(java.util.function.Consumer<String> action) {
+    this.onBlockDropped = action;
+  }
+
+  /**
+   * Blocks dragged from the palette: a stack block opens a new line where it
+   * would land, with its code in it, inside a method or constructor; a hat
+   * block opens lines between two members of the class; a reporter shows a
+   * caret in the line. Where a block can't go, a note says why and the drop is
+   * refused. Other dragged text drops in at the line under the pointer.
+   */
   private void installBlockDrop() {
+    dropLayer.setMouseTransparent(true);
+    dropLayer.styleProperty().bind(FONT_SIZE.asString("-fx-font-size: %dpx;"));
+    javafx.scene.shape.Rectangle clip = new javafx.scene.shape.Rectangle();
+    clip.widthProperty().bind(dropLayer.widthProperty());
+    clip.heightProperty().bind(dropLayer.heightProperty());
+    dropLayer.setClip(clip);
     area.setOnDragOver(e -> {
-      if (e.getGestureSource() != area && e.getDragboard().hasString()) {
-        e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
-        int index = area.hit(e.getX(), e.getY()).getInsertionIndex();
-        area.moveTo(index);
+      var board = e.getDragboard();
+      if (e.getGestureSource() != area && board.hasString()) {
+        if (board.hasContent(BlockPalette.BLOCK)) {
+          String category = (String) board.getContent(BlockPalette.BLOCK);
+          var target = previewBlock(board.getString(), category, e.getScreenX(), e.getScreenY());
+          if (target.valid()) e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+        } else {
+          e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+          area.moveTo(area.hit(e.getX(), e.getY()).getInsertionIndex());
+        }
       }
       e.consume();
     });
+    area.setOnDragExited(e -> clearDrop());
     area.setOnDragDropped(e -> {
+      var board = e.getDragboard();
       boolean done = false;
-      if (e.getDragboard().hasString()) {
+      if (board.hasString() && board.hasContent(BlockPalette.BLOCK)) {
+        done = dropBlock(board.getString(), e.getScreenX(), e.getScreenY());
+      } else if (board.hasString()) {
         area.moveTo(area.hit(e.getX(), e.getY()).getInsertionIndex());
-        insertBlock(e.getDragboard().getString());
+        insertBlock(board.getString());
         done = true;
       }
+      clearDrop();
       e.setDropCompleted(done);
       e.consume();
     });
+    // a gesture that ended elsewhere leaves no preview behind
+    area.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED, e -> {
+      if (dropTarget != null) clearDrop();
+    });
+  }
+
+  /**
+   * A palette block ({@code category}: its colour's style class) dragged over
+   * the code at a screen point: the preview shows where it would go.
+   */
+  BlockDrop.Target previewBlock(String snippet, String category, double screenX,
+      double screenY) {
+    BlockDrop.Target target = blockTarget(snippet, screenX, screenY);
+    dropTarget = target;
+    dropSnippet = snippet;
+    dropLayer.getChildren().clear();
+    if (!target.valid()) {
+      setDropGap(-1, false, 0);
+      showDropNote(target, screenX, screenY);
+    } else if (target.kind() == BlockDrop.Kind.EXPRESSION) {
+      setDropGap(-1, false, 0);
+      showDropCaret(target.insertion().start());
+    } else {
+      showDropLines(target, category);
+    }
+    return target;
+  }
+
+  /** A palette block dropped at a screen point: it goes where the preview showed, if it may. */
+  boolean dropBlock(String snippet, double screenX, double screenY) {
+    BlockDrop.Target target = blockTarget(snippet, screenX, screenY);
+    clearDrop();
+    if (!target.valid()) return false;
+    var insertion = target.insertion();
+    area.replaceText(insertion.start(), insertion.end(), insertion.text());
+    area.moveTo(insertion.caret());
+    area.requestFollowCaret();
+    area.requestFocus();
+    onBlockDropped.accept(snippet);
+    return true;
+  }
+
+  /** No preview any more: the lines it opened close. */
+  void clearDrop() {
+    dropTarget = null;
+    dropSnippet = null;
+    dropLayer.getChildren().clear();
+    setDropGap(-1, false, 0);
+  }
+
+  /** The preview's layer (tests). */
+  javafx.scene.layout.Pane dropLayer() {
+    return dropLayer;
+  }
+
+  /** Where a block under the pointer goes; screen coordinates. */
+  private BlockDrop.Target blockTarget(String snippet, double screenX, double screenY) {
+    String text = area.getText();
+    if (BlockDrop.kindOf(snippet) == BlockDrop.Kind.EXPRESSION) {
+      javafx.geometry.Point2D local = area.screenToLocal(screenX, screenY);
+      int offset = area.hit(local.getX(), local.getY()).getInsertionIndex();
+      return BlockDrop.inline(text, offset, snippet);
+    }
+    LineHit hit = lineAt(screenY);
+    if (hit == null) return BlockDrop.onLine(text, 0, true, snippet);
+    if (hit.inGap() && dropTarget != null && snippet.equals(dropSnippet)) {
+      return dropTarget; // over the lines the preview opened: it stays
+    }
+    return BlockDrop.onLine(text, hit.line(), hit.upper(), snippet);
+  }
+
+  /** The line at a screen height, whether in its upper half, or in the lines a preview opened. */
+  private record LineHit(int line, boolean upper, boolean inGap) { }
+
+  private LineHit lineAt(double screenY) {
+    int visible = area.getVisibleParagraphs().size();
+    double row = rowHeight();
+    LineHit below = null;
+    for (int i = 0; i < visible; i++) {
+      int line = area.visibleParToAllParIndex(i);
+      javafx.geometry.Bounds bounds = area.getVisibleParagraphBoundsOnScreen(i);
+      if (i == 0 && screenY < bounds.getMinY()) return new LineHit(line, true, false);
+      if (screenY < bounds.getMaxY()) {
+        double gap = line == dropGapLine ? openGap(bounds, row) : 0;
+        double top = bounds.getMinY() + (dropGapAbove ? gap : 0);
+        double bottom = bounds.getMaxY() - (dropGapAbove ? 0 : gap);
+        if (screenY < top || screenY >= bottom) return new LineHit(line, false, true);
+        return new LineHit(line, screenY < (top + bottom) / 2, false);
+      }
+      below = new LineHit(line, false, false);
+    }
+    return below;
+  }
+
+  /** The height of one line on screen, measured on the lines shown. */
+  private double rowHeight() {
+    double row = Double.MAX_VALUE;
+    for (int i = 0; i < area.getVisibleParagraphs().size(); i++) {
+      if (area.visibleParToAllParIndex(i) == dropGapLine) continue;
+      row = Math.min(row, area.getVisibleParagraphBoundsOnScreen(i).getHeight());
+    }
+    if (row == Double.MAX_VALUE) return Math.ceil(FONT_SIZE.get() * 1.2);
+    return Math.round(row * 100) / 100.0;
+  }
+
+  /** The height of the lines a preview opened at a line with these bounds (0: none laid out). */
+  private static double openGap(javafx.geometry.Bounds bounds, double row) {
+    double extra = bounds.getHeight() - row;
+    return extra > row / 2 ? extra : 0;
+  }
+
+  /** Where the top of {@code line} would be on screen without the preview's lines (NaN: hidden). */
+  private double topWithoutGap(int line, double row) {
+    var visible = area.allParToVisibleParIndex(line);
+    if (visible.isPresent()) {
+      return area.getVisibleParagraphBoundsOnScreen(visible.get()).getMinY() - gapAbove(line, row);
+    }
+    var previous = line > 0 ? area.allParToVisibleParIndex(line - 1)
+        : java.util.Optional.<Integer>empty();
+    if (previous.isPresent()) {
+      return area.getVisibleParagraphBoundsOnScreen(previous.get()).getMinY()
+          - gapAbove(line - 1, row) + row;
+    }
+    return Double.NaN;
+  }
+
+  /** How far the lines the preview opened push the top of {@code line} down. */
+  private double gapAbove(int line, double row) {
+    if (dropGapLine < 0 || dropGapLine >= line) return 0;
+    return area.allParToVisibleParIndex(dropGapLine)
+        .map(i -> openGap(area.getVisibleParagraphBoundsOnScreen(i), row))
+        .orElse(0.0);
+  }
+
+  /** A stack or hat block: the lines it adds open up, with its code in them. */
+  private void showDropLines(BlockDrop.Target target, String category) {
+    var slot = target.slot();
+    var insertion = target.insertion();
+    // measured on the layout shown now, before the lines open somewhere else
+    double row = rowHeight();
+    double top = topWithoutGap(slot.line(), row);
+    double[] column = textColumn();
+    ensureGapStyles(row);
+    int rows = Math.min(insertion.addedRows(), MAX_GAP_ROWS);
+    if (slot.fill()) {
+      setDropGap(slot.line(), false, rows);
+    } else if (slot.line() > 0 && area.allParToVisibleParIndex(slot.line() - 1).isPresent()) {
+      setDropGap(slot.line() - 1, false, rows);
+    } else {
+      setDropGap(slot.line(), true, rows);
+    }
+    if (Double.isNaN(top)) return;
+
+    VBox lines = new VBox();
+    for (String code : insertion.code()) {
+      Label line = new Label(code);
+      line.getStyleClass().add("drop-ghost-code");
+      line.setMinHeight(row);
+      line.setPrefHeight(row);
+      line.setMaxHeight(row);
+      lines.getChildren().add(line);
+    }
+    // the code at a fixed distance from the ghost's left edge, the colour bar on that edge
+    Region tint = new Region();
+    tint.getStyleClass().addAll("drop-ghost-tint", category);
+    tint.setManaged(false);
+    Region bar = new Region();
+    bar.getStyleClass().addAll("drop-ghost-bar", category);
+    bar.setManaged(false);
+    StackPane ghost = new StackPane(tint, bar, lines);
+    ghost.setAlignment(Pos.TOP_LEFT);
+    ghost.setPadding(new javafx.geometry.Insets(0, 0, 0, GHOST_INSET));
+    dropLayer.getChildren().add(ghost);
+    ghost.applyCss();
+    ghost.autosize();
+    tint.resizeRelocate(0, 0, ghost.getWidth(), ghost.getHeight());
+    bar.resizeRelocate(0, 0, 3, ghost.getHeight());
+    int columns = insertion.indent().replace("\t", " ".repeat(8)).length();
+    javafx.geometry.Point2D at = dropLayer.screenToLocal(
+        column[0] + columns * column[1], top + insertion.blankBefore() * row);
+    ghost.relocate(at.getX() - GHOST_INSET, at.getY());
+  }
+
+  /** A reporter: a caret where it would go in the line. */
+  private void showDropCaret(int offset) {
+    String text = area.getText();
+    java.util.Optional<javafx.geometry.Bounds> character;
+    double x;
+    if (offset < text.length() && text.charAt(offset) != '\n') {
+      character = area.getCharacterBoundsOnScreen(offset, offset + 1);
+      x = character.map(javafx.geometry.Bounds::getMinX).orElse(Double.NaN);
+    } else if (offset > 0 && text.charAt(offset - 1) != '\n') {
+      character = area.getCharacterBoundsOnScreen(offset - 1, offset);
+      x = character.map(javafx.geometry.Bounds::getMaxX).orElse(Double.NaN);
+    } else {
+      character = java.util.Optional.empty();
+      x = textColumn()[0];
+    }
+    var visible = area.allParToVisibleParIndex(area.offsetToPosition(offset,
+        org.fxmisc.richtext.model.TwoDimensional.Bias.Forward).getMajor());
+    if (Double.isNaN(x) || visible.isEmpty()) return;
+    javafx.geometry.Bounds line = area.getVisibleParagraphBoundsOnScreen(visible.get());
+    Region caret = new Region();
+    caret.getStyleClass().add("drop-caret");
+    dropLayer.getChildren().add(caret);
+    caret.applyCss();
+    caret.autosize();
+    caret.resize(caret.getWidth(), line.getHeight());
+    javafx.geometry.Point2D at = dropLayer.screenToLocal(x, line.getMinY());
+    caret.relocate(at.getX() - caret.getWidth() / 2, at.getY());
+  }
+
+  /** Where a block can't go: a note beside the pointer says why. */
+  private void showDropNote(BlockDrop.Target target, double screenX, double screenY) {
+    String message = switch (target.problem()) {
+      case BODY -> I18n.t("drop.body");
+      case STATEMENT -> I18n.t("drop.statement");
+      case CLASS_BODY -> I18n.t("drop.classbody");
+      case MEMBER -> I18n.t("drop.member");
+      case EXISTS -> I18n.t("drop.exists", String.valueOf(target.existingLine()));
+      case TEXT -> I18n.t("drop.text");
+    };
+    Label note = new Label(message);
+    note.getStyleClass().add("drop-note");
+    note.setWrapText(true);
+    note.setMaxWidth(320);
+    dropLayer.getChildren().add(note);
+    note.applyCss();
+    note.autosize();
+    javafx.geometry.Point2D at = dropLayer.screenToLocal(screenX, screenY);
+    double x = Math.max(4, Math.min(at.getX() + 16, dropLayer.getWidth() - note.getWidth() - 4));
+    double y = at.getY() + 20;
+    if (y + note.getHeight() > dropLayer.getHeight() - 4) y = at.getY() - note.getHeight() - 12;
+    note.relocate(x, Math.max(4, y));
+  }
+
+  /**
+   * The screen x of the first text column and the width of one column (the
+   * editor's font is monospaced), measured on a line shown: from one
+   * character to the next, as a character's own bounds are a little wider.
+   */
+  private double[] textColumn() {
+    for (int i = 0; i < area.getVisibleParagraphs().size(); i++) {
+      int line = area.visibleParToAllParIndex(i);
+      String text = area.getParagraph(line).getText();
+      if (text.length() < 2 || text.charAt(0) == '\t' || text.charAt(1) == '\t') continue;
+      int start = area.getAbsolutePosition(line, 0);
+      var first = area.getCharacterBoundsOnScreen(start, start + 1);
+      var second = area.getCharacterBoundsOnScreen(start + 1, start + 2);
+      if (first.isPresent() && second.isPresent()) {
+        double x = first.get().getMinX();
+        return new double[] {x, second.get().getMinX() - x};
+      }
+    }
+    javafx.geometry.Bounds view = area.localToScreen(area.getLayoutBounds());
+    return new double[] {view.getMinX(), FONT_SIZE.get() * 0.6};
+  }
+
+  /** Opens {@code rows} lines below (or above) {@code line} for the preview; -1 closes them. */
+  private void setDropGap(int line, boolean above, int rows) {
+    int next = rows > 0 ? line : -1;
+    if (next == dropGapLine && above == dropGapAbove && rows == dropGapRows) return;
+    int old = dropGapLine;
+    dropGapLine = next;
+    dropGapAbove = above;
+    dropGapRows = next < 0 ? 0 : rows;
+    // the line's text gets padding (its paragraph style); a new gutter keeps beside the text
+    if (old >= 0) paragraphStyle(old + 1);
+    if (next >= 0 && next != old) paragraphStyle(next + 1);
+  }
+
+  /**
+   * The paddings that open lines for a preview, in pixels of the current line
+   * height (a stylesheet of its own: CSS has no other way to size them).
+   */
+  private void ensureGapStyles(double row) {
+    if (row == gapStyleRow) return;
+    StringBuilder css = new StringBuilder();
+    for (int rows = 1; rows <= MAX_GAP_ROWS; rows++) {
+      double px = rows * row;
+      css.append(".paragraph-text.drop-gap-above-").append(rows)
+          .append(" { -fx-padding: ").append(px).append(" 0 0 0; }\n")
+          .append(".paragraph-text.drop-gap-below-").append(rows)
+          .append(" { -fx-padding: 0 0 ").append(px).append(" 0; }\n");
+    }
+    if (gapStyles != null) area.getStylesheets().remove(gapStyles);
+    gapStyles = "data:text/css;base64," + java.util.Base64.getEncoder().encodeToString(
+        css.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    area.getStylesheets().add(gapStyles);
+    gapStyleRow = row;
   }
 
   // --- hover -------------------------------------------------------------------

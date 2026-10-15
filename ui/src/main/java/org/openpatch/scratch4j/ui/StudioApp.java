@@ -282,6 +282,7 @@ public class StudioApp extends javafx.application.Application {
     editor.setOnRename(this::renameSymbol);
     editor.setOnFindUsages(this::findUsages);
     editor.setOnFindInProject(this::findInProject);
+    editor.setOnBlockDropped(this::addImports);
     editor.setOnBrowse(this::browse);
     editor.setOnSaved(this::onCodeSaved);
     editor.getSelectionModel().selectedItemProperty().addListener((o, old, tab) -> {
@@ -4236,6 +4237,11 @@ public class StudioApp extends javafx.application.Application {
    */
   private void insertWithImports(CodeEditor target, String snippet) {
     target.insertBlock(snippet);
+    addImports(target, snippet);
+  }
+
+  /** The imports the library classes in inserted code need (a dropped block's as well). */
+  private void addImports(CodeEditor target, String snippet) {
     ScratchProject p = project.get();
     if (p == null) return;
     try {

@@ -804,6 +804,44 @@
   -fx-padding: 0 0 0 4;
 }
 
+/* a block dragged over the code: the lines it would take (coloured by its category
+   below), a caret for a reporter, or a note on why it can't go there */
+.drop-ghost-tint {
+  -fx-background-color: -color-accent-emphasis;
+  -fx-background-radius: 3;
+  -fx-opacity: 0.18;
+}
+
+.drop-ghost-bar {
+  -fx-background-color: -color-accent-emphasis;
+  -fx-background-radius: 2;
+}
+
+.drop-ghost-code {
+  -fx-font-family: "monospace";
+  -fx-text-fill: -s-code-fg;
+  -fx-padding: 0 8 0 0;
+  -fx-opacity: 0.85;
+}
+
+.drop-caret {
+  -fx-background-color: -color-accent-emphasis;
+  -fx-min-width: 2;
+  -fx-pref-width: 2;
+}
+
+.drop-note {
+  -fx-background-color: -color-bg-overlay;
+  -fx-border-color: -color-border-default -color-border-default -color-border-default -s-warning;
+  -fx-border-width: 1 1 1 4;
+  -fx-border-radius: 6;
+  -fx-background-radius: 6;
+  -fx-padding: 6 10 6 10;
+  -fx-font-size: 12px;
+  -fx-text-fill: -color-fg-default;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.22), 10, 0, 0, 2);
+}
+
 .cat-motion { -fx-background-color: #4c97ff; -fx-fill: #4c97ff; }
 .cat-looks { -fx-background-color: #9966ff; -fx-fill: #9966ff; }
 .cat-sound { -fx-background-color: #cf63cf; -fx-fill: #cf63cf; }

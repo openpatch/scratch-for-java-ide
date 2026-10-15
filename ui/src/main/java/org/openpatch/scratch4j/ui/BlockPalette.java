@@ -10,6 +10,7 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.DataFormat;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
@@ -35,6 +36,12 @@ import java.util.function.Consumer;
  * override instead of a call.
  */
 final class BlockPalette extends BorderPane {
+
+  /**
+   * A block dragged from the palette carries its Java code as text and, in
+   * this format, its colour's style class: the code editor shows where it lands.
+   */
+  static final DataFormat BLOCK = new DataFormat("application/x-scratch4j-block");
 
   /** Scratch's own category order; other categories follow alphabetically. */
   private static final List<String> ORDER = List.of("Motion", "Looks", "Sound", "Events",
@@ -303,6 +310,7 @@ final class BlockPalette extends BorderPane {
         var board = startDragAndDrop(TransferMode.COPY);
         ClipboardContent content = new ClipboardContent();
         content.putString(snippet(getItem()));
+        content.put(BLOCK, cssKey(getItem().category()));
         board.setContent(content);
         board.setDragView(snapshot(null, null));
         e.consume();
