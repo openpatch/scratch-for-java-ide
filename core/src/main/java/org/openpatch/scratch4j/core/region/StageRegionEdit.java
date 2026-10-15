@@ -132,6 +132,9 @@ final class StageRegionEdit {
       if (method.equals("add") && call.getArguments().size() == 1) {
         return simple(call.getArguments().get(0)) + "/add";
       }
+      if (method.equals("setColor")) {
+        return "stage/setColor";
+      }
       if ((method.equals("addBackdrop") || method.equals("addSound"))
           && !call.getArguments().isEmpty() && call.getArguments().get(0) instanceof LiteralTree literal) {
         return "stage/" + method + "/" + literal.getValue();

@@ -7,7 +7,7 @@ and keeps them as ordinary Java source files that also work in BlueJ and VS Code
 **Status: 0.1.0-alpha.18.** The IDE and its
 project format may change while we test it with students and teachers.
 
-![Scratch for Java Studio with the code editor and the visual stage designer side by side](docs/screenshot.png)
+![Scratch for Java Studio with the Scratch blocks, the code editor and the visual stage designer side by side](docs/screenshot.png)
 
 ## Features
 
@@ -17,6 +17,9 @@ project format may change while we test it with students and teachers.
   in English and German, a Scratch block palette, and API help.
 - Arrange stages and sprites in visual editors. Managed Java regions keep the
   visual editors and source code in sync while leaving other code editable.
+- A class's tab reads left to right as in Scratch: the blocks, the code, the
+  stage or sprite editor. The switch at the end of the tab strip shows the
+  code, both side by side, or the visual editor alone.
 - Edit images, sounds, sprite sheets, hitboxes, shaders, and Tiled maps.
 - Run programs in a separate JVM, use the console and debugger, and export a
   runnable JAR, a portable app folder, or a BlueJ/VS Code project ZIP.

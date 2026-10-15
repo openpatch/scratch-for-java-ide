@@ -26,6 +26,17 @@ final class VisualMode {
     return paletteContext(file) == PaletteContext.SPRITE;
   }
 
+  /** The visual editor a class has: the stage designer, the sprite editor, window settings. */
+  enum Kind { STAGE, SPRITE, WINDOW, NONE }
+
+  static Kind kind(Path file) {
+    return switch (paletteContext(file)) {
+      case STAGE -> Kind.STAGE;
+      case SPRITE -> Kind.SPRITE;
+      case NONE -> isWindowSource(file) ? Kind.WINDOW : Kind.NONE;
+    };
+  }
+
   static String className(Path file) {
     if (file == null) return null;
     String name = file.getFileName().toString();
@@ -43,8 +54,28 @@ final class VisualMode {
    * hierarchy ({@code Bamboo extends Enemy extends AnimatedSprite} is a sprite).
    */
   static PaletteContext paletteContext(Path file) {
+    String base = libraryBase(file);
+    if (base == null) return PaletteContext.NONE;
+    return switch (base) {
+      case "Sprite", "AnimatedSprite", "UISprite" -> PaletteContext.SPRITE;
+      case "Stage" -> PaletteContext.STAGE;
+      default -> PaletteContext.NONE;
+    };
+  }
+
+  /** An {@code AnimatedSprite}, also through project superclasses: it can have animations. */
+  static boolean isAnimatedSprite(Path file) {
+    return "AnimatedSprite".equals(libraryBase(file));
+  }
+
+  /**
+   * The library class a Java file's class comes from through the project's own
+   * classes ({@code Sprite}, {@code AnimatedSprite}, {@code UISprite},
+   * {@code Stage}), or null.
+   */
+  private static String libraryBase(Path file) {
     String name = className(file);
-    if (name == null) return PaletteContext.NONE;
+    if (name == null) return null;
     Path dir = file.toAbsolutePath().getParent();
     for (int depth = 0; depth < 10 && name != null; depth++) {
       Path source = dir.resolve(name + ".java");
@@ -56,18 +87,15 @@ final class VisualMode {
           break;
         }
       }
-      if (parent == null) return PaletteContext.NONE;
+      if (parent == null) return null;
       switch (parent) {
-        case "Sprite", "AnimatedSprite", "UISprite" -> {
-          return PaletteContext.SPRITE;
-        }
-        case "Stage" -> {
-          return PaletteContext.STAGE;
+        case "Sprite", "AnimatedSprite", "UISprite", "Stage" -> {
+          return parent;
         }
         default -> name = Files.isRegularFile(dir.resolve(parent + ".java")) ? parent : null;
       }
     }
-    return PaletteContext.NONE;
+    return null;
   }
 
   private static String read(Path file) {

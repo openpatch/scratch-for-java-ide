@@ -64,24 +64,44 @@ class UiSmokeIT {
 
         var apiIndex = org.openpatch.scratch4j.core.api.ApiIndex.load();
         EditorTabs editor = new EditorTabs(apiIndex, () -> tmp.resolve("uismoke"));
-        AtomicReference<Path> visualMode = new AtomicReference<>();
-        editor.setOnVisualMode(visualMode::set);
         editor.open(stage);
         assertThat(editor.tabs()).hasSize(1);
 
         CodeEditor area = (CodeEditor) editor.tabs().get(0).getContent();
-        // code -> visual: a stage's code tab carries the "Visual" button
-        // it floats over the code (no extra row above it)
-        assertThat(area.getTop()).isInstanceOf(CodeEditor.FindBar.class);
-        area.visualModeButton().fire();
+        // code -> visual: the view switch at the end of the tab strip asks the host
+        AtomicReference<ViewSwitch.View> asked = new AtomicReference<>();
+        ViewSwitch views = new ViewSwitch((file, view) -> asked.set(view), file -> { });
+        views.showFor(stage, VisualMode.kind(stage), area.view());
+        assertThat(views.isVisible()).isTrue();
+        assertThat(views.view()).isEqualTo(ViewSwitch.View.CODE);
+        views.choose(ViewSwitch.View.SPLIT);
+        assertThat(asked.get()).isEqualTo(ViewSwitch.View.SPLIT);
+        assertThat(views.view()).as("the host decides, it opened nothing").isEqualTo(
+            ViewSwitch.View.CODE);
+        // only the view shown is named; the icons keep their names for screen readers
+        var segments = views.lookupAll(".view-segment").stream()
+            .map(n -> (javafx.scene.control.ToggleButton) n).toList();
+        assertThat(segments).hasSize(3);
+        assertThat(segments.stream().map(javafx.scene.control.ToggleButton::getText)
+            .filter(java.util.Objects::nonNull)).containsExactly(I18n.t("mode.code"));
+        assertThat(segments).allMatch(b -> b.getAccessibleText() != null);
+        views.showFor(stage, VisualMode.kind(stage), ViewSwitch.View.VISUAL);
+        assertThat(segments.stream().map(javafx.scene.control.ToggleButton::getText)
+            .filter(java.util.Objects::nonNull)).containsExactly(I18n.t("view.stage"));
+        // a class without a visual editor has no switch
+        Path plainClass = Files.writeString(tmp.resolve("Plain.java"), "class Plain { }\n");
+        views.showFor(plainClass, VisualMode.kind(plainClass), ViewSwitch.View.CODE);
+        assertThat(views.isVisible()).isFalse();
+        // the find bar is above the code alone: no row above the whole tab
+        assertThat(area.getTop()).isNull();
+        assertThat(area.codeColumn().getTop()).isInstanceOf(CodeEditor.FindBar.class);
         area.breakpoints().add(5);
         assertThat(editor.breakpoints().get(stage)).containsExactly(5);
         javafx.scene.Scene codeScene = new javafx.scene.Scene(area, 760, 300);
         Theme.apply(codeScene);
         area.applyCss();
         area.layout();
-        snapshot(area, Path.of("target/code-floating-visual.png"));
-        assertThat(visualMode.get()).isEqualTo(stage);
+        snapshot(area, Path.of("target/code-editor.png"));
         area.area().appendText("  // edited by smoke test\n  this.addCo");
         area.area().moveTo(area.area().getLength());
         editor.saveAll();
@@ -144,6 +164,15 @@ class UiSmokeIT {
         // round-trip: reload from the written file keeps the model
         designer.reload();
         assertThat(designer.model().sprites()).hasSize(spritesBefore + 1);
+        // the stage's background colour: written as this.setColor(r, g, b), and taken back
+        assertThat(designer.colorButton().isDisabled()).isFalse();
+        designer.setStageColor(javafx.scene.paint.Color.web("#4c97ff"));
+        assertThat(Files.readString(stage)).contains("this.setColor(76, 151, 255);");
+        assertThat(designer.model().color())
+            .isEqualTo(new org.openpatch.scratch4j.core.region.StageModel.BackgroundColor(
+                76, 151, 255));
+        designer.setStageColor(null);
+        assertThat(Files.readString(stage)).doesNotContain("setColor");
 
         // UISprite with nine-slice and pixel size, and a Text box on the stage
         Files.writeString(tmp.resolve("uismoke/Button.java"), """
@@ -457,6 +486,8 @@ class UiSmokeIT {
         StageDesignerView worldDesigner = new StageDesignerView(
             org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), "World", f -> { });
         assertThat(worldDesigner.isReadOnly()).isFalse();
+        assertThat(worldDesigner.colorButton().isDisabled())
+            .as("World sets its colour in its own code").isTrue();
         assertThat(worldDesigner.shownMap()).isEqualTo(tiled.resolve("Level1.tmx"));
         // the inventory is a UI sprite (setUI(true)): fixed to the screen, at its centre
         var inventoryRef = worldDesigner.model().sprites().byName("inventory");
@@ -694,17 +725,19 @@ class UiSmokeIT {
 
         SpriteAssetsView spriteAssets = new SpriteAssetsView(project, "Player", () -> {});
         assertThat(spriteAssets.file()).isEqualTo(project.root().resolve("Player.java"));
-        // visual -> code: the asset editor's "Code" button
-        AtomicReference<Boolean> codeMode = new AtomicReference<>(false);
-        spriteAssets.setOnOpenCode(() -> codeMode.set(true));
+        // back to the code is the view switch's: no button of its own
         assertThat(spriteAssets.getTop()).isNull();
-        spriteAssets.codeButton().fire();
-        assertThat(codeMode.get()).isTrue();
-        javafx.scene.control.TabPane spriteTabs = (javafx.scene.control.TabPane)
-            ((javafx.scene.layout.StackPane) spriteAssets.getCenter()).getChildren().get(0);
-        assertThat(spriteTabs.getTabs()).hasSize(4);
+        assertThat(spriteAssets.lookupAll(".button").stream()
+            .filter(b -> b instanceof javafx.scene.control.Labeled l
+                && I18n.t("mode.code").equals(l.getText()))).isEmpty();
+        javafx.scene.control.TabPane spriteTabs =
+            (javafx.scene.control.TabPane) spriteAssets.getCenter();
+        // a plain Sprite has no animations: costumes, sounds and the hitbox
+        assertThat(spriteTabs.getTabs()).extracting(javafx.scene.control.Tab::getText)
+            .containsExactly(I18n.t("spriteassets.costumes"), I18n.t("spriteassets.sounds"),
+                I18n.t("spriteassets.hitbox"));
         javafx.scene.layout.VBox hitboxPane = (javafx.scene.layout.VBox)
-            spriteTabs.getTabs().get(3).getContent();
+            spriteTabs.getTabs().get(2).getContent();
         javafx.scene.layout.HBox hitboxActions =
             (javafx.scene.layout.HBox) hitboxPane.getChildren().get(3);
         ((javafx.scene.control.Button) hitboxActions.getChildren().get(0)).fire();
@@ -723,12 +756,35 @@ class UiSmokeIT {
         assertThat(pointsList.getItems().get(0)).contains("0, 0");
         ((javafx.scene.control.Button) hitboxActions.getChildren().get(2)).fire();
         assertThat(pointsList.getItems().get(0)).contains("3, 0");
-        assertThat(((javafx.scene.control.Label) hitboxPane.getChildren().get(4)).getText())
-            .isEqualTo(I18n.t("spriteassets.hitbox.unsaved"));
-        ((javafx.scene.control.Button) hitboxActions.getChildren().get(3)).fire();
-        assertThat(Files.readString(project.root().resolve("Player.java")))
-            .contains("this.setHitbox(3, 0,");
+        javafx.scene.control.Label hitboxState =
+            (javafx.scene.control.Label) hitboxPane.getChildren().get(4);
+        assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.saving"));
+        // no Save button: a valid shape saves itself (here now, not after the pause)
+        assertThat(hitboxActions.getChildren()).extracting(n ->
+            ((javafx.scene.control.Button) n).getText())
+            .doesNotContain("Save hitbox", "Hitbox speichern");
+        spriteAssets.saveHitboxNow();
+        Path playerFile = project.root().resolve("Player.java");
+        assertThat(Files.readString(playerFile)).contains("this.setHitbox(3, 0,");
+        assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.saved"));
+        assertThat(pointsList.getSelectionModel().getSelectedIndex()).as("still selected")
+            .isZero();
+        // two points are no hitbox: not saved, the editor says why, and closing does not ask
+        javafx.scene.control.Button removePoint =
+            (javafx.scene.control.Button) pointsPanel.getChildren().get(3);
+        assertThat(removePoint.isVisible()).isTrue();
+        removePoint.fire();
+        removePoint.fire();
+        assertThat(pointsList.getItems()).hasSize(2);
+        assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.pending"));
+        String saved = Files.readString(playerFile);
+        spriteAssets.saveHitboxNow();
+        assertThat(Files.readString(playerFile)).isEqualTo(saved);
         assertThat(spriteAssets.confirmClose()).isTrue();
+        // X/Y and Remove only for a selected point
+        pointsList.getSelectionModel().clearSelection();
+        assertThat(removePoint.isVisible()).isFalse();
+        assertThat(pointsPanel.getChildren().get(2).isVisible()).isFalse();
 
         // image editor opens a costume copied out of the atlas
         Path png = org.openpatch.scratch4j.core.assets.AssetCopier.copyBuiltinImage(

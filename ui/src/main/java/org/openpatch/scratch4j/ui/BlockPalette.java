@@ -2,6 +2,7 @@ package org.openpatch.scratch4j.ui;
 
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -9,6 +10,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.control.skin.VirtualFlow;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.DataFormat;
 import javafx.scene.input.TransferMode;
@@ -29,11 +31,13 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
- * The Scratch-style block palette: a rail of coloured categories (as in
- * Scratch) and the blocks of the chosen category, drawn as Scratch blocks
- * with their Java call underneath. Double-click or drag into the editor
- * inserts the Java code; event blocks ({@code when ...}) insert a method
- * override instead of a call.
+ * The Scratch-style block pane at the left of a class's code: a rail of
+ * coloured categories and one list of all blocks under category headings,
+ * as in Scratch. A category on the rail scrolls to its blocks and the rail
+ * follows the scrolling. Blocks are drawn as Scratch blocks with their Java
+ * call underneath; double-click or drag into the editor inserts the Java
+ * code, event blocks ({@code when ...}) insert a method override instead of
+ * a call. The pane folds to its rail to give the code room.
  */
 final class BlockPalette extends BorderPane {
 
@@ -47,69 +51,82 @@ final class BlockPalette extends BorderPane {
   private static final List<String> ORDER = List.of("Motion", "Looks", "Sound", "Events",
       "Control", "Sensing", "Operators", "Pen", "Clock");
 
+  /** A heading (no method) or a block in the list. */
+  record Entry(String category, ApiMethod method) {
+    boolean isHeading() {
+      return method == null;
+    }
+  }
+
   private final ApiIndex index;
-  private final ListView<ApiMethod> list = new ListView<>();
+  private final ListView<Entry> list = new ListView<>();
   private final TextField search = new TextField();
   private final ToggleGroup rail = new ToggleGroup();
+  private final VBox railBox = new VBox(2);
+  private final Button unfold = Icons.button("fth-chevrons-right", I18n.t("palette.unfold"),
+      () -> userOpen(true));
+  private final VBox center;
+  private final Label noMatch = new Label();
   private final List<String> categoryNames = new ArrayList<>();
-  private String category;
-  private VisualMode.PaletteContext context = VisualMode.PaletteContext.NONE;
   private final List<ToggleButton> categoryButtons = new ArrayList<>();
+  private VisualMode.PaletteContext context = VisualMode.PaletteContext.NONE;
+  private boolean open = true;
+  private Consumer<Boolean> onOpenChanged = shown -> { };
+  /** The rail is being set from the list's scrolling (not a click). */
+  private boolean following;
+  /** The category last clicked: it stays current while its heading is in view. */
+  private String pinned;
 
   BlockPalette(ApiIndex index, Consumer<ApiMethod> onInsert) {
     this.index = index;
     getStyleClass().add("block-palette");
 
-    List<String> names = new ArrayList<>(index.blockPalette().keySet());
-    names.sort(Comparator.comparingInt((String n) -> ORDER.contains(n) ? ORDER.indexOf(n) : 99)
-        .thenComparing(Comparator.naturalOrder()));
-    categoryNames.add(I18n.t("palette.category.all"));
-    categoryNames.addAll(names);
-
-    VBox railBox = new VBox(2);
     railBox.getStyleClass().add("category-rail");
-    for (String name : categoryNames) {
-      ToggleButton button = new ToggleButton();
-      Circle dot = new Circle(9);
-      dot.getStyleClass().addAll("category-dot", cssKey(name));
-      Label label = new Label(categoryLabel(name));
-      label.getStyleClass().add("category-label");
-      VBox content = new VBox(2, dot, label);
-      content.setAlignment(Pos.CENTER);
-      button.setGraphic(content);
-      button.setToggleGroup(rail);
-      button.setUserData(name);
-      button.getStyleClass().add("category-button");
-      button.setMaxWidth(Double.MAX_VALUE);
-      railBox.getChildren().add(button);
-      categoryButtons.add(button);
-    }
+    railBox.setAlignment(Pos.TOP_CENTER);
+    unfold.getStyleClass().add("palette-unfold");
     rail.selectedToggleProperty().addListener((o, old, toggle) -> {
       if (toggle == null) {
-        old.setSelected(true);
+        if (old != null) old.setSelected(true);
         return;
       }
-      category = (String) toggle.getUserData();
-      refill();
+      if (!following) {
+        if (!open) userOpen(true);
+        scrollTo((String) toggle.getUserData());
+      }
     });
 
     list.getStyleClass().add("block-list");
     list.setCellFactory(view -> new BlockCell());
     list.setOnMouseClicked(e -> {
-      if (e.getClickCount() == 2 && list.getSelectionModel().getSelectedItem() != null) {
-        onInsert.accept(list.getSelectionModel().getSelectedItem());
+      if (e.getClickCount() == 2 && selectedItem() != null) {
+        onInsert.accept(selectedItem());
       }
     });
+    list.skinProperty().addListener((o, old, skin) -> javafx.application.Platform.runLater(
+        this::followScrolling));
+    list.setPlaceholder(noMatch);
+    noMatch.getStyleClass().add("palette-hint");
+    noMatch.setWrapText(true);
 
     search.setPromptText(I18n.t("palette.search"));
     search.textProperty().addListener((o, old, v) -> refill());
     search.getStyleClass().add("palette-search");
 
+    Label title = new Label(I18n.t("palette.title"));
+    title.getStyleClass().add("palette-title");
+    Region gap = new Region();
+    HBox.setHgrow(gap, Priority.ALWAYS);
+    Button fold = Icons.button("fth-chevrons-left", I18n.t("palette.fold"),
+        () -> userOpen(false));
+    HBox header = new HBox(4, title, gap, fold);
+    header.setAlignment(Pos.CENTER_LEFT);
+    header.getStyleClass().add("palette-header");
+
     Label hint = new Label(I18n.t("palette.hint"));
     hint.getStyleClass().add("palette-hint");
     hint.setWrapText(true);
 
-    VBox center = new VBox(6, search, list, hint);
+    center = new VBox(6, header, search, list, hint);
     VBox.setVgrow(list, Priority.ALWAYS);
     center.getStyleClass().add("palette-center");
     var railScroll = new javafx.scene.control.ScrollPane(railBox);
@@ -118,8 +135,38 @@ final class BlockPalette extends BorderPane {
     railScroll.getStyleClass().add("rail-scroll");
     setLeft(railScroll);
     setCenter(center);
-    setPrefWidth(340);
-    ((ToggleButton) railBox.getChildren().get(0)).setSelected(true);
+    setMinWidth(Region.USE_PREF_SIZE);
+    setMaxWidth(Region.USE_PREF_SIZE);
+    refill();
+    applyOpen();
+  }
+
+  /** Called when the student folds or unfolds the pane (not when the host does). */
+  void setOnOpenChanged(Consumer<Boolean> action) {
+    this.onOpenChanged = action;
+  }
+
+  /** Open: rail and blocks. Folded: only the rail, which unfolds it again. */
+  void setOpen(boolean show) {
+    if (show == open) return;
+    open = show;
+    applyOpen();
+  }
+
+  boolean isOpen() {
+    return open;
+  }
+
+  private void userOpen(boolean show) {
+    setOpen(show);
+    onOpenChanged.accept(show);
+  }
+
+  private void applyOpen() {
+    setCenter(open ? center : null);
+    unfold.setVisible(!open);
+    unfold.setManaged(!open);
+    pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("folded"), !open);
   }
 
   /**
@@ -129,18 +176,6 @@ final class BlockPalette extends BorderPane {
   void setContext(VisualMode.PaletteContext next) {
     if (next == context) return;
     context = next;
-    ToggleButton selected = (ToggleButton) rail.getSelectedToggle();
-    for (int i = 1; i < categoryButtons.size(); i++) {
-      ToggleButton button = categoryButtons.get(i);
-      String name = (String) button.getUserData();
-      boolean any = index.blockPalette().getOrDefault(name, List.of()).stream()
-          .anyMatch(this::fits);
-      button.setVisible(any);
-      button.setManaged(any);
-    }
-    if (selected != null && !selected.isVisible()) {
-      categoryButtons.get(0).setSelected(true);
-    }
     refill();
   }
 
@@ -158,7 +193,7 @@ final class BlockPalette extends BorderPane {
 
   /** The blocks listed now (tests). */
   List<ApiMethod> shownBlocks() {
-    return List.copyOf(list.getItems());
+    return list.getItems().stream().filter(e -> !e.isHeading()).map(Entry::method).toList();
   }
 
   private static String cssKey(String category) {
@@ -174,36 +209,141 @@ final class BlockPalette extends BorderPane {
     }
   }
 
+  /** Scratch's order inside a category: hats, then stack blocks, then conditions and values. */
+  private static int shape(ApiMethod m) {
+    String text = blockText(m);
+    if (text.startsWith("when ")) return 0;
+    if (text.startsWith("<")) return 2;
+    if (text.startsWith("(")) return 3;
+    return 1;
+  }
+
   void refresh() { refill(); }
 
   private void refill() {
     String query = search.getText() == null ? ""
         : search.getText().trim().toLowerCase(Locale.ROOT);
-    List<ApiMethod> entries;
-    if (category == null || category.equals(categoryNames.get(0)) || !query.isEmpty()) {
-      entries = index.methods().stream()
-          .filter(m -> m.scratchblock() != null)
-          .sorted(Comparator.comparingInt((ApiMethod m) -> ORDER.contains(m.category())
-                  ? ORDER.indexOf(m.category()) : 99)
-              .thenComparing(ApiMethod::category)
-              .thenComparing(ApiMethod::methodName))
-          .toList();
-    } else {
-      entries = index.blockPalette().getOrDefault(category, List.of());
-    }
-    entries = entries.stream().filter(this::fits).toList();
-    if (!query.isEmpty()) {
-      entries = entries.stream()
-          .filter(m -> blockText(m).toLowerCase(Locale.ROOT).contains(query)
+    var byCategory = index.blockPalette();
+    List<String> names = new ArrayList<>(byCategory.keySet());
+    names.sort(Comparator.comparingInt((String n) -> ORDER.contains(n) ? ORDER.indexOf(n) : 99)
+        .thenComparing(Comparator.naturalOrder()));
+    List<Entry> entries = new ArrayList<>();
+    List<String> shownCategories = new ArrayList<>();
+    for (String name : names) {
+      // overloads and Sprite/Stage twins show the same block once
+      java.util.Map<String, ApiMethod> unique = new java.util.LinkedHashMap<>();
+      byCategory.get(name).stream()
+          .filter(this::fits)
+          .sorted(Comparator.comparingInt(BlockPalette::shape))
+          .forEach(m -> unique.putIfAbsent(blockText(m) + "|" + snippet(m), m));
+      boolean any = !unique.isEmpty();
+      if (any) shownCategories.add(name);
+      List<ApiMethod> matching = unique.values().stream()
+          .filter(m -> query.isEmpty()
+              || blockText(m).toLowerCase(Locale.ROOT).contains(query)
               || m.methodName().toLowerCase(Locale.ROOT).contains(query))
           .toList();
+      if (!matching.isEmpty()) {
+        entries.add(new Entry(name, null));
+        matching.forEach(m -> entries.add(new Entry(name, m)));
+      }
     }
-    // overloads and Sprite/Stage twins show the same block once
-    java.util.Map<String, ApiMethod> unique = new java.util.LinkedHashMap<>();
-    for (ApiMethod m : entries) {
-      unique.putIfAbsent(blockText(m) + "|" + snippet(m), m);
+    if (!shownCategories.equals(categoryNames)) buildRail(shownCategories);
+    noMatch.setText(I18n.t("palette.nomatch", search.getText() == null ? ""
+        : search.getText().trim()));
+    list.getItems().setAll(entries);
+    pinned = null;
+    list.scrollTo(0);
+    followScrolling();
+  }
+
+  private void buildRail(List<String> names) {
+    String selected = rail.getSelectedToggle() == null ? null
+        : (String) rail.getSelectedToggle().getUserData();
+    categoryNames.clear();
+    categoryNames.addAll(names);
+    categoryButtons.forEach(b -> b.setToggleGroup(null));
+    categoryButtons.clear();
+    railBox.getChildren().setAll(unfold);
+    for (String name : names) {
+      ToggleButton button = new ToggleButton();
+      Circle dot = new Circle(9);
+      dot.getStyleClass().addAll("category-dot", cssKey(name));
+      Label label = new Label(categoryLabel(name));
+      label.getStyleClass().add("category-label");
+      VBox content = new VBox(3, dot, label);
+      content.setAlignment(Pos.CENTER);
+      button.setGraphic(content);
+      button.setUserData(name);
+      button.getStyleClass().add("category-button");
+      button.setMaxWidth(Double.MAX_VALUE);
+      button.setTooltip(new Tooltip(categoryLabel(name)));
+      railBox.getChildren().add(button);
+      categoryButtons.add(button);
+      button.setToggleGroup(rail);
     }
-    list.getItems().setAll(unique.values());
+    following = true;
+    try {
+      categoryButtons.stream().filter(b -> b.getUserData().equals(selected)).findFirst()
+          .or(() -> categoryButtons.stream().findFirst())
+          .ifPresent(b -> b.setSelected(true));
+    } finally {
+      following = false;
+    }
+  }
+
+  /** Scrolls the list to a category's heading (the rail's buttons). */
+  void scrollTo(String category) {
+    int heading = headingOf(category);
+    if (heading >= 0) {
+      pinned = category;
+      list.scrollTo(heading);
+      markRail(category);
+    }
+  }
+
+  private int headingOf(String category) {
+    for (int i = 0; i < list.getItems().size(); i++) {
+      if (list.getItems().get(i).category().equals(category)) return i;
+    }
+    return -1;
+  }
+
+  /** The rail shows the category of the blocks at the top of the list. */
+  private void followScrolling() {
+    if (list.lookup(".virtual-flow") instanceof VirtualFlow<?> flow) {
+      if (!Boolean.TRUE.equals(flow.getProperties().get("scratch4j.followed"))) {
+        flow.getProperties().put("scratch4j.followed", true);
+        flow.positionProperty().addListener((o, old, p) -> markTopCategory(flow));
+      }
+      markTopCategory(flow);
+    }
+  }
+
+  private void markTopCategory(VirtualFlow<?> flow) {
+    var first = flow.getFirstVisibleCell();
+    if (first == null || first.getIndex() < 0 || first.getIndex() >= list.getItems().size()) {
+      return;
+    }
+    if (pinned != null) {
+      // the last categories cannot scroll to the top: the clicked one stays current
+      int heading = headingOf(pinned);
+      var last = flow.getLastVisibleCell();
+      if (heading >= first.getIndex() && last != null && heading <= last.getIndex()) return;
+      pinned = null;
+    }
+    markRail(list.getItems().get(first.getIndex()).category());
+  }
+
+  /** Shows a category as current on the rail without scrolling to it. */
+  private void markRail(String category) {
+    following = true;
+    try {
+      categoryButtons.stream().filter(b -> b.getUserData().equals(category)).findFirst()
+          .ifPresent(b -> b.setSelected(true));
+    } finally {
+      following = false;
+    }
   }
 
   /** The scratchblock text, HTML entities from the Javadoc decoded. */
@@ -298,19 +438,19 @@ final class BlockPalette extends BorderPane {
     return -1;
   }
 
-  private final class BlockCell extends ListCell<ApiMethod> {
+  private final class BlockCell extends ListCell<Entry> {
 
     BlockCell() {
       // never wider than the list: no horizontal scrolling
       setPrefWidth(0);
       setOnDragDetected(e -> {
-        if (getItem() == null) {
+        if (getItem() == null || getItem().isHeading()) {
           return;
         }
         var board = startDragAndDrop(TransferMode.COPY);
         ClipboardContent content = new ClipboardContent();
-        content.putString(snippet(getItem()));
-        content.put(BLOCK, cssKey(getItem().category()));
+        content.putString(snippet(getItem().method()));
+        content.put(BLOCK, cssKey(getItem().method().category()));
         board.setContent(content);
         board.setDragView(snapshot(null, null));
         e.consume();
@@ -318,18 +458,35 @@ final class BlockPalette extends BorderPane {
     }
 
     @Override
-    protected void updateItem(ApiMethod method, boolean empty) {
-      super.updateItem(method, empty);
-      if (empty || method == null) {
+    protected void updateItem(Entry entry, boolean empty) {
+      super.updateItem(entry, empty);
+      getStyleClass().remove("block-heading-cell");
+      if (empty || entry == null) {
         setText(null);
         setGraphic(null);
         setTooltip(null);
+        setMouseTransparent(false);
         return;
       }
+      if (entry.isHeading()) {
+        Circle dot = new Circle(6);
+        dot.getStyleClass().addAll("category-dot", cssKey(entry.category()));
+        Label heading = new Label(categoryLabel(entry.category()), dot);
+        heading.getStyleClass().add("block-heading");
+        getStyleClass().add("block-heading-cell");
+        setText(null);
+        setGraphic(heading);
+        setTooltip(null);
+        // a heading is not a block: clicks pass to the list without selecting it
+        setMouseTransparent(true);
+        return;
+      }
+      setMouseTransparent(false);
+      ApiMethod method = entry.method();
       Node block = renderBlock(method);
       Label java = new Label(snippet(method).lines().findFirst().orElse(""));
       java.getStyleClass().add("block-java");
-      VBox box = new VBox(3, block, java);
+      VBox box = new VBox(4, block, java);
       HBox.setHgrow(box, Priority.ALWAYS);
       setText(null);
       setGraphic(box);
@@ -339,16 +496,28 @@ final class BlockPalette extends BorderPane {
     }
   }
 
-  /** The category names shown, for tests. */
+  /** The categories on the rail, for tests. */
   List<String> categoryItems() {
-    return categoryNames;
+    return List.copyOf(categoryNames);
+  }
+
+  /** The category the rail shows as current (tests). */
+  String currentCategory() {
+    return rail.getSelectedToggle() == null ? null
+        : (String) rail.getSelectedToggle().getUserData();
   }
 
   ApiMethod selectedItem() {
-    return list.getSelectionModel().getSelectedItem();
+    Entry entry = list.getSelectionModel().getSelectedItem();
+    return entry == null || entry.isHeading() ? null : entry.method();
   }
 
   void selectFirst() {
-    list.getSelectionModel().selectFirst();
+    for (int i = 0; i < list.getItems().size(); i++) {
+      if (!list.getItems().get(i).isHeading()) {
+        list.getSelectionModel().select(i);
+        return;
+      }
+    }
   }
 }

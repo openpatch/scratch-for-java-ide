@@ -110,12 +110,18 @@ final class StageDesignerView extends BorderPane {
   private ToggleButton mapToggle;
   private final javafx.scene.control.ComboBox<Path> mapChoice = new javafx.scene.control.ComboBox<>();
   private final VBox spriteCard = new VBox(8);
+  /** The stage's background colour: a swatch that opens the Scratch colour picker. */
+  private final Button colorButton = new Button();
+  private final javafx.scene.shape.Rectangle colorChip = new javafx.scene.shape.Rectangle(40, 20);
+  private final Button colorReset = Icons.button("fth-x", I18n.t("designer.color.reset"),
+      () -> setStageColor(null));
+  private final Label colorNote = new Label(I18n.t("designer.color.code"));
+  /** The selected object's numbers and actions: hidden while nothing is selected. */
+  private final VBox selectionDetails = new VBox(8);
   private final FlowPane instanceTiles = new FlowPane(6, 6);
   private final FlowPane classTiles = new FlowPane(6, 6);
   private final FlowPane backdropTiles = new FlowPane(6, 6);
   private final FlowPane soundTiles = new FlowPane(6, 6);
-  private final TextField widthField = numberField();
-  private final TextField heightField = numberField();
   // UISprite pixel size and Text properties (shown only for those objects)
   private final TextField pxWidthField = numberField();
   private final TextField pxHeightField = numberField();
@@ -233,19 +239,16 @@ final class StageDesignerView extends BorderPane {
     readOnlyBanner.getChildren().addAll(readOnlyTitle, readOnlyDetail, openCode);
     readOnlyBanner.setMaxHeight(Region.USE_PREF_SIZE);
     readOnlyBanner.setMaxWidth(560);
-    previewNote.getStyleClass().add("ghost-note");
-    previewNote.setVisible(false);
-    previewNote.setMouseTransparent(true);
-    previewNote.setWrapText(true);
-    previewNote.setMaxWidth(420);
+    // a word in the toolbar, next to Refresh, instead of a note over the stage
+    previewNote.getStyleClass().add("picture-status");
+    previewNote.setMinWidth(0);
+    previewNote.setMaxWidth(180);
     codeOwnedNote.setWrapText(true);
     codeOwnedNote.getStyleClass().add("ghost-note");
     codeOwnedNote.setMouseTransparent(true);
-    StackPane center = new StackPane(stageScroll, readOnlyBanner, previewNote, codeOwnedNote);
+    StackPane center = new StackPane(stageScroll, readOnlyBanner, codeOwnedNote);
     StackPane.setAlignment(codeOwnedNote, Pos.TOP_LEFT);
     StackPane.setMargin(codeOwnedNote, new Insets(10));
-    StackPane.setAlignment(previewNote, Pos.BOTTOM_LEFT);
-    StackPane.setMargin(previewNote, new Insets(0, 0, 10, 10));
     StackPane.setAlignment(readOnlyBanner, Pos.TOP_CENTER);
     StackPane.setMargin(readOnlyBanner, new Insets(12));
 
@@ -430,12 +433,7 @@ final class StageDesignerView extends BorderPane {
     mapChoice.setManaged(several);
   }
 
-  private Button codeModeButton() {
-    Button button = Icons.labeled("fth-code", I18n.t("mode.code"), () -> onOpenCode.run());
-    button.setTooltip(new javafx.scene.control.Tooltip(I18n.t("mode.code.tooltip")));
-    return button;
-  }
-
+  /** The read-only banner's "Open code" button. */
   void setOnOpenCode(Runnable onOpenCode) {
     this.onOpenCode = onOpenCode;
   }
@@ -586,13 +584,14 @@ final class StageDesignerView extends BorderPane {
     renderer.setPreview(last);
     if (last != null) {
       model.size(last.width(), last.height());
-      previewNote.setText(I18n.t("designer.picture.run", java.time.format.DateTimeFormatter
-          .ofPattern("HH:mm").format(java.time.LocalTime.ofInstant(
-              java.time.Instant.ofEpochMilli(pictureTime), java.time.ZoneId.systemDefault()))));
+      String time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(
+          java.time.LocalTime.ofInstant(java.time.Instant.ofEpochMilli(pictureTime),
+              java.time.ZoneId.systemDefault()));
+      pictureStatus(I18n.t("designer.picture.run.short", time),
+          I18n.t("designer.picture.run", time));
     } else {
-      previewNote.setText(I18n.t("designer.picture.none"));
+      pictureStatus(I18n.t("designer.picture.none.short"), I18n.t("designer.picture.none"));
     }
-    previewNote.setVisible(true);
     renderer.defaultCamera(model.width(), model.height());
   }
 
@@ -601,8 +600,7 @@ final class StageDesignerView extends BorderPane {
     if (refreshing || document == null) return;
     refreshing = true;
     refreshButton.setDisable(true);
-    previewNote.setText(I18n.t("designer.preview.running"));
-    previewNote.setVisible(true);
+    pictureStatus(I18n.t("designer.preview.running.short"), I18n.t("designer.preview.running"));
     List<String> omit = ownSprites();
     PREVIEWS.submit(() -> {
       org.openpatch.scratch4j.runner.StagePreview.Result result;
@@ -622,14 +620,24 @@ final class StageDesignerView extends BorderPane {
     });
   }
 
+  /** The toolbar's word on the program's picture; the whole story in its tooltip. */
+  private void pictureStatus(String text, String detail) {
+    previewNote.setText(text);
+    previewNote.setTooltip(new Tooltip(detail));
+  }
+
+  /** The toolbar's word on the program's picture (tests). */
+  String pictureStatus() {
+    return previewNote.getText();
+  }
+
   /** Shows a new picture, or why there is none (Refresh; tests make one themselves). */
   void showPreview(org.openpatch.scratch4j.runner.StagePreview.Result result) {
     if (result != null && result.ok()) {
       loadPicture();
     } else {
-      previewNote.setText(I18n.t("designer.preview.none",
+      pictureStatus(I18n.t("designer.preview.none.short"), I18n.t("designer.preview.none",
           result == null || result.error() == null ? "" : result.error()));
-      previewNote.setVisible(true);
     }
     refreshAll();
   }
@@ -683,16 +691,15 @@ final class StageDesignerView extends BorderPane {
           redraw();
         }),
         new Separator(javafx.geometry.Orientation.VERTICAL),
-        refreshButton(),
+        refreshButton(), previewNote,
         gridToggle, snapToggle, hitboxToggle, mapToggle(), objectsToggle, mapChoice,
-        inspectorToggle(),
-        spacer, readout,
-        codeModeButton());
+        spacer, readout);
     bar.setAlignment(Pos.CENTER_LEFT);
-    // a narrow tab shrinks only the readout, then clips the toolbar instead of
+    // a narrow tab shrinks only the readout, then clips the tools instead of
     // pushing the designer out of view
     for (Node child : bar.getChildren()) {
-      if (child instanceof Region region && child != readout && child != spacer) {
+      if (child instanceof Region region && child != readout && child != spacer
+          && child != previewNote) {
         region.setMinWidth(Region.USE_PREF_SIZE);
       }
     }
@@ -701,8 +708,14 @@ final class StageDesignerView extends BorderPane {
     clip.widthProperty().bind(bar.widthProperty());
     clip.heightProperty().bind(bar.heightProperty());
     bar.setClip(clip);
-    bar.getStyleClass().add("tool-bar-row");
-    return bar;
+    // the inspector's toggle stays in view, outside the clipped tools
+    BorderPane row = new BorderPane(bar);
+    row.setRight(inspectorToggle());
+    BorderPane.setAlignment(inspectorToggle, Pos.CENTER);
+    BorderPane.setMargin(inspectorToggle, new Insets(0, 0, 0, 6));
+    row.setMinWidth(0);
+    row.getStyleClass().add("tool-bar-row");
+    return row;
   }
 
   private Node sidebar() {
@@ -801,23 +814,28 @@ final class StageDesignerView extends BorderPane {
     spriteOnly.getChildren().addAll(turnRow, uiSizeRow,
         fieldLabel(I18n.t("designer.rotation.style")), rotationStyleBox,
         fieldLabel(I18n.t("designer.current.costume")), costumeBox, editAssets);
-    spriteCard.getChildren().addAll(new VBox(0, selectedName, selectedType), numbers,
-        spriteOnly, textOnly, actions);
+    selectionDetails.getChildren().addAll(numbers, spriteOnly, textOnly, actions);
+    spriteCard.getChildren().addAll(new VBox(0, selectedName, selectedType), selectionDetails);
 
-    // stage settings
-    GridPane size = new GridPane();
-    size.setHgap(8);
-    size.addRow(0, fieldLabel(I18n.t("designer.width")), widthField,
-        fieldLabel(I18n.t("designer.height")), heightField);
-    Tooltip windowSize = new Tooltip(I18n.t("designer.size.window"));
-    widthField.setTooltip(windowSize);
-    heightField.setTooltip(windowSize);
+    colorChip.setArcWidth(6);
+    colorChip.setArcHeight(6);
+    colorChip.setStroke(Color.gray(0.55));
+    colorButton.setGraphic(colorChip);
+    colorButton.getStyleClass().add("color-swatch-button");
+    colorButton.setTooltip(new Tooltip(I18n.t("designer.color.tooltip")));
+    colorButton.setOnAction(e -> new ScratchColorPicker(chipColor())
+        .openAt(colorButton, this::setStageColor));
+    colorNote.getStyleClass().add("text-muted");
+    HBox colorRow = new HBox(8, fieldLabel(I18n.t("designer.color")), colorButton, colorReset,
+        colorNote);
+    colorRow.setAlignment(Pos.CENTER_LEFT);
 
     VBox panel = new VBox(10,
         card(I18n.t("designer.selected"), "fth-mouse-pointer", spriteCard),
         card(I18n.t("designer.onstage"), "fth-layers", instanceTiles),
         card(I18n.t("designer.addsprite"), "fth-plus-circle", classTiles),
-        card(I18n.t("designer.stage"), "fth-monitor", new VBox(8, size,
+        // no size: a stage is as big as the window, set in the window settings
+        card(I18n.t("designer.stage"), "fth-monitor", new VBox(8, colorRow,
             fieldLabel(I18n.t("designer.backdrops")), backdropTiles,
             fieldLabel(I18n.t("designer.sounds")), soundTiles)));
     panel.setPadding(new Insets(10));
@@ -864,17 +882,41 @@ final class StageDesignerView extends BorderPane {
         String.join(", ", document.codeOwnedSprites().stream().sorted().toList())) : "");
     undoButton.setDisable(undoDelegate == null && undo.isEmpty());
     redoButton.setDisable(redoDelegate == null && redo.isEmpty());
-    widthField.setText(String.valueOf(model.width()));
-    heightField.setText(String.valueOf(model.height()));
-    // the size is the window's: the window settings change it
-    widthField.setDisable(true);
-    heightField.setDisable(true);
     refreshInstanceTiles();
     refreshClassTiles();
     refreshBackdropTiles();
     refreshSoundTiles();
+    refreshColor();
     updateInspector();
     redraw();
+  }
+
+  /** The swatch shows the background colour; code that sets it itself keeps it. */
+  private void refreshColor() {
+    colorChip.setFill(chipColor());
+    boolean editable = !isReadOnly() && document.isColorEditable();
+    colorButton.setDisable(!editable);
+    show(colorReset, editable && model.color() != null);
+    show(colorNote, !isReadOnly() && !editable);
+  }
+
+  private Color chipColor() {
+    var c = model.color();
+    return c == null ? Color.WHITE : Color.rgb(c.red(), c.green(), c.blue());
+  }
+
+  /** A colour from the picker ({@code this.setColor(r, g, b)}), or null: back to white (tests too). */
+  void setStageColor(Color color) {
+    if (isReadOnly() || !document.isColorEditable()) return;
+    model.color(color == null ? null : new StageModel.BackgroundColor(
+        (int) Math.round(color.getRed() * 255), (int) Math.round(color.getGreen() * 255),
+        (int) Math.round(color.getBlue() * 255)));
+    writeRegions();
+  }
+
+  /** The background colour's swatch (tests). */
+  Button colorButton() {
+    return colorButton;
   }
 
   private void refreshInstanceTiles() {
@@ -1066,7 +1108,9 @@ final class StageDesignerView extends BorderPane {
   private void updateInspector() {
     notifySelection();
     boolean has = selected != null;
-    spriteCard.setDisable(!has || !canEdit(selected));
+    // nothing selected: a hint, not a column of empty fields
+    show(selectionDetails, has);
+    selectionDetails.setDisable(!has || !canEdit(selected));
     if (!has) {
       inspectorUpdating = true;
       selectedName.setText(I18n.t("designer.noselection"));
@@ -1116,6 +1160,9 @@ final class StageDesignerView extends BorderPane {
       costumeBox.getItems().add(selected.costume());
     }
     costumeBox.setValue(selected.currentCostume() == null ? "" : selected.currentCostume());
+    // not set in the code: the sprite starts with its first costume
+    costumeBox.setPromptText(costumeBox.getItems().isEmpty() ? ""
+        : costumeBox.getItems().get(0));
     inspectorUpdating = false;
   }
 

@@ -76,9 +76,12 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * The IDE window. A header with the menus and the big green-flag Run / red
  * Stop buttons; on the left the stages (with thumbnails) and the project
- * files; in the middle the stage designer and editor tabs; on the right the
- * Scratch block palette; below the problems and the console. Code autosaves
- * and is checked continuously; the designer and thumbnails follow the code.
+ * files; in the middle the editor tabs; below the problems and the console.
+ * A class's tab reads left to right as in Scratch: the blocks, the code, the
+ * visual editor (stage designer, sprite editor), and the view switch at the
+ * end of the tab strip shows the code, both, or the visual editor. Code
+ * autosaves and is checked continuously; the designer and thumbnails follow
+ * the code.
  */
 public class StudioApp extends javafx.application.Application {
 
@@ -168,11 +171,12 @@ public class StudioApp extends javafx.application.Application {
   private SplitPane workArea;
   private SplitPane centerSplit;
   private StackPane centerStack;
-  private Node paletteNode;
+  /** The code tab the block pane is docked in (one pane, moved to the tab shown). */
+  private CodeEditor paletteHost;
+  private ViewSwitch viewSwitch;
   private Label status;
   private Label problemBadge;
   private Label projectTitle;
-  private boolean paletteVisible = true;
 
   /**
    * Called by the launcher before JavaFX starts: with compatibility graphics
@@ -246,6 +250,7 @@ public class StudioApp extends javafx.application.Application {
   // --- layout --------------------------------------------------------------------
 
   private void buildUi() {
+    paletteHost = null;
     fileTree = new FileTreeView();
     fileTree.setOnOpen(this::openByType);
     fileTree.setOnNewClass(() -> createClass(null));
@@ -264,7 +269,6 @@ public class StudioApp extends javafx.application.Application {
       ScratchProject p = project.get();
       return p == null ? null : p.root();
     });
-    editor.setOnVisualMode(this::openVisualForFile);
     editor.setOnSideChanged(this::updatePaletteContext);
     editor.setOnOpenFile(this::openByType);
     editor.setOnBreakpointsChanged((file, lines) -> {
@@ -301,6 +305,9 @@ public class StudioApp extends javafx.application.Application {
       updatePaletteContext();
     });
     palette = new BlockPalette(apiIndex, this::insertFromPalette);
+    palette.setOnOpenChanged(open -> {
+      if (paletteHost != null) Prefs.blocksOpen(paletteHost.view() == ViewSwitch.View.SPLIT, open);
+    });
     console = new ConsoleView(this::openSourceAt);
     problems = new ProblemsPane(p -> editor.openAt(p.file(), p.line()));
     problems.setOnFix(this::fixProblem);
@@ -343,7 +350,13 @@ public class StudioApp extends javafx.application.Application {
     emptyHint.setWrapText(true);
     emptyHint.visibleProperty().bind(javafx.beans.binding.Bindings.isEmpty(editor.getTabs()));
     emptyHint.setMouseTransparent(true);
-    centerStack = new StackPane(editor, emptyHint);
+    // the view switch at the right end of the tab strip, for the tab shown
+    viewSwitch = new ViewSwitch(this::showView, file -> openVisualForFile(file));
+    viewSwitch.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+    editor.reserveHeaderEnd(viewSwitch.widthProperty());
+    centerStack = new StackPane(editor, emptyHint, viewSwitch);
+    StackPane.setAlignment(viewSwitch, Pos.TOP_RIGHT);
+    StackPane.setMargin(viewSwitch, new javafx.geometry.Insets(4, 8, 0, 0));
     centerStack.getStyleClass().add("center-stack");
 
     problemBadge = new Label("0");
@@ -374,17 +387,19 @@ public class StudioApp extends javafx.application.Application {
     bottomTabs.getStyleClass().add("bottom-tabs");
     bottomTabs.setMinHeight(90);
 
-    centerSplit = new SplitPane(centerStack, bottomTabs);
+    // the panels are cards on the window's background, the gaps between them the dividers
+    Node bottomCard = surface(bottomTabs);
+    centerSplit = new SplitPane(surface(centerStack), bottomCard);
+    centerSplit.getStyleClass().add("work-split");
     centerSplit.setOrientation(Orientation.VERTICAL);
-    centerSplit.setDividerPositions(0.74);
-    SplitPane.setResizableWithParent(bottomTabs, false);
+    centerSplit.setDividerPositions(0.76);
+    SplitPane.setResizableWithParent(bottomCard, false);
 
-    paletteNode = palette;
-    workArea = new SplitPane(sidebar, centerSplit, paletteNode);
-    workArea.getStyleClass().add("work-area");
-    workArea.setDividerPositions(0.18, 0.76);
-    SplitPane.setResizableWithParent(sidebar, false);
-    SplitPane.setResizableWithParent(paletteNode, false);
+    Node sidebarCard = surface(sidebar);
+    workArea = new SplitPane(sidebarCard, centerSplit);
+    workArea.getStyleClass().addAll("work-area", "work-split");
+    workArea.setDividerPositions(0.18);
+    SplitPane.setResizableWithParent(sidebarCard, false);
 
     status = new Label(I18n.t("status.no.project"));
     status.getStyleClass().add("status-text");
@@ -465,11 +480,6 @@ public class StudioApp extends javafx.application.Application {
     recordToggle.setOnAction(e -> toggleRecording(recordToggle.isSelected()));
     recordToggle.disableProperty().bind(running.not());
 
-    ToggleButton paletteToggle = new ToggleButton(null, Icons.of("fth-sidebar"));
-    paletteToggle.setSelected(paletteVisible);
-    paletteToggle.getStyleClass().addAll("button-icon", "flat", "header-icon");
-    paletteToggle.setTooltip(new Tooltip(I18n.t("palette.toggle")));
-    paletteToggle.setOnAction(e -> setPaletteVisible(paletteToggle.isSelected()));
     Button theme = new Button(null, Icons.of(Theme.isDark() ? "fth-sun" : "fth-moon"));
     theme.getStyleClass().addAll("button-icon", "flat", "header-icon");
     theme.setTooltip(new Tooltip(I18n.t("theme.toggle")));
@@ -501,7 +511,7 @@ public class StudioApp extends javafx.application.Application {
     runningBar.managedProperty().bind(running);
     HBox bar = new HBox(6, logo, menus, compactMenu, left, projectTitle, right, run, stop,
         debugToggle, runningBar,
-        new javafx.scene.control.Separator(Orientation.VERTICAL), paletteToggle, theme,
+        new javafx.scene.control.Separator(Orientation.VERTICAL), theme,
         new javafx.scene.control.Separator(Orientation.VERTICAL), windowChrome.controls(this::exitApp));
     bar.setAlignment(Pos.CENTER_LEFT);
     bar.getStyleClass().add("header");
@@ -542,6 +552,13 @@ public class StudioApp extends javafx.application.Application {
     return windowChrome.header(bar, left, projectTitle, right);
   }
 
+  /** One panel of the work area (stages and files, editor, problems): a card. */
+  private static StackPane surface(Node content) {
+    StackPane card = new StackPane(content);
+    card.getStyleClass().add("surface");
+    return card;
+  }
+
   /** Shows a bottom tab the project needs now (only Problems and Console are always there). */
   private void showTab(Tab tab, boolean select) {
     if (!bottomTabs.getTabs().contains(tab)) {
@@ -556,36 +573,58 @@ public class StudioApp extends javafx.application.Application {
     bottomTabs.getTabs().remove(tab);
   }
 
-  private void setPaletteVisible(boolean visible) {
-    paletteVisible = visible;
-    applyPalette();
-  }
-
-  /** The palette follows the active tab: sprite or stage blocks, hidden elsewhere. */
+  /**
+   * The view switch and the block pane follow the tab shown: a sprite's or a
+   * stage's blocks at the left of its code, open or folded to the categories
+   * as last chosen for the code alone and for the code beside the visual
+   * editor; no blocks without code to drop them into.
+   */
   private void updatePaletteContext() {
     Tab tab = editor.getSelectionModel().getSelectedItem();
-    VisualMode.PaletteContext context = tab != null && tab.getContent() instanceof CodeEditor code
-        ? VisualMode.paletteContext(code.file()) : VisualMode.PaletteContext.NONE;
+    CodeEditor code = tab != null && tab.getContent() instanceof CodeEditor c ? c : null;
+    VisualMode.PaletteContext context = code == null ? VisualMode.PaletteContext.NONE
+        : VisualMode.paletteContext(code.file());
     palette.setContext(context);
-    applyPalette();
+    if (code == null) {
+      viewSwitch.showFor(null, VisualMode.Kind.NONE, ViewSwitch.View.CODE);
+    } else {
+      viewSwitch.showFor(code.file(), VisualMode.kind(code.file()), code.view());
+    }
+    boolean dock = project.get() != null && code != null
+        && context != VisualMode.PaletteContext.NONE && code.view() != ViewSwitch.View.VISUAL;
+    if (paletteHost != null && (paletteHost != code || !dock)) {
+      paletteHost.undockPalette();
+      paletteHost = null;
+    }
+    if (dock) {
+      palette.setOpen(Prefs.blocksOpen(code.view() == ViewSwitch.View.SPLIT));
+      code.dockPalette(palette);
+      paletteHost = code;
+    }
   }
 
-  private void applyPalette() {
-    if (project.get() == null) {
-      return;
+  /**
+   * The view switch: a class's code alone, beside its visual editor, or the
+   * visual editor alone. Back to the code puts the caret on the line that
+   * makes the object selected in the designer.
+   */
+  void showView(Path file, ViewSwitch.View view) {
+    CodeEditor code = editor.editorFor(file);
+    if (view == ViewSwitch.View.CODE) {
+      if (code != null && code.sidePanel() != null) {
+        String selected = code.sidePanel() instanceof StageDesignerView designer
+            ? designer.selectedName() : null;
+        if (editor.closeSide(file) && selected != null) openCodeAtObject(file, selected);
+      }
+    } else {
+      Prefs.visualOnly(view == ViewSwitch.View.VISUAL);
+      if (code == null || code.sidePanel() == null) {
+        openVisual(file);
+        code = editor.editorFor(file);
+      }
+      if (code != null) code.setVisualOnly(view == ViewSwitch.View.VISUAL);
     }
-    // a visual panel beside the code takes the palette's room while it is open
-    Tab tab = editor.getSelectionModel().getSelectedItem();
-    boolean visualOpen = tab != null && tab.getContent() instanceof CodeEditor code
-        && code.sidePanel() != null;
-    boolean visible = paletteVisible && palette.context() != VisualMode.PaletteContext.NONE
-        && !visualOpen;
-    if (visible && !workArea.getItems().contains(paletteNode)) {
-      workArea.getItems().add(paletteNode);
-      workArea.setDividerPosition(1, 0.76);
-    } else if (!visible) {
-      workArea.getItems().remove(paletteNode);
-    }
+    updatePaletteContext();
   }
 
   /** Saves and closes the open project, once the student agrees, and shows the start page. */
@@ -705,6 +744,12 @@ public class StudioApp extends javafx.application.Application {
 
     Menu view = new Menu(I18n.t("menu.view"));
     view.getItems().addAll(
+        item("view.menu.code", "fth-code", null, () -> showActiveView(ViewSwitch.View.CODE)),
+        item("view.menu.split", "fth-columns", null,
+            () -> showActiveView(ViewSwitch.View.SPLIT)),
+        item("view.menu.visual", "fth-monitor", null,
+            () -> showActiveView(ViewSwitch.View.VISUAL)),
+        new SeparatorMenuItem(),
         item("diagram.menu", "fth-layout", null, this::openDiagrams),
         new SeparatorMenuItem(),
         item("menu.view.zoomin", "fth-zoom-in", null,
@@ -889,6 +934,7 @@ public class StudioApp extends javafx.application.Application {
   private void withEditor(java.util.function.Consumer<CodeEditor> action) {
     CodeEditor active = editor.activeEditor();
     if (active != null) {
+      editor.revealCode(active); // the code was hidden behind its visual editor
       action.accept(active);
     }
   }
@@ -1254,14 +1300,35 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
-  /** Code editor "Visual" button: the designer for a stage, the asset editor for a sprite. */
+  /** View menu: the active class tab's code, both, or its visual editor. */
+  private void showActiveView(ViewSwitch.View view) {
+    CodeEditor active = editor.activeEditor();
+    VisualMode.Kind kind = active == null ? VisualMode.Kind.NONE : VisualMode.kind(active.file());
+    if (kind == VisualMode.Kind.STAGE || kind == VisualMode.Kind.SPRITE) {
+      showView(active.file(), view);
+    } else if (kind == VisualMode.Kind.WINDOW && view != ViewSwitch.View.CODE) {
+      openVisualForFile(active.file());
+    } else if (view != ViewSwitch.View.CODE) {
+      setStatus(I18n.t("mode.unavailable"));
+    }
+  }
+
+  /**
+   * Opens a class's visual editor, or closes it when it is open: the
+   * designer for a stage, the sprite editor for a sprite, the settings
+   * dialog for the window class.
+   */
   void openVisualForFile(Path file) {
     CodeEditor open = editor.editorFor(file);
     if (open != null && open.sidePanel() != null) {
-      // the button closes the panel it opened
-      editor.closeSide(file);
+      showView(file, ViewSwitch.View.CODE);
       return;
     }
+    openVisual(file);
+  }
+
+  /** The visual editor of a class, in the view last chosen for it (beside the code or alone). */
+  private void openVisual(Path file) {
     if (VisualMode.isStageSource(file)) {
       String stageClass = file.getFileName().toString().replaceFirst("\\.java$", "");
       CodeEditor code = editor.editorFor(file);
@@ -1691,11 +1758,8 @@ public class StudioApp extends javafx.application.Application {
           }
           scheduleCheck();
         });
-        // "Code": the panel closes, the caret goes to the selected object's line
-        view.setOnOpenCode(() -> {
-          editor.closeSide(codeFile);
-          openCodeAtObject(view.stageFile(), view.selectedName());
-        });
+        // "Open code": the panel closes, the caret goes to the selected object's line
+        view.setOnOpenCode(() -> showView(codeFile, ViewSwitch.View.CODE));
         view.setOnNewSpriteClass(() -> createClass(NewClass.Kind.SPRITE));
         view.setOnEditSpriteAssets(this::openSpriteAssets);
         view.setOnOpenClass(this::openClass);
@@ -1756,7 +1820,13 @@ public class StudioApp extends javafx.application.Application {
               reloadDesigners();
               scheduleCheck();
             });
-            view.setOnOpenCode(() -> editor.closeSide(sourceFile));
+            // a hitbox saves itself while it is being shaped: the code beside follows at
+            // once, a stage designer in another tab when it is shown (it reloads then)
+            view.setOnHitboxSaved(() -> {
+              editor.reloadIfOpen(sourceFile);
+              reloadShownDesigners();
+              scheduleCheck();
+            });
             linkSpriteEditor(sourceFile, view);
             view.setOnOpenAnimation(this::openAnimationEditor);
             view.setOnEditFile(this::openByType);
@@ -2654,6 +2724,22 @@ public class StudioApp extends javafx.application.Application {
         animation.reload();
       }
     }
+  }
+
+  /** The stage designers on screen now (the others catch up when their tab is shown). */
+  private void reloadShownDesigners() {
+    for (Node tool : editor.tools()) {
+      if (tool instanceof StageDesignerView designer && showing(designer)) {
+        designer.reload();
+      }
+    }
+  }
+
+  private static boolean showing(Node node) {
+    for (Node n = node; n != null; n = n.getParent()) {
+      if (!n.isVisible()) return false;
+    }
+    return node.getScene() != null;
   }
 
   private void scheduleCheck() {

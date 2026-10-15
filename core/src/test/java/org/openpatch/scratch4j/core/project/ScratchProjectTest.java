@@ -148,6 +148,41 @@ class ScratchProjectTest {
   }
 
   @Test
+  void theWindowIsTheOneTheStartClassMakesInMain() throws IOException {
+    Path root = tmp.resolve("mains");
+    Files.createDirectories(root);
+    Files.writeString(root.resolve("Welt.java"), """
+        public class Welt extends org.openpatch.scratch.Stage {
+          public static void main(String[] args) {
+            Window fenster = new Window(768, 432);
+            fenster.setStage(new Welt());
+          }
+        }
+        """);
+    Files.writeString(root.resolve("Main.java"), """
+        void main() {
+          Window window = new Window(400, 300);
+          window.setStage(new Level2());
+        }
+        """);
+    Files.writeString(root.resolve("Level2.java"),
+        "public class Level2 extends org.openpatch.scratch.Stage {}");
+    ScratchProject project = ScratchProject.open(root);
+    // the class the program starts with: Main
+    assertThat(project.mainWindowSource()).isEqualTo(root.resolve("Main.java"));
+    // Welt starts through its own main
+    project.settings().startStage = "Welt";
+    project.settings().save(root);
+    assertThat(ScratchProject.open(root).mainWindowSource()).isEqualTo(root.resolve("Welt.java"));
+
+    Path none = tmp.resolve("none");
+    Files.createDirectories(none);
+    Files.writeString(none.resolve("Welt.java"),
+        "public class Welt extends org.openpatch.scratch.Stage {}");
+    assertThat(ScratchProject.open(none).mainWindowSource()).isNull();
+  }
+
+  @Test
   void aCompactMainStartsBeforeTheStageItShows() throws IOException {
     Path root = tmp.resolve("compact");
     Files.createDirectories(root);

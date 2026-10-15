@@ -155,6 +155,17 @@ public final class RegionStatements {
         model.addSound(new StageModel.Sound(string(args.get(0)),
             args.size() > 1 ? string(args.get(1)) : null));
       }
+      case "setColor" -> {
+        // only red, green, blue as whole numbers (setColor(h) stays the code's)
+        if (args.size() != 3) return false;
+        int[] parts = new int[3];
+        for (int i = 0; i < 3; i++) {
+          Double part = number(args.get(i));
+          if (part == null || part != Math.rint(part) || part < 0 || part > 255) return false;
+          parts[i] = part.intValue();
+        }
+        model.color(new StageModel.BackgroundColor(parts[0], parts[1], parts[2]));
+      }
       case "add" -> {
         SpriteRef ref = args.size() == 1 ? model.sprites().byName(name(args.get(0))) : null;
         if (ref == null) return false;
@@ -295,6 +306,11 @@ public final class RegionStatements {
         sb.append(", \"").append(sound.path()).append('"');
       }
       sb.append(");\n");
+    }
+    if (model.color() != null) {
+      sb.append(indent).append("this.setColor(").append(model.color().red()).append(", ")
+          .append(model.color().green()).append(", ").append(model.color().blue())
+          .append(");\n");
     }
     for (SpriteRef ref : model.sprites()) {
       if (ref.isText()) {

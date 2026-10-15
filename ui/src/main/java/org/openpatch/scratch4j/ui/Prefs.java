@@ -164,6 +164,27 @@ final class Prefs {
     NODE.putBoolean("graphics.compatibility", on);
   }
 
+  /** A class's visual editor opens alone, the code hidden, instead of beside the code. */
+  static boolean visualOnly() {
+    return NODE.getBoolean("editor.visualOnly", false);
+  }
+
+  static void visualOnly(boolean only) {
+    NODE.putBoolean("editor.visualOnly", only);
+  }
+
+  /**
+   * The block pane is open, not folded to its categories, beside the code
+   * alone or beside code and visual editor. It starts folded in both.
+   */
+  static boolean blocksOpen(boolean besideVisual) {
+    return NODE.getBoolean(besideVisual ? "blocks.open.split" : "blocks.open.code", false);
+  }
+
+  static void blocksOpen(boolean besideVisual, boolean open) {
+    NODE.putBoolean(besideVisual ? "blocks.open.split" : "blocks.open.code", open);
+  }
+
   /** The folder the last project was created in or opened from ("" if none yet). */
   static String projectsFolder() {
     return NODE.get("projects.lastDir", "");
