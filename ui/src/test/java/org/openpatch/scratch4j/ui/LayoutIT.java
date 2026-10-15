@@ -266,6 +266,44 @@ class LayoutIT {
       assertThat(worldCode.get().content()).doesNotContain("this.setTint(");
     });
 
+    // the view switch at the end of the tab strip: the code with its blocks, both, the stage
+    onFx(() -> {
+      Path world = tiled.resolve("World.java");
+      CodeEditor code = worldCode.get();
+      var root = window.get().getScene().getRoot();
+      ViewSwitch views = (ViewSwitch) root.lookup(".view-switch-bar");
+      assertThat(views.file()).isEqualTo(world);
+      assertThat(views.view()).isEqualTo(ViewSwitch.View.SPLIT);
+      // beside the stage the blocks are folded to their categories
+      assertThat(code.dockedPalette()).isInstanceOf(BlockPalette.class);
+      assertThat(((BlockPalette) code.dockedPalette()).isOpen()).isFalse();
+      views.choose(ViewSwitch.View.CODE);
+      assertThat(code.sidePanel()).isNull();
+      assertThat(root.lookupAll(".designer")).isEmpty();
+      BlockPalette blocks = (BlockPalette) code.dockedPalette();
+      assertThat(blocks).as("the blocks left of the code").isNotNull();
+      assertThat(blocks.isOpen()).isTrue();
+      assertThat(blocks.shownBlocks()).noneMatch(m -> m.className().equals("Sprite"));
+      // one list under category headings: a category on the rail scrolls to its blocks
+      assertThat(blocks.categoryItems()).contains("Looks");
+      blocks.scrollTo("Looks");
+      assertThat(blocks.currentCategory()).isEqualTo("Looks");
+      views.choose(ViewSwitch.View.VISUAL);
+      assertThat(code.visualOnly()).isTrue();
+      assertThat(views.view()).isEqualTo(ViewSwitch.View.VISUAL);
+      assertThat(root.lookupAll(".designer")).hasSize(1);
+      assertThat(code.dockedPalette()).as("no code to drop blocks into").isNull();
+      // going to a line (a problem, a search hit) shows the code again
+      ((EditorTabs) root.lookup(".editor-tabs")).openAt(world, 3);
+      assertThat(code.visualOnly()).isFalse();
+      assertThat(views.view()).isEqualTo(ViewSwitch.View.SPLIT);
+      assertThat(code.sidePanel()).isInstanceOf(StageDesignerView.class);
+      // the visual editor alone stays the choice for the next one opened: back to both
+      assertThat(Prefs.visualOnly()).isTrue();
+      app.get().showView(world, ViewSwitch.View.SPLIT);
+      assertThat(Prefs.visualOnly()).isFalse();
+    });
+
     // the Visual button closes the panel and opens it again
     onFx(() -> app.get().openVisualForFile(tiled.resolve("World.java")));
     onFx(() -> assertThat(window.get().getScene().getRoot().lookupAll(".designer")).isEmpty());

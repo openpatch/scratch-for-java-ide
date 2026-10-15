@@ -65,8 +65,6 @@ final class SpriteAssetsView extends BorderPane {
   private boolean updatingPointFields;
   private double[] loadedHitbox = new double[0];
   private boolean hitboxReadOnly;
-  private Runnable onOpenCode = () -> { };
-  private Button codeButton;
   /** (sprite file, animation name, project-relative frame pattern) */
   private AnimationOpener onOpenAnimation = (file, name, pattern) -> { };
 
@@ -89,16 +87,9 @@ final class SpriteAssetsView extends BorderPane {
             SpriteAssets.Kind.ANIMATION)),
         new Tab(I18n.t("spriteassets.hitbox"), hitboxPane()));
     tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
-    Button openCode = Icons.labeled("fth-code", I18n.t("mode.code"), () -> onOpenCode.run());
-    openCode.setTooltip(new javafx.scene.control.Tooltip(I18n.t("mode.code.tooltip")));
-    openCode.getStyleClass().add("floating-mode-button");
-    this.codeButton = openCode;
-    // the Code button floats in the top-right corner, beside the tab headers
-    javafx.scene.layout.StackPane layered = new javafx.scene.layout.StackPane(tabs, openCode);
-    javafx.scene.layout.StackPane.setAlignment(openCode, javafx.geometry.Pos.TOP_RIGHT);
-    javafx.scene.layout.StackPane.setMargin(openCode, new Insets(2, 4, 0, 0));
-    setCenter(layered);
-    setPadding(new Insets(12));
+    tabs.getStyleClass().add("sprite-tabs");
+    getStyleClass().add("sprite-editor");
+    setCenter(tabs);
     hitboxCostume.setConverter(new javafx.util.StringConverter<>() {
       @Override public String toString(String ref) {
         return ref == null ? "" : hitboxLabels.getOrDefault(ref, ref);
@@ -141,16 +132,6 @@ final class SpriteAssetsView extends BorderPane {
     Theme.style(dialog);
     dialog.showAndWait().map(String::trim).filter(n -> n.matches("[A-Za-z][A-Za-z0-9_]*"))
         .ifPresent(n -> onOpenAnimation.open(file, n, "assets/images/" + n + "%d.png"));
-  }
-
-  /** The floating Code button (tests fire it). */
-  Button codeButton() {
-    return codeButton;
-  }
-
-  /** The "Code" button: switches to the sprite class's source. */
-  void setOnOpenCode(Runnable onOpenCode) {
-    this.onOpenCode = onOpenCode;
   }
 
   boolean confirmClose() {
@@ -353,7 +334,10 @@ final class SpriteAssetsView extends BorderPane {
         edit(list.getSelectionModel().getSelectedItem());
       }
     });
-    HBox buttons = new HBox(8, add, edit, remove);
+    // narrow (beside the code): the buttons wrap instead of shortening to "..."
+    javafx.scene.layout.FlowPane buttons = new javafx.scene.layout.FlowPane(8, 8, add, edit,
+        remove);
+    buttons.getStyleClass().add("asset-actions");
     if (kind != SpriteAssets.Kind.SOUND) {
       Button sheet = new Button(I18n.t("spriteassets.fromsheet"), Icons.of("fth-grid"));
       sheet.setOnAction(e -> fromSheet(kind));
@@ -397,8 +381,21 @@ final class SpriteAssetsView extends BorderPane {
     }
     VBox.setVgrow(list, javafx.scene.layout.Priority.ALWAYS);
     pane.setPadding(new Insets(8));
-    HBox.setHgrow(pane, javafx.scene.layout.Priority.ALWAYS);
-    return new HBox(8, pane, preview);
+    // the preview beside the list, or under it when the editor is narrow
+    BorderPane layout = new BorderPane(pane);
+    layout.widthProperty().addListener((o, old, w) -> {
+      boolean narrow = w.doubleValue() < 620;
+      if (narrow && layout.getBottom() != preview) {
+        layout.setRight(null);
+        layout.setBottom(preview);
+      } else if (!narrow && layout.getRight() != preview) {
+        layout.setBottom(null);
+        layout.setRight(preview);
+      }
+    });
+    layout.setRight(preview);
+    BorderPane.setMargin(preview, new Insets(8));
+    return layout;
   }
 
   /** Hitbox costume choices: reference -> the asset's name. */

@@ -17,6 +17,12 @@
   -s-stage-bg: #e9eef5;
   -s-card-bg: white;
   -s-card-border: #e2e6ef;
+  /* the window's background, the panels on it, their toolbars and inner lines */
+  -s-canvas: #e6ecf5;
+  -s-surface: white;
+  -s-surface-alt: #f6f8fb;
+  -s-line: #e3e8f0;
+  -s-segment-on: white;
 
   -s-code-bg: #ffffff;
   -s-code-fg: #24292f;
@@ -49,6 +55,11 @@
   -s-stage-bg: #0d1117;
   -s-card-bg: #1c2129;
   -s-card-border: #30363d;
+  -s-canvas: #05070a;
+  -s-surface: #0d1117;
+  -s-surface-alt: #131920;
+  -s-line: #262c35;
+  -s-segment-on: #2d333b;
 
   -s-code-bg: #0d1117;
   -s-code-fg: #e6edf3;
@@ -209,7 +220,7 @@
 /* ---------- layout ---------- */
 
 .studio {
-  -fx-background-color: -color-bg-default;
+  -fx-background-color: -s-canvas;
 }
 
 .studio.custom-chrome {
@@ -217,16 +228,142 @@
   -fx-padding: 5;
 }
 
-.work-area {
-  -fx-background-color: -color-bg-default;
+/* the work area: panels as cards on the window's background; the gaps are the dividers */
+.work-split {
+  -fx-background-color: -s-canvas;
   -fx-padding: 0;
   -fx-box-border: transparent;
 }
 
-.work-area > .split-pane-divider,
+.work-area {
+  -fx-padding: 6 6 0 6;
+}
+
+.work-split > .split-pane-divider {
+  -fx-background-color: transparent;
+  -fx-padding: 0 3 0 3;
+}
+
+.work-split:vertical > .split-pane-divider {
+  -fx-padding: 3 0 3 0;
+}
+
+/* the grip shows where the gap is grabbed */
+.work-split > .split-pane-divider > .vertical-grabber,
+.work-split > .split-pane-divider > .horizontal-grabber,
+.code-visual-split > .split-pane-divider > .horizontal-grabber {
+  -fx-background-color: transparent;
+}
+
+.work-split > .split-pane-divider:hover > .vertical-grabber,
+.work-split > .split-pane-divider:hover > .horizontal-grabber {
+  -fx-background-color: -color-accent-muted;
+}
+
 .split-pane > .split-pane-divider {
   -fx-padding: 0 1 0 1;
   -fx-background-color: -color-border-default;
+}
+
+.surface {
+  -fx-background-color: -s-card-border, -s-surface;
+  -fx-background-insets: 0, 1;
+  -fx-background-radius: 7, 6;
+  -fx-padding: 2;
+}
+
+/* tab strips: quiet, the selected tab underlined in the accent colour */
+.sidebar-tabs > .tab-header-area,
+.bottom-tabs > .tab-header-area,
+.editor-tabs > .tab-header-area {
+  -fx-background-color: -s-surface;
+  /* one height for every strip, and room for the view switch */
+  -fx-min-height: 40;
+  -fx-pref-height: 40;
+}
+
+.sidebar-tabs > .tab-header-area > .tab-header-background,
+.bottom-tabs > .tab-header-area > .tab-header-background,
+.editor-tabs > .tab-header-area > .tab-header-background {
+  -fx-background-color: -s-line, -s-surface;
+  -fx-background-insets: 0, 0 0 1 0;
+}
+
+.sidebar-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label,
+.bottom-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label,
+.editor-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label {
+  -fx-text-fill: -color-fg-muted;
+}
+
+.sidebar-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label .ikonli-font-icon,
+.bottom-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label .ikonli-font-icon,
+.editor-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label .ikonli-font-icon {
+  -fx-icon-color: -color-fg-muted;
+}
+
+.sidebar-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label,
+.bottom-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label,
+.editor-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label {
+  -fx-text-fill: -color-fg-default;
+}
+
+.sidebar-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label .ikonli-font-icon,
+.bottom-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label .ikonli-font-icon,
+.editor-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label .ikonli-font-icon {
+  -fx-icon-color: -color-accent-fg;
+}
+
+/* ---------- view switch: code / both / visual, at the end of the tab strip ---------- */
+
+.view-switch {
+  -fx-background-color: -s-line, -s-canvas;
+  -fx-background-insets: 0, 1;
+  -fx-background-radius: 9, 8;
+  -fx-padding: 3;
+  -fx-spacing: 2;
+}
+
+.view-segment {
+  -fx-background-color: transparent;
+  -fx-background-radius: 6;
+  -fx-border-color: transparent;
+  -fx-border-width: 0;
+  -fx-padding: 3 10 3 10;
+  -fx-graphic-text-gap: 6;
+  -fx-text-fill: -color-fg-muted;
+  -fx-cursor: hand;
+}
+
+.view-segment .ikonli-font-icon {
+  -fx-icon-color: -color-fg-muted;
+}
+
+.view-segment:hover {
+  -fx-background-color: -color-bg-subtle;
+  -fx-text-fill: -color-fg-default;
+}
+
+.view-segment:selected,
+.view-segment:selected:hover {
+  -fx-background-color: -s-segment-on;
+  -fx-text-fill: -color-accent-fg;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.16), 4, 0, 0, 1);
+}
+
+.view-segment:selected .ikonli-font-icon {
+  -fx-icon-color: -color-accent-fg;
+}
+
+.view-segment:focused {
+  -fx-background-color: -color-accent-muted, -s-segment-on;
+  -fx-background-insets: 0, 2;
+}
+
+.view-switch-action {
+  -fx-background-color: -s-line, -s-canvas;
+  -fx-background-insets: 0, 1;
+  -fx-background-radius: 9, 8;
+  -fx-padding: 5 12 5 10;
 }
 
 .sidebar-tabs, .bottom-tabs, .editor-tabs {
@@ -239,7 +376,7 @@
 }
 
 .center-stack {
-  -fx-background-color: -s-panel-bg;
+  -fx-background-color: -s-surface;
 }
 
 .empty-hint {
@@ -256,9 +393,8 @@
 }
 
 .status-bar {
-  -fx-background-color: -s-panel-bg;
-  -fx-border-color: -color-border-default transparent transparent transparent;
-  -fx-padding: 3 10 3 10;
+  -fx-background-color: -s-canvas;
+  -fx-padding: 3 12 3 12;
 }
 
 .status-text {
@@ -676,29 +812,49 @@
   -fx-border-width: 1;
 }
 
-/* ---------- block palette ---------- */
+/* ---------- block pane (left of a class's code) ---------- */
 
 .block-palette {
-  -fx-background-color: -s-panel-bg;
+  -fx-background-color: -s-surface;
+  -fx-border-color: transparent -s-line transparent transparent;
+  -fx-pref-width: 330;
+}
+
+.block-palette:folded {
+  -fx-pref-width: 70;
 }
 
 .category-rail {
-  -fx-padding: 6 2 6 2;
-  -fx-background-color: -color-bg-default;
+  -fx-padding: 6 4 6 4;
+  -fx-spacing: 2;
+  -fx-background-color: -s-surface-alt;
 }
 
 .rail-scroll, .rail-scroll > .viewport {
-  -fx-background-color: -color-bg-default;
-  -fx-border-color: transparent -color-border-default transparent transparent;
-  -fx-min-width: 72;
-  -fx-pref-width: 72;
+  -fx-background-color: -s-surface-alt;
+  -fx-min-width: 70;
+  -fx-pref-width: 70;
+}
+
+.rail-scroll {
+  -fx-border-color: transparent -s-line transparent transparent;
+}
+
+.block-palette:folded .rail-scroll {
+  -fx-border-color: transparent;
+}
+
+.palette-unfold {
+  -fx-padding: 6;
+  -fx-background-radius: 8;
 }
 
 .category-button {
   -fx-background-color: transparent;
-  -fx-background-radius: 8;
-  -fx-padding: 6 2 6 2;
+  -fx-background-radius: 10;
+  -fx-padding: 6 2 5 2;
   -fx-border-width: 0;
+  -fx-cursor: hand;
 }
 
 .category-button:hover {
@@ -721,31 +877,59 @@
 
 .category-dot {
   -fx-fill: #8f9bb3;
-  -fx-stroke: rgba(0, 0, 0, 0.12);
+  -fx-stroke: rgba(0, 0, 0, 0.14);
 }
 
 .palette-center {
-  -fx-padding: 8;
+  -fx-padding: 8 4 6 10;
+}
+
+.palette-header {
+  -fx-padding: 0 4 0 2;
+  -fx-min-height: 28;
+}
+
+.palette-title {
+  -fx-font-weight: bold;
+  -fx-font-size: 13px;
+}
+
+.palette-search {
+  -fx-background-radius: 8;
+  -fx-border-radius: 8;
 }
 
 .palette-hint {
   -fx-font-size: 11px;
   -fx-text-fill: -color-fg-subtle;
+  -fx-padding: 0 6 0 2;
 }
 
 .block-list {
   -fx-background-color: transparent;
   -fx-border-width: 0;
+  -fx-padding: 0;
 }
 
 .block-list .list-cell {
   -fx-background-color: transparent;
-  -fx-padding: 5 2 5 2;
+  -fx-padding: 5 6 5 2;
 }
 
 .block-list .list-cell:selected {
   -fx-background-color: -color-accent-subtle;
   -fx-background-radius: 8;
+}
+
+.block-list .list-cell.block-heading-cell {
+  -fx-padding: 12 6 2 2;
+}
+
+.block-heading {
+  -fx-font-weight: bold;
+  -fx-font-size: 13px;
+  -fx-text-fill: -color-fg-default;
+  -fx-graphic-text-gap: 8;
 }
 
 .block {
@@ -801,7 +985,7 @@
   -fx-font-family: "monospace";
   -fx-font-size: 10px;
   -fx-text-fill: -color-fg-muted;
-  -fx-padding: 0 0 0 4;
+  -fx-padding: 0 0 0 6;
 }
 
 .cat-motion { -fx-background-color: #4c97ff; -fx-fill: #4c97ff; }
@@ -819,7 +1003,7 @@
 /* ---------- stage selector ---------- */
 
 .stage-selector {
-  -fx-background-color: -s-panel-bg;
+  -fx-background-color: -s-surface;
 }
 
 .stage-selector .text-warning {
@@ -896,8 +1080,13 @@
 
 .tool-bar-row {
   -fx-padding: 4 8 4 8;
-  -fx-background-color: -color-bg-default;
-  -fx-border-color: transparent transparent -color-border-default transparent;
+  -fx-min-height: 42;
+  -fx-background-color: -s-surface;
+  -fx-border-color: transparent transparent -s-line transparent;
+}
+
+.tool-bar-row > .separator:vertical {
+  -fx-padding: 4 3 4 3;
 }
 
 .zoom-label {
@@ -935,15 +1124,18 @@
 }
 
 .designer-sidebar, .designer-sidebar-scroll, .designer-sidebar-scroll > .viewport {
-  -fx-background-color: -s-panel-bg;
+  -fx-background-color: -s-surface;
 }
 
+.designer-sidebar-scroll {
+  -fx-border-color: transparent transparent transparent -s-line;
+}
+
+/* the inspector's parts are sections of one panel, not cards in a panel */
 .side-card {
-  -fx-background-color: -s-card-bg;
-  -fx-border-color: -s-card-border;
-  -fx-border-radius: 12;
-  -fx-background-radius: 12;
-  -fx-padding: 10;
+  -fx-background-color: transparent;
+  -fx-border-color: transparent transparent -s-line transparent;
+  -fx-padding: 2 2 14 2;
 }
 
 .card-header {
@@ -1149,18 +1341,41 @@
   -fx-icon-size: 18;
 }
 
-/* Visual / Code: a floating switch in the editor's top-right corner */
-.floating-mode-button {
-  -fx-background-color: -color-bg-default;
-  -fx-border-color: -color-border-default;
-  -fx-border-radius: 6;
-  -fx-background-radius: 6;
-  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 6, 0, 0, 1);
-  -fx-opacity: 0.92;
+/* code beside the visual editor: a hairline with a wider grip */
+.code-visual-split {
+  -fx-background-color: -s-surface;
+  -fx-padding: 0;
+  -fx-box-border: transparent;
 }
 
-.floating-mode-button:hover {
-  -fx-opacity: 1;
+.code-visual-split > .split-pane-divider {
+  -fx-background-color: transparent, -s-line;
+  -fx-background-insets: 0, 0 2 0 2;
+  -fx-padding: 0 2.5 0 2.5;
+}
+
+.code-side, .code-column {
+  -fx-background-color: -s-code-bg;
+}
+
+/* ---------- sprite editor (costumes, sounds, animations, hitbox) ---------- */
+
+.sprite-editor {
+  -fx-background-color: -s-surface;
+}
+
+.sprite-tabs > .tab-header-area {
+  -fx-padding: 4 8 0 8;
+  -fx-background-color: -s-surface;
+}
+
+.sprite-tabs > .tab-header-area > .tab-header-background {
+  -fx-background-color: -s-line, -s-surface;
+  -fx-background-insets: 0, 0 0 1 0;
+}
+
+.sprite-tabs > .tab-content-area {
+  -fx-padding: 4 6 6 6;
 }
 
 /* Scratch-style colour picker: gradient tracks under transparent sliders */
@@ -1217,7 +1432,10 @@
 
 /* the designer's inspector over a narrow stage (visual panel beside the code) */
 .inspector-overlay {
-  -fx-background-color: -color-bg-default;
+  -fx-background-color: -s-surface;
+  -fx-border-color: -s-line;
+  -fx-border-radius: 0 0 0 8;
+  -fx-background-radius: 0 0 0 8;
   -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.2), 14, 0, 0, 3);
 }
 

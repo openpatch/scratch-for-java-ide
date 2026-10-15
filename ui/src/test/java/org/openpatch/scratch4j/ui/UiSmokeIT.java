@@ -64,24 +64,34 @@ class UiSmokeIT {
 
         var apiIndex = org.openpatch.scratch4j.core.api.ApiIndex.load();
         EditorTabs editor = new EditorTabs(apiIndex, () -> tmp.resolve("uismoke"));
-        AtomicReference<Path> visualMode = new AtomicReference<>();
-        editor.setOnVisualMode(visualMode::set);
         editor.open(stage);
         assertThat(editor.tabs()).hasSize(1);
 
         CodeEditor area = (CodeEditor) editor.tabs().get(0).getContent();
-        // code -> visual: a stage's code tab carries the "Visual" button
-        // it floats over the code (no extra row above it)
-        assertThat(area.getTop()).isInstanceOf(CodeEditor.FindBar.class);
-        area.visualModeButton().fire();
+        // code -> visual: the view switch at the end of the tab strip asks the host
+        AtomicReference<ViewSwitch.View> asked = new AtomicReference<>();
+        ViewSwitch views = new ViewSwitch((file, view) -> asked.set(view), file -> { });
+        views.showFor(stage, VisualMode.kind(stage), area.view());
+        assertThat(views.isVisible()).isTrue();
+        assertThat(views.view()).isEqualTo(ViewSwitch.View.CODE);
+        views.choose(ViewSwitch.View.SPLIT);
+        assertThat(asked.get()).isEqualTo(ViewSwitch.View.SPLIT);
+        assertThat(views.view()).as("the host decides, it opened nothing").isEqualTo(
+            ViewSwitch.View.CODE);
+        // a class without a visual editor has no switch
+        Path plainClass = Files.writeString(tmp.resolve("Plain.java"), "class Plain { }\n");
+        views.showFor(plainClass, VisualMode.kind(plainClass), ViewSwitch.View.CODE);
+        assertThat(views.isVisible()).isFalse();
+        // the find bar is above the code alone: no row above the whole tab
+        assertThat(area.getTop()).isNull();
+        assertThat(area.codeColumn().getTop()).isInstanceOf(CodeEditor.FindBar.class);
         area.breakpoints().add(5);
         assertThat(editor.breakpoints().get(stage)).containsExactly(5);
         javafx.scene.Scene codeScene = new javafx.scene.Scene(area, 760, 300);
         Theme.apply(codeScene);
         area.applyCss();
         area.layout();
-        snapshot(area, Path.of("target/code-floating-visual.png"));
-        assertThat(visualMode.get()).isEqualTo(stage);
+        snapshot(area, Path.of("target/code-editor.png"));
         area.area().appendText("  // edited by smoke test\n  this.addCo");
         area.area().moveTo(area.area().getLength());
         editor.saveAll();
@@ -684,14 +694,13 @@ class UiSmokeIT {
 
         SpriteAssetsView spriteAssets = new SpriteAssetsView(project, "Player", () -> {});
         assertThat(spriteAssets.file()).isEqualTo(project.root().resolve("Player.java"));
-        // visual -> code: the asset editor's "Code" button
-        AtomicReference<Boolean> codeMode = new AtomicReference<>(false);
-        spriteAssets.setOnOpenCode(() -> codeMode.set(true));
+        // back to the code is the view switch's: no button of its own
         assertThat(spriteAssets.getTop()).isNull();
-        spriteAssets.codeButton().fire();
-        assertThat(codeMode.get()).isTrue();
-        javafx.scene.control.TabPane spriteTabs = (javafx.scene.control.TabPane)
-            ((javafx.scene.layout.StackPane) spriteAssets.getCenter()).getChildren().get(0);
+        assertThat(spriteAssets.lookupAll(".button").stream()
+            .filter(b -> b instanceof javafx.scene.control.Labeled l
+                && I18n.t("mode.code").equals(l.getText()))).isEmpty();
+        javafx.scene.control.TabPane spriteTabs =
+            (javafx.scene.control.TabPane) spriteAssets.getCenter();
         assertThat(spriteTabs.getTabs()).hasSize(4);
         javafx.scene.layout.VBox hitboxPane = (javafx.scene.layout.VBox)
             spriteTabs.getTabs().get(3).getContent();

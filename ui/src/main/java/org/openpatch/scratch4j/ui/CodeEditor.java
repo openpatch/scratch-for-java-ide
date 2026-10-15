@@ -139,7 +139,6 @@ final class CodeEditor extends BorderPane {
   private final List<Integer> bracketMarks = new ArrayList<>();
   private String savedText;
   private Runnable onEdited = () -> { };
-  private Button visualModeButton;
   private java.util.function.IntConsumer onGoToDefinition = offset -> { };
   private java.util.function.IntConsumer onRename = offset -> { };
   private java.util.function.IntConsumer onFindUsages = offset -> { };
@@ -197,8 +196,12 @@ final class CodeEditor extends BorderPane {
     installBlockDrop();
 
     findBar = new FindBar(area);
-    setTop(findBar);
-    setCenter(new VirtualizedScrollPane<>(area));
+    codeColumn.setTop(findBar);
+    codeColumn.setCenter(new VirtualizedScrollPane<>(area));
+    codeColumn.getStyleClass().add("code-column");
+    codeSide.setCenter(codeColumn);
+    codeSide.getStyleClass().add("code-side");
+    setCenter(codeSide);
     installLinks();
     installContextMenu();
     area.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, e -> {
@@ -213,64 +216,92 @@ final class CodeEditor extends BorderPane {
     });
   }
 
-  /**
-   * A "Visual" button floating in the editor's top-right corner (no extra
-   * row) that switches to the class's visual editor.
+  /*
+   * The tab's layout, left to right as in Scratch: the blocks, the code, the
+   * visual editor. The blocks and the code are the code side; the visual
+   * editor sits beside it, or alone when the code is hidden.
    */
-  void setVisualModeAction(String label, String tooltip, Runnable action) {
-    if (visualModeButton != null) return;
-    visualModeButton = Icons.labeled("fth-monitor", label, action);
-    visualModeButton.setTooltip(new Tooltip(tooltip));
-    visualModeButton.getStyleClass().add("floating-mode-button");
-    StackPane layered = new StackPane(getCenter(), visualModeButton);
-    StackPane.setAlignment(visualModeButton, Pos.TOP_RIGHT);
-    // clear of the vertical scroll bar
-    StackPane.setMargin(visualModeButton, new javafx.geometry.Insets(6, 22, 0, 0));
-    setCenter(layered);
-  }
-
-  /** The code (with its floating button) while a visual panel is beside it. */
-  private javafx.scene.Node codePane;
+  /** The find bar above the code. */
+  private final BorderPane codeColumn = new BorderPane();
+  /** The block pane (when docked here) and the code. */
+  private final BorderPane codeSide = new BorderPane();
   private javafx.scene.Node sidePanel;
   private String sidePanelKey;
-  private String visualLabel;
-  private Tooltip visualTooltip;
+  private javafx.scene.control.SplitPane split;
+  private boolean visualOnly;
+  /** Where the divider between code and visual editor was (the code's share). */
+  private double splitPosition = 0.42;
 
   /**
    * The class's visual editor (stage designer, sprite editor) to the right
    * of the code, in this tab; replaces another one that was there.
    */
   void showSidePanel(String key, javafx.scene.Node panel) {
-    if (codePane == null) {
-      codePane = getCenter();
+    if (split != null) {
+      rememberSplit();
+      split.getItems().clear();
     }
-    javafx.scene.control.SplitPane split = new javafx.scene.control.SplitPane(codePane, panel);
-    split.getStyleClass().add("code-visual-split");
-    split.setDividerPositions(0.42);
-    setCenter(split);
     sidePanel = panel;
     sidePanelKey = key;
-    if (visualModeButton != null) {
-      visualLabel = visualModeButton.getText();
-      // an icon only: the code beside the panel is narrow
-      visualModeButton.setText(null);
-      visualModeButton.setGraphic(Icons.of("fth-x"));
-      visualTooltip = visualModeButton.getTooltip();
-      visualModeButton.setTooltip(new Tooltip(I18n.t("mode.visual.close")));
-    }
+    split = new javafx.scene.control.SplitPane();
+    split.getStyleClass().add("code-visual-split");
+    layoutSides();
   }
 
   /** Back to the code alone. */
   void hideSidePanel() {
     if (sidePanel == null) return;
-    setCenter(codePane);
+    rememberSplit();
+    split.getItems().clear();
+    split = null;
     sidePanel = null;
     sidePanelKey = null;
-    if (visualModeButton != null && visualLabel != null) {
-      visualModeButton.setText(visualLabel);
-      visualModeButton.setGraphic(Icons.of("fth-monitor"));
-      visualModeButton.setTooltip(visualTooltip);
+    visualOnly = false;
+    setCenter(codeSide);
+  }
+
+  /** The visual editor alone (the code hidden), or back beside the code. */
+  void setVisualOnly(boolean only) {
+    if (sidePanel == null || only == visualOnly) return;
+    rememberSplit();
+    visualOnly = only;
+    layoutSides();
+  }
+
+  boolean visualOnly() {
+    return sidePanel != null && visualOnly;
+  }
+
+  private void rememberSplit() {
+    if (split != null && split.getItems().size() == 2) {
+      splitPosition = split.getDividers().get(0).getPosition();
     }
+  }
+
+  private void layoutSides() {
+    if (visualOnly) {
+      split.getItems().clear();
+      setCenter(sidePanel);
+    } else {
+      setCenter(null);
+      split.getItems().setAll(codeSide, sidePanel);
+      split.setDividerPositions(splitPosition);
+      setCenter(split);
+    }
+  }
+
+  /** The block pane at the left of the code (one pane, moved to the tab shown). */
+  void dockPalette(javafx.scene.Node palette) {
+    if (codeSide.getLeft() != palette) codeSide.setLeft(palette);
+  }
+
+  void undockPalette() {
+    codeSide.setLeft(null);
+  }
+
+  /** The block pane docked here, or null. */
+  javafx.scene.Node dockedPalette() {
+    return codeSide.getLeft();
   }
 
   javafx.scene.Node sidePanel() {
@@ -281,9 +312,15 @@ final class CodeEditor extends BorderPane {
     return sidePanelKey;
   }
 
-  /** The floating Visual button, or null for classes without a visual editor. */
-  Button visualModeButton() {
-    return visualModeButton;
+  /** How the tab shows now: the code, both, or the visual editor alone. */
+  ViewSwitch.View view() {
+    return sidePanel == null ? ViewSwitch.View.CODE
+        : visualOnly ? ViewSwitch.View.VISUAL : ViewSwitch.View.SPLIT;
+  }
+
+  /** The find bar's row (above the code only). */
+  BorderPane codeColumn() {
+    return codeColumn;
   }
 
   /** F12 or Ctrl/Cmd+click: the host resolves the name at the offset. */

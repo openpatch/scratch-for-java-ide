@@ -110,6 +110,8 @@ final class StageDesignerView extends BorderPane {
   private ToggleButton mapToggle;
   private final javafx.scene.control.ComboBox<Path> mapChoice = new javafx.scene.control.ComboBox<>();
   private final VBox spriteCard = new VBox(8);
+  /** The selected object's numbers and actions: hidden while nothing is selected. */
+  private final VBox selectionDetails = new VBox(8);
   private final FlowPane instanceTiles = new FlowPane(6, 6);
   private final FlowPane classTiles = new FlowPane(6, 6);
   private final FlowPane backdropTiles = new FlowPane(6, 6);
@@ -430,12 +432,7 @@ final class StageDesignerView extends BorderPane {
     mapChoice.setManaged(several);
   }
 
-  private Button codeModeButton() {
-    Button button = Icons.labeled("fth-code", I18n.t("mode.code"), () -> onOpenCode.run());
-    button.setTooltip(new javafx.scene.control.Tooltip(I18n.t("mode.code.tooltip")));
-    return button;
-  }
-
+  /** The read-only banner's "Open code" button. */
   void setOnOpenCode(Runnable onOpenCode) {
     this.onOpenCode = onOpenCode;
   }
@@ -685,11 +682,9 @@ final class StageDesignerView extends BorderPane {
         new Separator(javafx.geometry.Orientation.VERTICAL),
         refreshButton(),
         gridToggle, snapToggle, hitboxToggle, mapToggle(), objectsToggle, mapChoice,
-        inspectorToggle(),
-        spacer, readout,
-        codeModeButton());
+        spacer, readout);
     bar.setAlignment(Pos.CENTER_LEFT);
-    // a narrow tab shrinks only the readout, then clips the toolbar instead of
+    // a narrow tab shrinks only the readout, then clips the tools instead of
     // pushing the designer out of view
     for (Node child : bar.getChildren()) {
       if (child instanceof Region region && child != readout && child != spacer) {
@@ -701,8 +696,13 @@ final class StageDesignerView extends BorderPane {
     clip.widthProperty().bind(bar.widthProperty());
     clip.heightProperty().bind(bar.heightProperty());
     bar.setClip(clip);
-    bar.getStyleClass().add("tool-bar-row");
-    return bar;
+    // the inspector's toggle stays in view, outside the clipped tools
+    BorderPane row = new BorderPane(bar);
+    row.setRight(inspectorToggle());
+    BorderPane.setAlignment(inspectorToggle, Pos.CENTER);
+    row.setMinWidth(0);
+    row.getStyleClass().add("tool-bar-row");
+    return row;
   }
 
   private Node sidebar() {
@@ -801,8 +801,8 @@ final class StageDesignerView extends BorderPane {
     spriteOnly.getChildren().addAll(turnRow, uiSizeRow,
         fieldLabel(I18n.t("designer.rotation.style")), rotationStyleBox,
         fieldLabel(I18n.t("designer.current.costume")), costumeBox, editAssets);
-    spriteCard.getChildren().addAll(new VBox(0, selectedName, selectedType), numbers,
-        spriteOnly, textOnly, actions);
+    selectionDetails.getChildren().addAll(numbers, spriteOnly, textOnly, actions);
+    spriteCard.getChildren().addAll(new VBox(0, selectedName, selectedType), selectionDetails);
 
     // stage settings
     GridPane size = new GridPane();
@@ -1066,7 +1066,9 @@ final class StageDesignerView extends BorderPane {
   private void updateInspector() {
     notifySelection();
     boolean has = selected != null;
-    spriteCard.setDisable(!has || !canEdit(selected));
+    // nothing selected: a hint, not a column of empty fields
+    show(selectionDetails, has);
+    selectionDetails.setDisable(!has || !canEdit(selected));
     if (!has) {
       inspectorUpdating = true;
       selectedName.setText(I18n.t("designer.noselection"));

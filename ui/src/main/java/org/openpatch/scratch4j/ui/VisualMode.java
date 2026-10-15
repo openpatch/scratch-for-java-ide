@@ -26,6 +26,17 @@ final class VisualMode {
     return paletteContext(file) == PaletteContext.SPRITE;
   }
 
+  /** The visual editor a class has: the stage designer, the sprite editor, window settings. */
+  enum Kind { STAGE, SPRITE, WINDOW, NONE }
+
+  static Kind kind(Path file) {
+    return switch (paletteContext(file)) {
+      case STAGE -> Kind.STAGE;
+      case SPRITE -> Kind.SPRITE;
+      case NONE -> isWindowSource(file) ? Kind.WINDOW : Kind.NONE;
+    };
+  }
+
   static String className(Path file) {
     if (file == null) return null;
     String name = file.getFileName().toString();

@@ -38,7 +38,6 @@ final class EditorTabs extends TabPane {
   private final Supplier<Path> projectRoot;
   private Map<Path, List<CodeEditor.Diagnostic>> diagnostics = Map.of();
   private Consumer<Path> onSaved = file -> { };
-  private Consumer<Path> onVisualMode = file -> { };
   private Consumer<String> browse = url -> { };
   private java.util.function.BiConsumer<CodeEditor, Integer> onGoToDefinition = (e, o) -> { };
   private java.util.function.BiConsumer<CodeEditor, Integer> onRename = (e, o) -> { };
@@ -51,6 +50,25 @@ final class EditorTabs extends TabPane {
     setTabClosingPolicy(TabClosingPolicy.ALL_TABS);
     getStyleClass().add("editor-tabs");
     setTabDragPolicy(TabDragPolicy.REORDER);
+  }
+
+  /** Keeps the tabs clear of what sits at the right end of their strip (the view switch). */
+  void reserveHeaderEnd(javafx.beans.value.ObservableDoubleValue width) {
+    // set, not styled: a style would apply the header's CSS again and could
+    // leave the strip laid out at its height of that moment
+    Runnable apply = () -> {
+      if (lookup(".tab-header-area") instanceof javafx.scene.layout.Region header) {
+        double end = width.get() > 0 ? width.get() + 20 : 0;
+        if (header.getPadding().getRight() != end) {
+          header.setPadding(new javafx.geometry.Insets(0, end, 0, 0));
+          requestLayout();
+        }
+      }
+    };
+    // after the layout pass that changed the width
+    width.addListener((o, old, w) -> javafx.application.Platform.runLater(apply));
+    skinProperty().addListener((o, old, skin) -> javafx.application.Platform.runLater(apply));
+    apply.run();
   }
 
   /** Called after a code tab was written to disk (autosave or save). */
@@ -101,10 +119,6 @@ final class EditorTabs extends TabPane {
     this.browse = browse;
   }
 
-  void setOnVisualMode(Consumer<Path> onVisualMode) {
-    this.onVisualMode = onVisualMode;
-  }
-
   /** Opens the file in a tab (or focuses the existing tab). */
   void open(Path file) {
     Tab tab = openTabs.get(file);
@@ -119,11 +133,6 @@ final class EditorTabs extends TabPane {
       throw new UncheckedIOException("Cannot open " + file, e);
     }
     CodeEditor editor = new CodeEditor(file, text, apiIndex, projectRoot);
-    if (VisualMode.isStageSource(file) || VisualMode.isSpriteSource(file)
-        || VisualMode.isWindowSource(file)) {
-      editor.setVisualModeAction(I18n.t("mode.visual"),
-          I18n.t("mode.visual.tooltip"), () -> onVisualMode.accept(file));
-    }
     editor.setBrowse(url -> browse.accept(url));
     String fileName = file.getFileName().toString();
     if ((fileName.endsWith(".frag") || fileName.endsWith(".vert")) && projectRoot.get() != null) {
@@ -234,7 +243,11 @@ final class EditorTabs extends TabPane {
         return code;
       }
       Node panel = factory.get();
-      if (panel != null) code.showSidePanel(key, panel);
+      if (panel != null) {
+        code.showSidePanel(key, panel);
+        // as the student last chose: beside the code, or alone
+        code.setVisualOnly(Prefs.visualOnly());
+      }
       onSideChanged.run();
     }
     return code;
@@ -311,6 +324,7 @@ final class EditorTabs extends TabPane {
     open(file);
     CodeEditor editor = editorFor(file);
     if (editor != null) {
+      revealCode(editor);
       editor.selectRange(start, end);
     }
   }
@@ -320,7 +334,16 @@ final class EditorTabs extends TabPane {
     open(file);
     CodeEditor editor = editorFor(file);
     if (editor != null && line > 0) {
+      revealCode(editor);
       editor.gotoLine((int) line);
+    }
+  }
+
+  /** A jump to a line shows the code again when only the visual editor was shown. */
+  void revealCode(CodeEditor editor) {
+    if (editor.visualOnly()) {
+      editor.setVisualOnly(false);
+      onSideChanged.run();
     }
   }
 
