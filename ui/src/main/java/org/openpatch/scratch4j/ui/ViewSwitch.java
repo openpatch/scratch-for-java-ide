@@ -15,8 +15,9 @@ import java.util.function.Consumer;
 /**
  * How a class's tab shows: its code, the code beside its visual editor, or
  * the visual editor alone. The switch sits at the right end of the editor
- * tab strip and follows the selected tab; a window class has its settings
- * button there instead, every other tab nothing.
+ * tab strip and follows the selected tab; only the view shown is named, the
+ * others are icons with tooltips. A window class has its settings button
+ * there instead, every other tab nothing.
  */
 final class ViewSwitch extends HBox {
 
@@ -28,6 +29,7 @@ final class ViewSwitch extends HBox {
   private final ToggleButton visual = segment(View.VISUAL, "fth-monitor");
   private final HBox segments = new HBox(code, split, visual);
   private final Button windowSettings;
+  private final java.util.Map<ToggleButton, String> labels = new java.util.HashMap<>();
   private Path file;
   private View view = View.CODE;
 
@@ -40,7 +42,8 @@ final class ViewSwitch extends HBox {
     setAlignment(Pos.CENTER_RIGHT);
     segments.getStyleClass().add("view-switch");
     segments.setAlignment(Pos.CENTER);
-    code.setText(I18n.t("mode.code"));
+    label(code, I18n.t("mode.code"));
+    label(split, I18n.t("view.split"));
     code.setTooltip(new Tooltip(I18n.t("view.code.tooltip")));
     for (ToggleButton segment : List.of(code, split, visual)) {
       segment.setOnAction(e -> {
@@ -72,7 +75,7 @@ final class ViewSwitch extends HBox {
         && (kind == VisualMode.Kind.STAGE || kind == VisualMode.Kind.SPRITE);
     if (switchable) {
       boolean stage = kind == VisualMode.Kind.STAGE;
-      visual.setText(I18n.t(stage ? "view.stage" : "view.sprite"));
+      label(visual, I18n.t(stage ? "view.stage" : "view.sprite"));
       visual.setGraphic(Icons.of(stage ? "fth-monitor" : "fth-image"));
       visual.setTooltip(new Tooltip(I18n.t(stage ? "view.stage.tooltip"
           : "view.sprite.tooltip")));
@@ -89,8 +92,18 @@ final class ViewSwitch extends HBox {
     setManaged(isVisible());
   }
 
+  /** A segment's name: its text while it is the view shown, read out by screen readers always. */
+  private void label(ToggleButton segment, String text) {
+    labels.put(segment, text);
+    segment.setAccessibleText(text);
+  }
+
   private void select(View shown) {
-    (shown == View.SPLIT ? split : shown == View.VISUAL ? visual : code).setSelected(true);
+    ToggleButton on = shown == View.SPLIT ? split : shown == View.VISUAL ? visual : code;
+    on.setSelected(true);
+    for (ToggleButton segment : List.of(code, split, visual)) {
+      segment.setText(segment == on ? labels.get(segment) : null);
+    }
   }
 
   /** The view the switch shows (tests). */

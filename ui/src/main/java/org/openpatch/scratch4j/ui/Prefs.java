@@ -174,11 +174,11 @@ final class Prefs {
   }
 
   /**
-   * The block pane is open, not folded to its categories: beside the code
-   * alone (open at first) or beside code and visual editor (folded at first).
+   * The block pane is open, not folded to its categories, beside the code
+   * alone or beside code and visual editor. It starts folded in both.
    */
   static boolean blocksOpen(boolean besideVisual) {
-    return NODE.getBoolean(besideVisual ? "blocks.open.split" : "blocks.open.code", !besideVisual);
+    return NODE.getBoolean(besideVisual ? "blocks.open.split" : "blocks.open.code", false);
   }
 
   static void blocksOpen(boolean besideVisual, boolean open) {

@@ -282,12 +282,20 @@ class LayoutIT {
       assertThat(root.lookupAll(".designer")).isEmpty();
       BlockPalette blocks = (BlockPalette) code.dockedPalette();
       assertThat(blocks).as("the blocks left of the code").isNotNull();
-      assertThat(blocks.isOpen()).isTrue();
+      assertThat(blocks.isOpen()).as("folded to the categories at first").isFalse();
       assertThat(blocks.shownBlocks()).noneMatch(m -> m.className().equals("Sprite"));
-      // one list under category headings: a category on the rail scrolls to its blocks
+      // a category on the rail opens the blocks there: one list under category headings
       assertThat(blocks.categoryItems()).contains("Looks");
-      blocks.scrollTo("Looks");
+      blocks.lookupAll(".category-button").stream()
+          .map(n -> (javafx.scene.control.ToggleButton) n)
+          .filter(b -> "Looks".equals(b.getUserData())).findFirst().orElseThrow().fire();
+      assertThat(blocks.isOpen()).isTrue();
       assertThat(blocks.currentCategory()).isEqualTo("Looks");
+      assertThat(Prefs.blocksOpen(false)).as("open stays the choice").isTrue();
+      // only the view shown is named, the others are icons
+      assertThat(views.lookupAll(".view-segment").stream()
+          .map(n -> ((javafx.scene.control.ToggleButton) n).getText())
+          .filter(t -> t != null)).containsExactly(I18n.t("mode.code"));
       views.choose(ViewSwitch.View.VISUAL);
       assertThat(code.visualOnly()).isTrue();
       assertThat(views.view()).isEqualTo(ViewSwitch.View.VISUAL);

@@ -78,6 +78,16 @@ class UiSmokeIT {
         assertThat(asked.get()).isEqualTo(ViewSwitch.View.SPLIT);
         assertThat(views.view()).as("the host decides, it opened nothing").isEqualTo(
             ViewSwitch.View.CODE);
+        // only the view shown is named; the icons keep their names for screen readers
+        var segments = views.lookupAll(".view-segment").stream()
+            .map(n -> (javafx.scene.control.ToggleButton) n).toList();
+        assertThat(segments).hasSize(3);
+        assertThat(segments.stream().map(javafx.scene.control.ToggleButton::getText)
+            .filter(java.util.Objects::nonNull)).containsExactly(I18n.t("mode.code"));
+        assertThat(segments).allMatch(b -> b.getAccessibleText() != null);
+        views.showFor(stage, VisualMode.kind(stage), ViewSwitch.View.VISUAL);
+        assertThat(segments.stream().map(javafx.scene.control.ToggleButton::getText)
+            .filter(java.util.Objects::nonNull)).containsExactly(I18n.t("view.stage"));
         // a class without a visual editor has no switch
         Path plainClass = Files.writeString(tmp.resolve("Plain.java"), "class Plain { }\n");
         views.showFor(plainClass, VisualMode.kind(plainClass), ViewSwitch.View.CODE);

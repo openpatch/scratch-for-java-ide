@@ -700,6 +700,7 @@ final class StageDesignerView extends BorderPane {
     BorderPane row = new BorderPane(bar);
     row.setRight(inspectorToggle());
     BorderPane.setAlignment(inspectorToggle, Pos.CENTER);
+    BorderPane.setMargin(inspectorToggle, new Insets(0, 0, 0, 6));
     row.setMinWidth(0);
     row.getStyleClass().add("tool-bar-row");
     return row;
