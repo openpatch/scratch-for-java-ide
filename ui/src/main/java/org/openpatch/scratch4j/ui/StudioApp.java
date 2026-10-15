@@ -1819,6 +1819,13 @@ public class StudioApp extends javafx.application.Application {
               reloadDesigners();
               scheduleCheck();
             });
+            // a hitbox saves itself while it is being shaped: the code beside follows at
+            // once, a stage designer in another tab when it is shown (it reloads then)
+            view.setOnHitboxSaved(() -> {
+              editor.reloadIfOpen(sourceFile);
+              reloadShownDesigners();
+              scheduleCheck();
+            });
             linkSpriteEditor(sourceFile, view);
             view.setOnOpenAnimation(this::openAnimationEditor);
             view.setOnEditFile(this::openByType);
@@ -2716,6 +2723,22 @@ public class StudioApp extends javafx.application.Application {
         animation.reload();
       }
     }
+  }
+
+  /** The stage designers on screen now (the others catch up when their tab is shown). */
+  private void reloadShownDesigners() {
+    for (Node tool : editor.tools()) {
+      if (tool instanceof StageDesignerView designer && showing(designer)) {
+        designer.reload();
+      }
+    }
+  }
+
+  private static boolean showing(Node node) {
+    for (Node n = node; n != null; n = n.getParent()) {
+      if (!n.isVisible()) return false;
+    }
+    return node.getScene() != null;
   }
 
   private void scheduleCheck() {

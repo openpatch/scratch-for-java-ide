@@ -47,6 +47,7 @@ public final class StageDocument {
     copy.size(model.width(), model.height());
     copy.backdrops().addAll(model.backdrops());
     copy.sounds().addAll(model.sounds());
+    copy.color(model.color());
     model.sprites().forEach(ref -> copy.addSprite(ref.copy()));
     return copy;
   }
@@ -130,6 +131,20 @@ public final class StageDocument {
     return !codeOwned.contains(name);
   }
 
+  /** The stage's own {@code setColor} calls: {@code this.setColor(...)} or {@code setColor(...)}. */
+  private static final Pattern SET_COLOR =
+      Pattern.compile("(?<![\\w.])(?:this\\s*\\.\\s*)?setColor\\s*\\(");
+
+  /**
+   * Whether the designer may set the background colour: no other code of the
+   * class sets it (it would win, or be overwritten). One call is the
+   * designer's own when it read a colour.
+   */
+  public boolean isColorEditable() {
+    long calls = SET_COLOR.matcher(source).results().count();
+    return calls == (original.color() != null ? 1 : 0);
+  }
+
   /** The sprites the code decides about: the designer shows them, and leaves them be. */
   public Set<String> codeOwnedSprites() {
     return codeOwned;
@@ -204,6 +219,10 @@ public final class StageDocument {
           && (!isSpriteEditable(old.name()) || !latest.isSpriteEditable(old.name()))) {
         throw new IllegalArgumentException(old.name() + " is controlled by its Java code");
       }
+    }
+    if (!java.util.Objects.equals(original.color(), updated.color())
+        && (!isColorEditable() || !latest.isColorEditable())) {
+      throw new IllegalArgumentException("The background colour is set in the Java code");
     }
     // a stage written by hand gets its regions with the first designer edit
     String result = DesignerRegions.ensureStage(latestSource);

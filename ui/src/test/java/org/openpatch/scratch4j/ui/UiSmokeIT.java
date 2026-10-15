@@ -154,6 +154,15 @@ class UiSmokeIT {
         // round-trip: reload from the written file keeps the model
         designer.reload();
         assertThat(designer.model().sprites()).hasSize(spritesBefore + 1);
+        // the stage's background colour: written as this.setColor(r, g, b), and taken back
+        assertThat(designer.colorButton().isDisabled()).isFalse();
+        designer.setStageColor(javafx.scene.paint.Color.web("#4c97ff"));
+        assertThat(Files.readString(stage)).contains("this.setColor(76, 151, 255);");
+        assertThat(designer.model().color())
+            .isEqualTo(new org.openpatch.scratch4j.core.region.StageModel.BackgroundColor(
+                76, 151, 255));
+        designer.setStageColor(null);
+        assertThat(Files.readString(stage)).doesNotContain("setColor");
 
         // UISprite with nine-slice and pixel size, and a Text box on the stage
         Files.writeString(tmp.resolve("uismoke/Button.java"), """
@@ -467,6 +476,8 @@ class UiSmokeIT {
         StageDesignerView worldDesigner = new StageDesignerView(
             org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), "World", f -> { });
         assertThat(worldDesigner.isReadOnly()).isFalse();
+        assertThat(worldDesigner.colorButton().isDisabled())
+            .as("World sets its colour in its own code").isTrue();
         assertThat(worldDesigner.shownMap()).isEqualTo(tiled.resolve("Level1.tmx"));
         // the inventory is a UI sprite (setUI(true)): fixed to the screen, at its centre
         var inventoryRef = worldDesigner.model().sprites().byName("inventory");
@@ -735,12 +746,35 @@ class UiSmokeIT {
         assertThat(pointsList.getItems().get(0)).contains("0, 0");
         ((javafx.scene.control.Button) hitboxActions.getChildren().get(2)).fire();
         assertThat(pointsList.getItems().get(0)).contains("3, 0");
-        assertThat(((javafx.scene.control.Label) hitboxPane.getChildren().get(4)).getText())
-            .isEqualTo(I18n.t("spriteassets.hitbox.unsaved"));
-        ((javafx.scene.control.Button) hitboxActions.getChildren().get(3)).fire();
-        assertThat(Files.readString(project.root().resolve("Player.java")))
-            .contains("this.setHitbox(3, 0,");
+        javafx.scene.control.Label hitboxState =
+            (javafx.scene.control.Label) hitboxPane.getChildren().get(4);
+        assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.saving"));
+        // no Save button: a valid shape saves itself (here now, not after the pause)
+        assertThat(hitboxActions.getChildren()).extracting(n ->
+            ((javafx.scene.control.Button) n).getText())
+            .doesNotContain("Save hitbox", "Hitbox speichern");
+        spriteAssets.saveHitboxNow();
+        Path playerFile = project.root().resolve("Player.java");
+        assertThat(Files.readString(playerFile)).contains("this.setHitbox(3, 0,");
+        assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.saved"));
+        assertThat(pointsList.getSelectionModel().getSelectedIndex()).as("still selected")
+            .isZero();
+        // two points are no hitbox: not saved, the editor says why, and closing does not ask
+        javafx.scene.control.Button removePoint =
+            (javafx.scene.control.Button) pointsPanel.getChildren().get(3);
+        assertThat(removePoint.isVisible()).isTrue();
+        removePoint.fire();
+        removePoint.fire();
+        assertThat(pointsList.getItems()).hasSize(2);
+        assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.pending"));
+        String saved = Files.readString(playerFile);
+        spriteAssets.saveHitboxNow();
+        assertThat(Files.readString(playerFile)).isEqualTo(saved);
         assertThat(spriteAssets.confirmClose()).isTrue();
+        // X/Y and Remove only for a selected point
+        pointsList.getSelectionModel().clearSelection();
+        assertThat(removePoint.isVisible()).isFalse();
+        assertThat(pointsPanel.getChildren().get(2).isVisible()).isFalse();
 
         // image editor opens a costume copied out of the atlas
         Path png = org.openpatch.scratch4j.core.assets.AssetCopier.copyBuiltinImage(

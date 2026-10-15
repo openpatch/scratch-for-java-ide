@@ -110,6 +110,12 @@ final class StageDesignerView extends BorderPane {
   private ToggleButton mapToggle;
   private final javafx.scene.control.ComboBox<Path> mapChoice = new javafx.scene.control.ComboBox<>();
   private final VBox spriteCard = new VBox(8);
+  /** The stage's background colour: a swatch that opens the Scratch colour picker. */
+  private final Button colorButton = new Button();
+  private final javafx.scene.shape.Rectangle colorChip = new javafx.scene.shape.Rectangle(40, 20);
+  private final Button colorReset = Icons.button("fth-x", I18n.t("designer.color.reset"),
+      () -> setStageColor(null));
+  private final Label colorNote = new Label(I18n.t("designer.color.code"));
   /** The selected object's numbers and actions: hidden while nothing is selected. */
   private final VBox selectionDetails = new VBox(8);
   private final FlowPane instanceTiles = new FlowPane(6, 6);
@@ -811,12 +817,25 @@ final class StageDesignerView extends BorderPane {
     selectionDetails.getChildren().addAll(numbers, spriteOnly, textOnly, actions);
     spriteCard.getChildren().addAll(new VBox(0, selectedName, selectedType), selectionDetails);
 
+    colorChip.setArcWidth(6);
+    colorChip.setArcHeight(6);
+    colorChip.setStroke(Color.gray(0.55));
+    colorButton.setGraphic(colorChip);
+    colorButton.getStyleClass().add("color-swatch-button");
+    colorButton.setTooltip(new Tooltip(I18n.t("designer.color.tooltip")));
+    colorButton.setOnAction(e -> new ScratchColorPicker(chipColor())
+        .openAt(colorButton, this::setStageColor));
+    colorNote.getStyleClass().add("text-muted");
+    HBox colorRow = new HBox(8, fieldLabel(I18n.t("designer.color")), colorButton, colorReset,
+        colorNote);
+    colorRow.setAlignment(Pos.CENTER_LEFT);
+
     VBox panel = new VBox(10,
         card(I18n.t("designer.selected"), "fth-mouse-pointer", spriteCard),
         card(I18n.t("designer.onstage"), "fth-layers", instanceTiles),
         card(I18n.t("designer.addsprite"), "fth-plus-circle", classTiles),
         // no size: a stage is as big as the window, set in the window settings
-        card(I18n.t("designer.stage"), "fth-monitor", new VBox(8,
+        card(I18n.t("designer.stage"), "fth-monitor", new VBox(8, colorRow,
             fieldLabel(I18n.t("designer.backdrops")), backdropTiles,
             fieldLabel(I18n.t("designer.sounds")), soundTiles)));
     panel.setPadding(new Insets(10));
@@ -867,8 +886,37 @@ final class StageDesignerView extends BorderPane {
     refreshClassTiles();
     refreshBackdropTiles();
     refreshSoundTiles();
+    refreshColor();
     updateInspector();
     redraw();
+  }
+
+  /** The swatch shows the background colour; code that sets it itself keeps it. */
+  private void refreshColor() {
+    colorChip.setFill(chipColor());
+    boolean editable = !isReadOnly() && document.isColorEditable();
+    colorButton.setDisable(!editable);
+    show(colorReset, editable && model.color() != null);
+    show(colorNote, !isReadOnly() && !editable);
+  }
+
+  private Color chipColor() {
+    var c = model.color();
+    return c == null ? Color.WHITE : Color.rgb(c.red(), c.green(), c.blue());
+  }
+
+  /** A colour from the picker ({@code this.setColor(r, g, b)}), or null: back to white (tests too). */
+  void setStageColor(Color color) {
+    if (isReadOnly() || !document.isColorEditable()) return;
+    model.color(color == null ? null : new StageModel.BackgroundColor(
+        (int) Math.round(color.getRed() * 255), (int) Math.round(color.getGreen() * 255),
+        (int) Math.round(color.getBlue() * 255)));
+    writeRegions();
+  }
+
+  /** The background colour's swatch (tests). */
+  Button colorButton() {
+    return colorButton;
   }
 
   private void refreshInstanceTiles() {

@@ -48,6 +48,44 @@ class StageDocumentTest {
   }
 
   @Test
+  void theBackgroundColourRoundTripsAndIsLeftToHandWrittenCode() {
+    StageDocument plain = StageDocument.read(PLAN_SAMPLE);
+    assertThat(plain.model().color()).isNull();
+    assertThat(plain.isColorEditable()).isTrue();
+
+    StageModel coloured = plain.model();
+    coloured.color(new StageModel.BackgroundColor(255, 120, 0));
+    String written = plain.write(coloured);
+    assertThat(written).contains("    this.setColor(255, 120, 0);\n    // end stage designer");
+    StageDocument read = StageDocument.read(written);
+    assertThat(read.model().color()).isEqualTo(new StageModel.BackgroundColor(255, 120, 0));
+    assertThat(read.isColorEditable()).as("the designer's own call").isTrue();
+
+    StageModel changed = read.model();
+    changed.color(new StageModel.BackgroundColor(0, 0, 0));
+    assertThat(read.write(changed)).contains("this.setColor(0, 0, 0);")
+        .doesNotContain("255, 120, 0");
+    changed.color(null);
+    assertThat(read.write(changed)).doesNotContain("setColor");
+
+    // set by hand outside the blocks, or in a way the designer does not write: the code's
+    String byHand = PLAN_SAMPLE.replace("    // end stage designer\n  }",
+        "    // end stage designer\n    this.setColor(10, 20, 30);\n  }");
+    StageDocument handWritten = StageDocument.read(byHand);
+    assertThat(handWritten.isColorEditable()).isFalse();
+    StageModel attempt = handWritten.model();
+    attempt.color(new StageModel.BackgroundColor(1, 2, 3));
+    assertThatThrownBy(() -> handWritten.write(attempt))
+        .isInstanceOf(IllegalArgumentException.class);
+    String hue = PLAN_SAMPLE.replace("this.add(player);", "this.add(player);\n    this.setColor(120);");
+    assertThat(StageDocument.read(hue).isColorEditable()).isFalse();
+    // a pen's colour is not the stage's
+    String pen = PLAN_SAMPLE.replace("    // end stage designer\n  }",
+        "    // end stage designer\n    pen.setColor(10, 20, 30);\n  }");
+    assertThat(StageDocument.read(pen).isColorEditable()).isTrue();
+  }
+
+  @Test
   void unfinishedJavaCannotBeRead() {
     String source = PLAN_SAMPLE.replace("this.add(player);", "this.add(player");
     assertThatThrownBy(() -> StageDocument.read(source))

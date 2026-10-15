@@ -5,8 +5,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * The designer's model of a stage class: its size ({@code super(w, h)}), its
- * backdrops, sounds and sprite instances, all living in the marked regions.
+ * The designer's model of a stage class: its size (the window's), its
+ * backdrops, sounds, background colour and sprite instances, all living in
+ * the marked regions.
  */
 public final class StageModel {
 
@@ -15,6 +16,7 @@ public final class StageModel {
   private final List<Backdrop> backdrops = new ArrayList<>();
   private final List<Sound> sounds = new ArrayList<>();
   private final SpriteRef.Refs sprites = new SpriteRef.Refs();
+  private BackgroundColor color;
 
   /** One backdrop: a built-in name, or a name plus a file path. */
   public record Backdrop(String name, String path, Boolean stretch) {
@@ -36,6 +38,17 @@ public final class StageModel {
   public record Sound(String name, String path) {
     public Sound {
       Objects.requireNonNull(name);
+    }
+  }
+
+  /** The colour behind the backdrops, {@code this.setColor(r, g, b)}: 0 to 255 each. */
+  public record BackgroundColor(int red, int green, int blue) {
+    public BackgroundColor {
+      for (int part : new int[] {red, green, blue}) {
+        if (part < 0 || part > 255) {
+          throw new IllegalArgumentException("not a colour part (0-255): " + part);
+        }
+      }
     }
   }
 
@@ -72,6 +85,15 @@ public final class StageModel {
     sounds.add(sound);
   }
 
+  /** The background colour, or null: the library's white. */
+  public BackgroundColor color() {
+    return color;
+  }
+
+  public void color(BackgroundColor color) {
+    this.color = color;
+  }
+
   public SpriteRef.Refs sprites() {
     return sprites;
   }
@@ -92,11 +114,12 @@ public final class StageModel {
     return width == other.width && height == other.height
         && backdrops.equals(other.backdrops)
         && sounds.equals(other.sounds)
+        && Objects.equals(color, other.color)
         && sprites.equals(other.sprites);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(width, height, backdrops, sounds, sprites);
+    return Objects.hash(width, height, backdrops, sounds, color, sprites);
   }
 }

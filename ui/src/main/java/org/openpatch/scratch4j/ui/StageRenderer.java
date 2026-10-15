@@ -862,7 +862,9 @@ final class StageRenderer {
     stageWidth = model.width();
     double w = model.width() * scale;
     double h = model.height() * scale;
-    g.setFill(Color.WHITE);
+    // the stage's colour (the library's white unless setColor says otherwise), the backdrop over it
+    var color = model.color();
+    g.setFill(color == null ? Color.WHITE : Color.rgb(color.red(), color.green(), color.blue()));
     g.fillRect(0, 0, w, h);
     Image backdrop = previewImage != null ? null : backdrop(model);
     if (previewImage != null) {

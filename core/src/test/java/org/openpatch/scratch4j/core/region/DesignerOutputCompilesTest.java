@@ -51,7 +51,9 @@ class DesignerOutputCompilesTest {
     title.textWidth(200);
     title.textStyle("TextStyle.BOX");
     doc.model().addSprite(title);
+    doc.model().color(new StageModel.BackgroundColor(76, 151, 255));
     Files.writeString(stage, doc.write());
+    assertThat(Files.readString(stage)).contains("this.setColor(76, 151, 255);");
 
     var project = ScratchProject.open(root);
     var result = new CompilerService().compile(project.javaSources(), List.of(jar),

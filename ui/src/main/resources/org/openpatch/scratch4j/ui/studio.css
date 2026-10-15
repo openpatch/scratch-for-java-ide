@@ -1085,6 +1085,11 @@
   -fx-border-color: transparent transparent -s-line transparent;
 }
 
+.color-swatch-button {
+  -fx-padding: 4 6 4 6;
+  -fx-cursor: hand;
+}
+
 .picture-status {
   -fx-font-size: 12px;
   -fx-text-fill: -color-fg-muted;

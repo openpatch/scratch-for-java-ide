@@ -39,6 +39,8 @@ final class SpriteAssetsView extends BorderPane {
   private final ScratchProject project;
   private final Path file;
   private final Runnable onSaved;
+  /** After a hitbox save (often, while shaping it): only what has to follow at once. */
+  private Runnable onHitboxSaved;
   private Tab costumesTab;
   private Tab soundsTab;
   /** Null for a class that is no AnimatedSprite. */
@@ -53,6 +55,13 @@ final class SpriteAssetsView extends BorderPane {
   private final List<Point2D> vertices = new ArrayList<>();
   private final Label hitboxHelp = new Label();
   private final Label hitboxState = new Label();
+  /** A valid hitbox saves itself this long after its last change (a drag is many). */
+  private final javafx.animation.PauseTransition hitboxSave =
+      new javafx.animation.PauseTransition(javafx.util.Duration.millis(500));
+  /** The selected point's X/Y and its Remove button: only while a point is selected. */
+  private HBox pointRow;
+  private Button removePointButton;
+  private Label pointsLabel;
   private final ListView<String> pointList = new ListView<>();
   private final TextField pointX = new TextField();
   private final TextField pointY = new TextField();
@@ -148,13 +157,65 @@ final class SpriteAssetsView extends BorderPane {
         .ifPresent(n -> onOpenAnimation.open(file, n, "assets/images/" + n + "%d.png"));
   }
 
+  /**
+   * Before the editor closes: a valid hitbox not saved yet is saved now; an
+   * unfinished one (too few points, crossed edges) is let go, the code keeps
+   * the last valid one. Nothing to ask, so closing always goes on.
+   */
   boolean confirmClose() {
-    if (!hitboxDirty) return true;
-    Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-        I18n.t("spriteassets.hitbox.close.warning"), I18n.ok(), I18n.cancel());
-    Theme.style(confirmation);
-    confirmation.setHeaderText(null);
-    return confirmation.showAndWait().orElse(null) == I18n.ok();
+    saveHitboxNow();
+    return true;
+  }
+
+  private void hitboxChanged() {
+    hitboxDirty = true;
+    hitboxSave.playFromStart();
+  }
+
+  /** Saves a changed, valid hitbox into the code (also right away, for closing and tests). */
+  void saveHitboxNow() {
+    hitboxSave.stop();
+    if (!hitboxDirty || hitboxReadOnly || hitboxImage == null) return;
+    if (dragging >= 0) {
+      hitboxSave.playFromStart(); // once the point is let go
+      return;
+    }
+    if (!HitboxPolygon.valid(polygon(), hitboxImage.getWidth(), hitboxImage.getHeight())) {
+      refreshHitboxState();
+      return;
+    }
+    double[] points = shownHitbox();
+    // only the hitbox changed: no reload of the lists and previews (no hitch after a drag)
+    try {
+      String source = currentSource();
+      if (!java.util.Arrays.equals(SpriteAssets.hitbox(source), loadedHitbox)) {
+        throw new IllegalStateException(I18n.t("spriteassets.hitbox.conflict"));
+      }
+      String updated = SpriteRegionWriter.setHitbox(source, points);
+      if (!updated.equals(source)) {
+        LocalHistory.writeString(project.root(), file, updated);
+      }
+      loadedHitbox = points;
+      hitboxDirty = false;
+      refreshHitboxState();
+      if (!updated.equals(source)) (onHitboxSaved != null ? onHitboxSaved : onSaved).run();
+    } catch (IOException | RuntimeException e) {
+      alert(e.getMessage(), e);
+      reload();
+    }
+  }
+
+  /** What follows a hitbox save; without one, the same as after any other save. */
+  void setOnHitboxSaved(Runnable action) {
+    this.onHitboxSaved = action;
+  }
+
+  /** Saved, about to be saved, or not saved because the shape is not finished. */
+  private void refreshHitboxState() {
+    boolean valid = hitboxImage != null
+        && HitboxPolygon.valid(polygon(), hitboxImage.getWidth(), hitboxImage.getHeight());
+    hitboxState.setText(I18n.t(!hitboxDirty ? "spriteassets.hitbox.saved"
+        : valid ? "spriteassets.hitbox.saving" : "spriteassets.hitbox.pending"));
   }
 
   void reload() {
@@ -179,17 +240,24 @@ final class SpriteAssetsView extends BorderPane {
       }
       hitboxReadOnly = SpriteAssets.hasUnmanagedHitbox(source);
       if (!hitboxDirty) {
-        vertices.clear();
-        selectedPoint = -1;
-        hitboxUndo.clear();
-        hitboxRedo.clear();
         try {
           double[] points = SpriteAssets.hitbox(source);
           loadedHitbox = points.clone();
-          for (int i = 0; i < points.length; i += 2) {
-            vertices.add(new Point2D(points[i], points[i + 1]));
+          // just saved from here: the selection and the undo steps stay
+          if (!java.util.Arrays.equals(points, shownHitbox())) {
+            vertices.clear();
+            selectedPoint = -1;
+            hitboxUndo.clear();
+            hitboxRedo.clear();
+            for (int i = 0; i < points.length; i += 2) {
+              vertices.add(new Point2D(points[i], points[i + 1]));
+            }
           }
         } catch (IllegalArgumentException e) {
+          vertices.clear();
+          selectedPoint = -1;
+          hitboxUndo.clear();
+          hitboxRedo.clear();
           hitboxReadOnly = true;
         }
       }
@@ -672,7 +740,7 @@ final class SpriteAssetsView extends BorderPane {
         selectedPoint = edge < 0 ? vertices.size() : edge + 1;
         vertices.add(selectedPoint, point);
         dragging = selectedPoint;
-        hitboxDirty = true;
+        hitboxChanged();
       }
       refreshPoints();
       drawHitbox();
@@ -687,13 +755,16 @@ final class SpriteAssetsView extends BorderPane {
             dragRecorded = true;
           }
           vertices.set(dragging, point);
-          hitboxDirty = true;
+          hitboxChanged();
           refreshPoints();
           drawHitbox();
         }
       }
     });
-    hitboxCanvas.setOnMouseReleased(e -> dragging = -1);
+    hitboxCanvas.setOnMouseReleased(e -> {
+      dragging = -1;
+      if (hitboxDirty) hitboxSave.playFromStart();
+    });
     hitboxCanvas.setOnKeyPressed(e -> {
       if (hitboxKey(e.getCode(), e.isShiftDown())) e.consume();
     });
@@ -709,31 +780,15 @@ final class SpriteAssetsView extends BorderPane {
       vertices.addAll(List.of(new Point2D(0, 0), new Point2D(w, 0),
           new Point2D(w, h), new Point2D(0, h)));
       selectedPoint = 0;
-      hitboxDirty = true;
+      hitboxChanged();
       refreshPoints();
       drawHitbox();
     });
-    Button save = new Button(I18n.t("spriteassets.save.hitbox"));
-    save.setOnAction(e -> {
-      if (hitboxReadOnly || hitboxImage == null
-          || !HitboxPolygon.valid(polygon(), hitboxImage.getWidth(), hitboxImage.getHeight())) {
-        alert(I18n.t("spriteassets.hitbox.invalid"));
-        return;
-      }
-      double[] points = new double[vertices.size() * 2];
-      for (int i = 0; i < vertices.size(); i++) {
-        points[i * 2] = vertices.get(i).getX();
-        points[i * 2 + 1] = vertices.get(i).getY();
-      }
-      write(source -> {
-        if (!java.util.Arrays.equals(SpriteAssets.hitbox(source), loadedHitbox)) {
-          throw new IllegalStateException(I18n.t("spriteassets.hitbox.conflict"));
-        }
-        return SpriteRegionWriter.setHitbox(source, points);
-      }, true);
-    });
+    // no Save button: a valid shape saves itself (saveHitboxNow)
+    hitboxSave.setOnFinished(e -> saveHitboxNow());
     Button clear = new Button(I18n.t("spriteassets.clear.hitbox"));
     clear.setOnAction(e -> {
+      hitboxSave.stop();
       if (!hitboxReadOnly) write(source -> {
         if (!java.util.Arrays.equals(SpriteAssets.hitbox(source), loadedHitbox)) {
           throw new IllegalStateException(I18n.t("spriteassets.hitbox.conflict"));
@@ -743,22 +798,34 @@ final class SpriteAssetsView extends BorderPane {
     });
     Button removePoint = new Button(I18n.t("spriteassets.point.remove"));
     removePoint.setOnAction(e -> removeSelectedPoint());
+    removePointButton = removePoint;
     Button undo = new Button(I18n.t("spriteassets.hitbox.undo"));
     undo.setOnAction(e -> undoHitbox());
     Button redo = new Button(I18n.t("spriteassets.hitbox.redo"));
     redo.setOnAction(e -> redoHitbox());
-    VBox pointControls = new VBox(7,
-        new Label(I18n.t("spriteassets.points")), pointList,
-        new HBox(5, new Label("X"), pointX, new Label("Y"), pointY), removePoint);
+    pointsLabel = new Label(I18n.t("spriteassets.points"));
+    pointRow = new HBox(5, new Label("X"), pointX, new Label("Y"), pointY);
+    pointRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+    VBox pointControls = new VBox(7, pointsLabel, pointList, pointRow, removePoint);
     Label underlay = new Label(I18n.t("spriteassets.hitbox.underlay"));
     underlay.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
     HBox underlayRow = new HBox(8, underlay, hitboxCostume);
     underlayRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
     VBox pane = new VBox(8, hitboxHelp, underlayRow,
         new HBox(10, hitboxCanvas, pointControls),
-        new HBox(8, rectangle, undo, redo, save, clear), hitboxState);
+        new HBox(8, rectangle, undo, redo, clear), hitboxState);
     pane.setPadding(new Insets(8));
     return pane;
+  }
+
+  /** The points the editor shows, as the code writes them. */
+  private double[] shownHitbox() {
+    double[] points = new double[vertices.size() * 2];
+    for (int i = 0; i < vertices.size(); i++) {
+      points[i * 2] = vertices.get(i).getX();
+      points[i * 2 + 1] = vertices.get(i).getY();
+    }
+    return points;
   }
 
   private Point2D toImage(double x, double y) {
@@ -793,7 +860,7 @@ final class SpriteAssetsView extends BorderPane {
     vertices.clear();
     vertices.addAll(hitboxUndo.pop());
     selectedPoint = Math.min(selectedPoint, vertices.size() - 1);
-    hitboxDirty = true;
+    hitboxChanged();
     refreshPoints();
     drawHitbox();
   }
@@ -804,7 +871,7 @@ final class SpriteAssetsView extends BorderPane {
     vertices.clear();
     vertices.addAll(hitboxRedo.pop());
     selectedPoint = Math.min(selectedPoint, vertices.size() - 1);
-    hitboxDirty = true;
+    hitboxChanged();
     refreshPoints();
     drawHitbox();
   }
@@ -814,7 +881,7 @@ final class SpriteAssetsView extends BorderPane {
     recordHitboxUndo();
     vertices.remove(selectedPoint);
     selectedPoint = Math.min(selectedPoint, vertices.size() - 1);
-    hitboxDirty = true;
+    hitboxChanged();
     refreshPoints();
     drawHitbox();
   }
@@ -836,7 +903,7 @@ final class SpriteAssetsView extends BorderPane {
     if (!next.equals(old)) {
       recordHitboxUndo();
       vertices.set(selectedPoint, next);
-      hitboxDirty = true;
+      hitboxChanged();
       refreshPoints();
       drawHitbox();
     }
@@ -857,8 +924,13 @@ final class SpriteAssetsView extends BorderPane {
       selectedPoint = keep;
     }
     updatePointFields();
-    hitboxState.setText(I18n.t(hitboxDirty
-        ? "spriteassets.hitbox.unsaved" : "spriteassets.hitbox.saved"));
+    // the list once there are points; X/Y and Remove for the selected one
+    boolean any = !vertices.isEmpty();
+    for (javafx.scene.Node node : List.of(pointsLabel, pointList)) {
+      node.setVisible(any);
+      node.setManaged(any);
+    }
+    refreshHitboxState();
   }
 
   private void updatePointFields() {
@@ -870,6 +942,12 @@ final class SpriteAssetsView extends BorderPane {
       pointY.setText(point == null ? "" : String.valueOf(Math.round(point.getY())));
       pointX.setDisable(point == null || hitboxReadOnly);
       pointY.setDisable(point == null || hitboxReadOnly);
+      if (pointRow != null) {
+        for (javafx.scene.Node node : List.of(pointRow, removePointButton)) {
+          node.setVisible(point != null);
+          node.setManaged(point != null);
+        }
+      }
     } finally {
       updatingPointFields = false;
     }
@@ -889,7 +967,7 @@ final class SpriteAssetsView extends BorderPane {
       if (!next.equals(vertices.get(selectedPoint))) {
         recordHitboxUndo();
         vertices.set(selectedPoint, next);
-        hitboxDirty = true;
+        hitboxChanged();
         refreshPoints();
         drawHitbox();
       }
