@@ -39,6 +39,10 @@ final class SpriteAssetsView extends BorderPane {
   private final ScratchProject project;
   private final Path file;
   private final Runnable onSaved;
+  private Tab costumesTab;
+  private Tab soundsTab;
+  /** Null for a class that is no AnimatedSprite. */
+  private Tab animationsTab;
   private final ListView<SpriteAssets.Entry> costumes = new ListView<>();
   private final ListView<SpriteAssets.Entry> sounds = new ListView<>();
   private final ListView<SpriteAssets.Entry> animations = new ListView<>();
@@ -78,14 +82,18 @@ final class SpriteAssetsView extends BorderPane {
     this.file = sourceFile;
     this.onSaved = onSaved;
     TabPane tabs = new TabPane();
-    tabs.getTabs().addAll(
-        new Tab(I18n.t("spriteassets.costumes"), assetPane(costumes,
-            SpriteAssets.Kind.COSTUME)),
-        new Tab(I18n.t("spriteassets.sounds"), assetPane(sounds,
-            SpriteAssets.Kind.SOUND)),
-        new Tab(I18n.t("spriteassets.animations"), assetPane(animations,
-            SpriteAssets.Kind.ANIMATION)),
-        new Tab(I18n.t("spriteassets.hitbox"), hitboxPane()));
+    costumesTab = new Tab(I18n.t("spriteassets.costumes"), assetPane(costumes,
+        SpriteAssets.Kind.COSTUME));
+    soundsTab = new Tab(I18n.t("spriteassets.sounds"), assetPane(sounds,
+        SpriteAssets.Kind.SOUND));
+    tabs.getTabs().addAll(costumesTab, soundsTab);
+    // animations only for an AnimatedSprite: a plain sprite would show a tab of greyed buttons
+    if (VisualMode.isAnimatedSprite(sourceFile)) {
+      animationsTab = new Tab(I18n.t("spriteassets.animations"), assetPane(animations,
+          SpriteAssets.Kind.ANIMATION));
+      tabs.getTabs().add(animationsTab);
+    }
+    tabs.getTabs().add(new Tab(I18n.t("spriteassets.hitbox"), hitboxPane()));
     tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
     tabs.getStyleClass().add("sprite-tabs");
     getStyleClass().add("sprite-editor");
@@ -99,6 +107,12 @@ final class SpriteAssetsView extends BorderPane {
       }
     });
     reload();
+    // the first entry shows in the preview, not "choose an entry"
+    for (ListView<SpriteAssets.Entry> list : List.of(costumes, sounds, animations)) {
+      if (list.getSelectionModel().isEmpty() && !list.getItems().isEmpty()) {
+        list.getSelectionModel().selectFirst();
+      }
+    }
   }
 
   SpriteAssetsView(ScratchProject project, String className, Runnable onSaved)
@@ -347,15 +361,12 @@ final class SpriteAssetsView extends BorderPane {
       Button editor = new Button(I18n.t("animation.new"), Icons.of("fth-film"));
       editor.setOnAction(e -> openAnimationEditor(null));
       buttons.getChildren().add(editor);
-      try {
-        if (!Files.readString(file).contains("extends AnimatedSprite")) {
-          add.setDisable(true);
-          editor.setDisable(true);
-          add.setTooltip(new javafx.scene.control.Tooltip(I18n.t("spriteassets.animated.only")));
-        }
-      } catch (IOException ignored) { }
     }
+    // only when the list has entries from hand-written code (marked "code")
     Label note = new Label(I18n.t("spriteassets.handwritten.note"));
+    note.getStyleClass().add("text-muted");
+    var handwritten = javafx.beans.binding.Bindings.createBooleanBinding(
+        () -> list.getItems().stream().anyMatch(e -> !e.managed()), list.getItems());
     VBox pane = new VBox(8, buttons, list, note);
     if (kind == SpriteAssets.Kind.COSTUME) {
       javafx.scene.control.ScrollPane scroll = new javafx.scene.control.ScrollPane(fromCode);
@@ -366,10 +377,10 @@ final class SpriteAssetsView extends BorderPane {
       // a class whose costumes all come from the code: they get the room, not an empty list
       var listShown = javafx.beans.binding.Bindings.isNotEmpty(list.getItems())
           .or(fromCode.visibleProperty().not());
-      for (javafx.scene.Node node : List.of(list, note)) {
-        node.visibleProperty().bind(listShown);
-        node.managedProperty().bind(listShown);
-      }
+      list.visibleProperty().bind(listShown);
+      list.managedProperty().bind(listShown);
+      note.visibleProperty().bind(listShown.and(handwritten));
+      note.managedProperty().bind(note.visibleProperty());
       java.util.function.Consumer<Boolean> layout = shown -> {
         VBox.setVgrow(scroll, shown ? javafx.scene.layout.Priority.NEVER
             : javafx.scene.layout.Priority.ALWAYS);
@@ -379,8 +390,16 @@ final class SpriteAssetsView extends BorderPane {
       layout.accept(listShown.get());
       listShown.addListener((o, was, shown) -> layout.accept(shown));
     }
+    if (kind != SpriteAssets.Kind.COSTUME) {
+      note.visibleProperty().bind(handwritten);
+      note.managedProperty().bind(handwritten);
+    }
     VBox.setVgrow(list, javafx.scene.layout.Priority.ALWAYS);
     pane.setPadding(new Insets(8));
+    // nothing to preview in an empty list
+    var any = javafx.beans.binding.Bindings.isNotEmpty(list.getItems());
+    preview.visibleProperty().bind(any);
+    preview.managedProperty().bind(any);
     // the preview beside the list, or under it when the editor is narrow
     BorderPane layout = new BorderPane(pane);
     layout.widthProperty().addListener((o, old, w) -> {
@@ -472,9 +491,10 @@ final class SpriteAssetsView extends BorderPane {
         if (!e.equals(list.getSelectionModel().getSelectedItem())) {
           list.getSelectionModel().select(e);
         }
-        if (lookup(".tab-pane") instanceof TabPane tabs) {
-          tabs.getSelectionModel().select(kind == SpriteAssets.Kind.SOUND ? 1
-              : kind == SpriteAssets.Kind.ANIMATION ? 2 : 0);
+        Tab tab = kind == SpriteAssets.Kind.SOUND ? soundsTab
+            : kind == SpriteAssets.Kind.ANIMATION ? animationsTab : costumesTab;
+        if (tab != null && tab.getTabPane() != null) {
+          tab.getTabPane().getSelectionModel().select(tab);
         }
         return true;
       }

@@ -233,19 +233,16 @@ final class StageDesignerView extends BorderPane {
     readOnlyBanner.getChildren().addAll(readOnlyTitle, readOnlyDetail, openCode);
     readOnlyBanner.setMaxHeight(Region.USE_PREF_SIZE);
     readOnlyBanner.setMaxWidth(560);
-    previewNote.getStyleClass().add("ghost-note");
-    previewNote.setVisible(false);
-    previewNote.setMouseTransparent(true);
-    previewNote.setWrapText(true);
-    previewNote.setMaxWidth(420);
+    // a word in the toolbar, next to Refresh, instead of a note over the stage
+    previewNote.getStyleClass().add("picture-status");
+    previewNote.setMinWidth(0);
+    previewNote.setMaxWidth(180);
     codeOwnedNote.setWrapText(true);
     codeOwnedNote.getStyleClass().add("ghost-note");
     codeOwnedNote.setMouseTransparent(true);
-    StackPane center = new StackPane(stageScroll, readOnlyBanner, previewNote, codeOwnedNote);
+    StackPane center = new StackPane(stageScroll, readOnlyBanner, codeOwnedNote);
     StackPane.setAlignment(codeOwnedNote, Pos.TOP_LEFT);
     StackPane.setMargin(codeOwnedNote, new Insets(10));
-    StackPane.setAlignment(previewNote, Pos.BOTTOM_LEFT);
-    StackPane.setMargin(previewNote, new Insets(0, 0, 10, 10));
     StackPane.setAlignment(readOnlyBanner, Pos.TOP_CENTER);
     StackPane.setMargin(readOnlyBanner, new Insets(12));
 
@@ -581,13 +578,14 @@ final class StageDesignerView extends BorderPane {
     renderer.setPreview(last);
     if (last != null) {
       model.size(last.width(), last.height());
-      previewNote.setText(I18n.t("designer.picture.run", java.time.format.DateTimeFormatter
-          .ofPattern("HH:mm").format(java.time.LocalTime.ofInstant(
-              java.time.Instant.ofEpochMilli(pictureTime), java.time.ZoneId.systemDefault()))));
+      String time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").format(
+          java.time.LocalTime.ofInstant(java.time.Instant.ofEpochMilli(pictureTime),
+              java.time.ZoneId.systemDefault()));
+      pictureStatus(I18n.t("designer.picture.run.short", time),
+          I18n.t("designer.picture.run", time));
     } else {
-      previewNote.setText(I18n.t("designer.picture.none"));
+      pictureStatus(I18n.t("designer.picture.none.short"), I18n.t("designer.picture.none"));
     }
-    previewNote.setVisible(true);
     renderer.defaultCamera(model.width(), model.height());
   }
 
@@ -596,8 +594,7 @@ final class StageDesignerView extends BorderPane {
     if (refreshing || document == null) return;
     refreshing = true;
     refreshButton.setDisable(true);
-    previewNote.setText(I18n.t("designer.preview.running"));
-    previewNote.setVisible(true);
+    pictureStatus(I18n.t("designer.preview.running.short"), I18n.t("designer.preview.running"));
     List<String> omit = ownSprites();
     PREVIEWS.submit(() -> {
       org.openpatch.scratch4j.runner.StagePreview.Result result;
@@ -617,14 +614,24 @@ final class StageDesignerView extends BorderPane {
     });
   }
 
+  /** The toolbar's word on the program's picture; the whole story in its tooltip. */
+  private void pictureStatus(String text, String detail) {
+    previewNote.setText(text);
+    previewNote.setTooltip(new Tooltip(detail));
+  }
+
+  /** The toolbar's word on the program's picture (tests). */
+  String pictureStatus() {
+    return previewNote.getText();
+  }
+
   /** Shows a new picture, or why there is none (Refresh; tests make one themselves). */
   void showPreview(org.openpatch.scratch4j.runner.StagePreview.Result result) {
     if (result != null && result.ok()) {
       loadPicture();
     } else {
-      previewNote.setText(I18n.t("designer.preview.none",
+      pictureStatus(I18n.t("designer.preview.none.short"), I18n.t("designer.preview.none",
           result == null || result.error() == null ? "" : result.error()));
-      previewNote.setVisible(true);
     }
     refreshAll();
   }
@@ -678,14 +685,15 @@ final class StageDesignerView extends BorderPane {
           redraw();
         }),
         new Separator(javafx.geometry.Orientation.VERTICAL),
-        refreshButton(),
+        refreshButton(), previewNote,
         gridToggle, snapToggle, hitboxToggle, mapToggle(), objectsToggle, mapChoice,
         spacer, readout);
     bar.setAlignment(Pos.CENTER_LEFT);
     // a narrow tab shrinks only the readout, then clips the tools instead of
     // pushing the designer out of view
     for (Node child : bar.getChildren()) {
-      if (child instanceof Region region && child != readout && child != spacer) {
+      if (child instanceof Region region && child != readout && child != spacer
+          && child != previewNote) {
         region.setMinWidth(Region.USE_PREF_SIZE);
       }
     }
@@ -1104,6 +1112,9 @@ final class StageDesignerView extends BorderPane {
       costumeBox.getItems().add(selected.costume());
     }
     costumeBox.setValue(selected.currentCostume() == null ? "" : selected.currentCostume());
+    // not set in the code: the sprite starts with its first costume
+    costumeBox.setPromptText(costumeBox.getItems().isEmpty() ? ""
+        : costumeBox.getItems().get(0));
     inspectorUpdating = false;
   }
 

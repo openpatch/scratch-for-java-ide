@@ -1085,6 +1085,12 @@
   -fx-border-color: transparent transparent -s-line transparent;
 }
 
+.picture-status {
+  -fx-font-size: 12px;
+  -fx-text-fill: -color-fg-muted;
+  -fx-padding: 0 6 0 0;
+}
+
 .tool-bar-row > .separator:vertical {
   -fx-padding: 4 3 4 3;
 }

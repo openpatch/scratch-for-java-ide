@@ -711,9 +711,12 @@ class UiSmokeIT {
                 && I18n.t("mode.code").equals(l.getText()))).isEmpty();
         javafx.scene.control.TabPane spriteTabs =
             (javafx.scene.control.TabPane) spriteAssets.getCenter();
-        assertThat(spriteTabs.getTabs()).hasSize(4);
+        // a plain Sprite has no animations: costumes, sounds and the hitbox
+        assertThat(spriteTabs.getTabs()).extracting(javafx.scene.control.Tab::getText)
+            .containsExactly(I18n.t("spriteassets.costumes"), I18n.t("spriteassets.sounds"),
+                I18n.t("spriteassets.hitbox"));
         javafx.scene.layout.VBox hitboxPane = (javafx.scene.layout.VBox)
-            spriteTabs.getTabs().get(3).getContent();
+            spriteTabs.getTabs().get(2).getContent();
         javafx.scene.layout.HBox hitboxActions =
             (javafx.scene.layout.HBox) hitboxPane.getChildren().get(3);
         ((javafx.scene.control.Button) hitboxActions.getChildren().get(0)).fire();

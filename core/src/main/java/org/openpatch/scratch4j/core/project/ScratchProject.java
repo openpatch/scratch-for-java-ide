@@ -229,6 +229,26 @@ public final class ScratchProject {
     return null;
   }
 
+  /**
+   * The source whose {@code main} makes the program's window
+   * ({@code Window myWindow = new Window(600, 400);}, see
+   * {@link org.openpatch.scratch4j.core.region.MainWindow}): the start class's,
+   * otherwise the first class with such a {@code main}. Null when none does.
+   */
+  public Path mainWindowSource() throws IOException {
+    List<String> candidates = new ArrayList<>();
+    candidates.add(startStage());
+    candidates.addAll(mainClasses());
+    for (String name : candidates) {
+      Path file = name.isBlank() ? null : sourceOf(name);
+      if (file != null && org.openpatch.scratch4j.core.region.MainWindow.has(
+          Files.readString(file, StandardCharsets.UTF_8))) {
+        return file;
+      }
+    }
+    return null;
+  }
+
   /** The source file {@code Name.java}, or null. */
   public Path sourceOf(String className) throws IOException {
     for (Path source : javaSources()) {

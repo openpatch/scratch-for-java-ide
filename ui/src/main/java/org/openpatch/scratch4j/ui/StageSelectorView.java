@@ -18,6 +18,7 @@ import javafx.scene.layout.VBox;
 import org.openpatch.scratch4j.core.project.NewClass;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.project.ProjectSettings;
+import org.openpatch.scratch4j.core.region.MainWindow;
 import org.openpatch.scratch4j.core.region.WindowDocument;
 import org.openpatch.scratch4j.core.io.LocalHistory;
 
@@ -270,11 +271,17 @@ final class StageSelectorView extends BorderPane {
    * the generated launcher applies them, and the dialog offers to create the
    * window class.
    */
+  /**
+   * The window's size and options, where the program keeps them: the window
+   * class's settings regions, the {@code new Window(...)} in a {@code main}
+   * (as the tutorials start), or else the project's metadata.
+   */
   void showWindowSettings() {
     ProjectSettings settings = project.settings();
     String windowClass;
     WindowDocument.Settings code = null;
     Path windowFile = null;
+    Path mainFile = null;
     try {
       windowClass = project.windowClass();
       if (windowClass != null) {
@@ -285,6 +292,19 @@ final class StageSelectorView extends BorderPane {
       showError(new IOException(I18n.t("stages.window.handwritten"), e));
       return;
     }
+    if (windowClass == null) {
+      try {
+        mainFile = project.mainWindowSource();
+        if (mainFile != null) {
+          code = MainWindow.read(Files.readString(mainFile));
+        }
+      } catch (IOException | RuntimeException e) {
+        showError(new IOException(I18n.t("stages.window.main.handwritten",
+            mainFile == null ? "" : mainFile.getFileName()), e));
+        return;
+      }
+    }
+    boolean inCode = windowClass != null || mainFile != null;
     javafx.scene.control.CheckBox fullScreen = new javafx.scene.control.CheckBox(
         I18n.t("stages.window.fullscreen"));
     fullScreen.setSelected(code != null ? code.fullScreen() : settings.fullScreen);
@@ -327,18 +347,19 @@ final class StageSelectorView extends BorderPane {
     HBox.setHgrow(splash, Priority.ALWAYS);
     Label where = new Label(windowClass != null
         ? I18n.t("stages.window.incode", windowClass + ".java")
+        : mainFile != null ? I18n.t("stages.window.inmain", mainFile.getFileName())
         : I18n.t("stages.window.inmeta"));
     where.setWrapText(true);
     where.getStyleClass().add("text-muted");
     javafx.scene.control.CheckBox createWindow = new javafx.scene.control.CheckBox(
         I18n.t("stages.window.create"));
-    createWindow.setVisible(windowClass == null);
-    createWindow.setManaged(windowClass == null);
+    createWindow.setVisible(!inCode);
+    createWindow.setManaged(!inCode);
     HBox size = new HBox(6, new Label(I18n.t("stages.window.size")), width, new Label("\u00d7"),
         height);
     size.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
     size.visibleProperty().bind(createWindow.selectedProperty().or(
-        new javafx.beans.property.SimpleBooleanProperty(windowClass != null)));
+        new javafx.beans.property.SimpleBooleanProperty(inCode)));
     size.managedProperty().bind(size.visibleProperty());
     VBox content = new VBox(10, where, size, fullScreen, pixelArt, debug,
         new Label(I18n.t("stages.window.splash")), splashRow, createWindow);
@@ -352,6 +373,7 @@ final class StageSelectorView extends BorderPane {
     dialog.getDialogPane().getButtonTypes().addAll(I18n.ok(), I18n.cancel());
     String existingWindow = windowClass;
     Path existingFile = windowFile;
+    Path existingMain = mainFile;
     dialog.showAndWait().ifPresent(button -> {
       if (button != I18n.ok()) {
         return;
@@ -376,10 +398,17 @@ final class StageSelectorView extends BorderPane {
         return;
       }
       try {
-        if (existingWindow != null || createWindow.isSelected()) {
+        if (existingWindow != null || existingMain != null || createWindow.isSelected()) {
           WindowDocument.Settings next = new WindowDocument.Settings(w, h, startStage(),
               fullScreen.isSelected(), pixelArt.isSelected(), pathText, debug.isSelected());
-          if (existingWindow != null) {
+          if (existingMain != null) {
+            // in place, in main; the start star keeps its setStage line
+            String source = Files.readString(existingMain);
+            String written = MainWindow.write(source, next);
+            if (!written.equals(source)) {
+              LocalHistory.writeString(project.root(), existingMain, written);
+            }
+          } else if (existingWindow != null) {
             String source = Files.readString(existingFile);
             LocalHistory.writeString(project.root(), existingFile,
                 WindowDocument.write(source, next));
@@ -394,7 +423,7 @@ final class StageSelectorView extends BorderPane {
                 WindowDocument.create(name, next), java.nio.file.StandardOpenOption.CREATE_NEW);
             settings.startStage = name;
           }
-          // the window class owns these now: the launcher must not apply them twice
+          // the code owns these now: the launcher must not apply them twice
           settings.fullScreen = false;
           settings.pixelArt = false;
           settings.debugOnStart = false;

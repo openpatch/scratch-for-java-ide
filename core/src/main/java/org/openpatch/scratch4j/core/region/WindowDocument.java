@@ -52,12 +52,12 @@ public final class WindowDocument {
   private static final Pattern SET_STAGE =
       Pattern.compile("this\\.setStage\\(new\\s+(\\w+)\\(\\)\\)\\s*;");
   private static final Pattern DEBUG = Pattern.compile("this\\.setDebug\\((true|false)\\)\\s*;");
-  private static final Pattern FULL_SCREEN =
+  static final Pattern FULL_SCREEN =
       Pattern.compile("(?:org\\.openpatch\\.scratch\\.)?Window\\.useFullScreen\\(\\)\\s*;");
-  private static final Pattern SAMPLING = Pattern.compile(
+  static final Pattern SAMPLING = Pattern.compile(
       "(?:org\\.openpatch\\.scratch\\.)?Window\\.useTextureSampling\\("
           + "(?:org\\.openpatch\\.scratch\\.)?TextureSampling\\.(\\w+)\\)\\s*;");
-  private static final Pattern SPLASH = Pattern.compile(
+  static final Pattern SPLASH = Pattern.compile(
       "(?:org\\.openpatch\\.scratch\\.)?Window\\.useSplashLogo\\(\"([^\"\\\\]*)\"\\)\\s*;");
 
   private WindowDocument() {}
