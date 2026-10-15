@@ -1,10 +1,14 @@
 package org.openpatch.scratch4j.ui;
 
 import javafx.scene.Scene;
+import javafx.scene.control.Button;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyEvent;
+import javafx.scene.input.MouseButton;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.robot.Robot;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import org.junit.jupiter.api.Test;
@@ -19,6 +23,8 @@ import org.openpatch.scratch4j.core.project.NewProject;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -70,6 +76,161 @@ class CompletionIT {
         assertThat(item.detail()).contains(item.label()).doesNotContainPattern("\\barg\\d+\\b");
       }
     });
+  }
+
+  /** Real keys and clicks (the robot): the suggestions go as soon as they no longer apply. */
+  @Test
+  void suggestionsCloseWhenTheCaretMovesAClickLandsOrTheWordIsGone() throws Exception {
+    String text = """
+        class Player {
+          int mode;
+          void move() {}
+          void run() {
+            mo
+          }
+        }
+        """;
+    int end = text.indexOf("    mo\n") + "    mo".length();
+    AtomicBoolean pressed = new AtomicBoolean();
+    Opened opened = openEditor(text, editor -> {
+      Button other = new Button("Other");
+      other.setOnAction(e -> pressed.set(true));
+      return new BorderPane(editor, null, null, other, null);
+    });
+    Stage window = opened.window();
+    CodeEditor code = opened.code();
+    try {
+      // a cursor key moves the caret as usual and closes them
+      for (KeyCode key : List.of(KeyCode.LEFT, KeyCode.RIGHT, KeyCode.HOME, KeyCode.END,
+          KeyCode.PAGE_UP, KeyCode.PAGE_DOWN)) {
+        openSuggestions(window, code, end);
+        LayoutIT.onFx(() -> new Robot().keyType(key));
+        LayoutIT.settle();
+        LayoutIT.onFx(() -> {
+          assertThat(code.completionShowing()).as(key.getName()).isFalse();
+          if (key == KeyCode.LEFT) {
+            assertThat(code.area().getCaretPosition()).isEqualTo(end - 1);
+          }
+        });
+      }
+
+      // a click in the code closes them, and the caret goes where it landed
+      openSuggestions(window, code, end);
+      LayoutIT.onFx(() -> {
+        int at = text.indexOf("mode");
+        click(code.area().getCharacterBoundsOnScreen(at, at + 1).orElseThrow());
+      });
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionShowing()).isFalse();
+        assertThat(code.caretLine()).isEqualTo(2);
+      });
+
+      // so does a click beside the code, which still does its job
+      openSuggestions(window, code, end);
+      LayoutIT.onFx(() -> {
+        var other = ((BorderPane) window.getScene().getRoot()).getBottom();
+        click(other.localToScreen(other.getBoundsInLocal()));
+      });
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionShowing()).isFalse();
+        assertThat(pressed).as("the button was pressed").isTrue();
+      });
+
+      // deleting the word leaves nothing to complete
+      openSuggestions(window, code, end);
+      LayoutIT.onFx(() -> new Robot().keyType(KeyCode.BACK_SPACE));
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> assertThat(code.completionShowing()).as("after m").isTrue());
+      LayoutIT.onFx(() -> new Robot().keyType(KeyCode.BACK_SPACE));
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> assertThat(code.completionShowing()).isFalse());
+    } finally {
+      LayoutIT.onFx(window::hide);
+    }
+  }
+
+  /** javac's answer for suggestions that were closed meanwhile does not open them again. */
+  @Test
+  void aLateAnswerLeavesClosedSuggestionsClosed() throws Exception {
+    String text = """
+        class Player {
+          int mode;
+          void run() {
+            this.
+          }
+        }
+        """;
+    int end = text.indexOf("this.") + "this.".length();
+    Opened opened = openEditor(text, editor -> editor);
+    Stage window = opened.window();
+    CodeEditor code = opened.code();
+    CountDownLatch answer = new CountDownLatch(1);
+    try {
+      LayoutIT.onFx(() -> code.setSemanticCompleter((source, content, offset) -> {
+        try {
+          answer.await();
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+        }
+        return new Completions.Result(offset, "", true, List.of(new Completions.Item("mode",
+            Completions.Kind.FIELD, "mode", "int", "Player", false, List.of())));
+      }));
+      openSuggestions(window, code, end);
+      LayoutIT.onFx(() -> new Robot().keyType(KeyCode.ESCAPE));
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> assertThat(code.completionShowing()).isFalse());
+      answer.countDown();
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> assertThat(code.completionShowing()).isFalse());
+    } finally {
+      answer.countDown();
+      LayoutIT.onFx(window::hide);
+    }
+  }
+
+  private record Opened(Stage window, CodeEditor code) {}
+
+  /** A window with an editor for {@code text}, placed in the scene by {@code root}. */
+  private Opened openEditor(String text,
+      java.util.function.Function<CodeEditor, javafx.scene.Parent> root) throws Exception {
+    Path file = tmp.resolve("Player.java");
+    Files.writeString(file, text);
+    AtomicReference<Opened> opened = new AtomicReference<>();
+    LayoutIT.startFx();
+    LayoutIT.onFx(() -> {
+      CodeEditor code = new CodeEditor(file, text, ApiIndex.load(), () -> tmp);
+      Stage stage = new Stage();
+      Scene scene = new Scene(root.apply(code), 760, 340);
+      Theme.apply(scene);
+      stage.setScene(scene);
+      stage.show();
+      opened.set(new Opened(stage, code));
+    });
+    LayoutIT.settle();
+    return opened.get();
+  }
+
+  /** Ctrl+Space at {@code caret}, with the window and the code focused for the robot's keys. */
+  private static void openSuggestions(Stage window, CodeEditor code, int caret)
+      throws Exception {
+    LayoutIT.onFx(() -> {
+      window.toFront();
+      window.requestFocus();
+      code.area().requestFocus();
+      code.area().moveTo(caret);
+      code.area().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+          "", "", KeyCode.SPACE, false, true, false, false));
+    });
+    LayoutIT.settle();
+    LayoutIT.onFx(() -> assertThat(code.completionShowing()).as("suggestions open").isTrue());
+  }
+
+  private static void click(javafx.geometry.Bounds onScreen) {
+    Robot robot = new Robot();
+    robot.mouseMove(onScreen.getCenterX(), onScreen.getCenterY());
+    robot.mouseClick(MouseButton.PRIMARY);
   }
 
   @ParameterizedTest

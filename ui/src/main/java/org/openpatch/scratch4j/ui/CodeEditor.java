@@ -1989,6 +1989,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   private void installCompletionPopup() {
     completionPopup.setAutoHide(true);
+    // a click elsewhere closes the suggestions and still does its job
+    completionPopup.setConsumeAutoHidingEvents(false);
     // an open popup gets the window's keys first (its list would swallow Enter): the
     // suggestion keys are handled here; Enter/Tab on a complete word do their normal job
     completionPopup.getScene().addEventFilter(KeyEvent.KEY_PRESSED, e -> {
@@ -2007,6 +2009,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     completionPopup.setOnHidden(e -> {
       semanticItems = null;
       semanticStart = -1;
+      // an answer still on its way doesn't open closed suggestions again
+      semanticRequest++;
     });
     completionList.getStyleClass().add("completion-list");
     completionList.setPrefSize(380, 230);
@@ -2034,6 +2038,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       });
     });
     completionDocs.setText(I18n.t("completion.docs"));
+    // a focusable link would get the keys the popup sees first (the arrows move focus)
+    completionDocs.setFocusTraversable(false);
     completionDocs.setVisible(false);
     completionDocs.setManaged(false);
     completionList.setOnMouseClicked(e -> {
@@ -2060,6 +2066,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         completionPopup.hide();
       }
     });
+    // auto-hide leaves clicks on its owner, the code, alone: they close it here
+    area.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, e -> completionPopup.hide());
   }
 
   private Node completionIcon(Completion item) {
@@ -2115,6 +2123,11 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       case ESCAPE -> {
         completionPopup.hide();
         return true;
+      }
+      case LEFT, RIGHT, HOME, END, PAGE_UP, PAGE_DOWN -> {
+        // the caret leaves the word: the suggestions go, the key moves the caret
+        completionPopup.hide();
+        return false;
       }
       default -> {
         return false;
