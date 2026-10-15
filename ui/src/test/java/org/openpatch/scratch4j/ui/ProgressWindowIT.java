@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ProgressWindowIT {
 
   @Test
-  void followsTheImportFromItsWorkerThreadAndStaysUntilItEnds() throws Exception {
+  void followsTheImportFromItsWorkerThreadAndCancelsIt() throws Exception {
     I18n.Language language = I18n.current();
     I18n.set(I18n.Language.EN);
     LayoutIT.startFx();
@@ -52,9 +52,29 @@ class ProgressWindowIT {
         UiSmokeIT.snapshot(window.window().getScene().getRoot(),
             Path.of("target/progress-window.png"));
 
+        // closing the window cancels: it stays until the import has stopped
         window.window().fireEvent(new WindowEvent(window.window(),
             WindowEvent.WINDOW_CLOSE_REQUEST));
         assertThat(window.window().isShowing()).as("the import is still running").isTrue();
+        assertThat(window.cancelled()).isTrue();
+        assertThat(detail.getText()).isEqualTo("Stopping the import...");
+      });
+
+      // the import's next step ends it
+      AtomicReference<Throwable> thrown = new AtomicReference<>();
+      Thread stopped = new Thread(() -> {
+        try {
+          progress.get().step("Cat: costume5", 4, 5);
+        } catch (Throwable t) {
+          thrown.set(t);
+        }
+      });
+      stopped.start();
+      stopped.join();
+      assertThat(thrown.get()).isInstanceOf(ProgressWindow.Cancelled.class);
+
+      LayoutIT.onFx(() -> {
+        ProgressWindow window = progress.get();
         window.close();
         assertThat(window.window().isShowing()).isFalse();
       });

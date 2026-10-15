@@ -1028,7 +1028,7 @@ public class StudioApp extends javafx.application.Application {
       projectName = name + i;
     }
     String target = projectName;
-    importing(sb3.getName(), progress -> org.openpatch.scratch4j.core.project.Sb3Importer
+    importing(sb3.getName(), folder.toPath(), progress -> org.openpatch.scratch4j.core.project.Sb3Importer
         .importProject(sb3.toPath(), folder.toPath(), target,
             LibraryJarSource.allJar(bundledLibraryDir()), mp3 -> {
               try {
@@ -1058,21 +1058,26 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /**
-   * Runs an import of {@code fileName} on a worker thread behind a progress
-   * window, so a large project does not look like a hung IDE; then
-   * {@code done} with the result on the FX thread, or an alert with the
-   * error message as {@code failed} words it.
+   * Runs an import of {@code fileName} into {@code parentDir} on a worker
+   * thread behind a progress window, so a large project does not look like a
+   * hung IDE; then {@code done} with the result on the FX thread, or an alert
+   * with the error message as {@code failed} words it. A cancelled import
+   * leaves nothing behind: what it added to {@code parentDir} goes again.
    */
-  private <T> void importing(String fileName, ImportJob<T> job,
+  private <T> void importing(String fileName, Path parentDir, ImportJob<T> job,
       java.util.function.Consumer<T> done,
       java.util.function.UnaryOperator<String> failed) {
     String what = I18n.t("import.running", fileName);
     setStatus(what);
+    java.util.Set<Path> before = children(parentDir);
     ProgressWindow progress = new ProgressWindow(stage, what);
     progress.show();
     Thread worker = new Thread(() -> {
       try {
         T result = job.run(progress::step);
+        if (progress.cancelled()) {
+          throw new ProgressWindow.Cancelled(); // cancelled after its last step
+        }
         Platform.runLater(() -> {
           progress.close();
           setStatus(""); // opening the project says so
@@ -1080,16 +1085,44 @@ public class StudioApp extends javafx.application.Application {
         });
       } catch (IOException | RuntimeException | Error e) {
         // an Error too (out of memory drawing costumes): the window must not stay
-        String message = e.getMessage() == null ? e.toString() : e.getMessage();
+        if (!progress.cancelled()) {
+          String message = e.getMessage() == null ? e.toString() : e.getMessage();
+          Platform.runLater(() -> {
+            progress.close();
+            setStatus(I18n.t("import.failed"));
+            alert(failed.apply(message), e);
+          });
+          return;
+        }
+        // cancelled (an importer may have wrapped the exception): nothing stays behind
+        java.util.Set<Path> after = before == null ? null : children(parentDir);
+        for (Path added : after == null ? java.util.Set.<Path>of() : after) {
+          if (!before.contains(added)) {
+            try {
+              org.openpatch.scratch4j.core.project.PortableProject.deleteTree(added);
+            } catch (IOException | RuntimeException ignored) {
+              // what is left is an unfinished folder the student can delete
+            }
+          }
+        }
         Platform.runLater(() -> {
           progress.close();
-          setStatus(I18n.t("import.failed"));
-          alert(failed.apply(message), e);
+          setStatus(I18n.t("import.cancelled"));
         });
       }
     }, "project-import");
     worker.setDaemon(true);
     worker.start();
+  }
+
+  /** The entries of {@code dir}: none when it is missing, null when it can't be read. */
+  private static java.util.Set<Path> children(Path dir) {
+    if (Files.notExists(dir)) return java.util.Set.of();
+    try (var entries = Files.list(dir)) {
+      return entries.collect(java.util.stream.Collectors.toSet());
+    } catch (IOException | RuntimeException e) {
+      return null;
+    }
   }
 
   private void openProject() {
@@ -3958,7 +3991,7 @@ public class StudioApp extends javafx.application.Application {
     parent.setInitialDirectory(ProjectsFolder.existing(ProjectsFolder.current()));
     File folder = parent.showDialog(stage);
     if (folder == null) return;
-    importing(archive.getName(), progress -> {
+    importing(archive.getName(), folder.toPath(), progress -> {
       var libraries = new java.util.HashMap<String, Path>();
       for (LibraryFlavour flavour : LibraryFlavour.values()) {
         libraries.put(flavour.id(), LibraryJarSource.jar(flavour, libraryDirFor(flavour)));
@@ -3991,7 +4024,7 @@ public class StudioApp extends javafx.application.Application {
 
   /** Imports a project ZIP or workspace JSON into a new folder in {@code parentDir} and opens it. */
   private void importShared(Path file, Path parentDir) {
-    importing(file.getFileName().toString(), progress -> {
+    importing(file.getFileName().toString(), parentDir, progress -> {
       Files.createDirectories(parentDir);
       return SharedProjectFile.isJson(file)
           ? org.openpatch.scratch4j.core.project.PortableProject.importWorkspace(file, parentDir)
