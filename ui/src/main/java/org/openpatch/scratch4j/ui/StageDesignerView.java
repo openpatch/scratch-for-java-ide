@@ -116,8 +116,6 @@ final class StageDesignerView extends BorderPane {
   private final FlowPane classTiles = new FlowPane(6, 6);
   private final FlowPane backdropTiles = new FlowPane(6, 6);
   private final FlowPane soundTiles = new FlowPane(6, 6);
-  private final TextField widthField = numberField();
-  private final TextField heightField = numberField();
   // UISprite pixel size and Text properties (shown only for those objects)
   private final TextField pxWidthField = numberField();
   private final TextField pxHeightField = numberField();
@@ -805,20 +803,12 @@ final class StageDesignerView extends BorderPane {
     selectionDetails.getChildren().addAll(numbers, spriteOnly, textOnly, actions);
     spriteCard.getChildren().addAll(new VBox(0, selectedName, selectedType), selectionDetails);
 
-    // stage settings
-    GridPane size = new GridPane();
-    size.setHgap(8);
-    size.addRow(0, fieldLabel(I18n.t("designer.width")), widthField,
-        fieldLabel(I18n.t("designer.height")), heightField);
-    Tooltip windowSize = new Tooltip(I18n.t("designer.size.window"));
-    widthField.setTooltip(windowSize);
-    heightField.setTooltip(windowSize);
-
     VBox panel = new VBox(10,
         card(I18n.t("designer.selected"), "fth-mouse-pointer", spriteCard),
         card(I18n.t("designer.onstage"), "fth-layers", instanceTiles),
         card(I18n.t("designer.addsprite"), "fth-plus-circle", classTiles),
-        card(I18n.t("designer.stage"), "fth-monitor", new VBox(8, size,
+        // no size: a stage is as big as the window, set in the window settings
+        card(I18n.t("designer.stage"), "fth-monitor", new VBox(8,
             fieldLabel(I18n.t("designer.backdrops")), backdropTiles,
             fieldLabel(I18n.t("designer.sounds")), soundTiles)));
     panel.setPadding(new Insets(10));
@@ -865,11 +855,6 @@ final class StageDesignerView extends BorderPane {
         String.join(", ", document.codeOwnedSprites().stream().sorted().toList())) : "");
     undoButton.setDisable(undoDelegate == null && undo.isEmpty());
     redoButton.setDisable(redoDelegate == null && redo.isEmpty());
-    widthField.setText(String.valueOf(model.width()));
-    heightField.setText(String.valueOf(model.height()));
-    // the size is the window's: the window settings change it
-    widthField.setDisable(true);
-    heightField.setDisable(true);
     refreshInstanceTiles();
     refreshClassTiles();
     refreshBackdropTiles();
