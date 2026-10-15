@@ -4236,8 +4236,7 @@ public class StudioApp extends javafx.application.Application {
    * {@code KeyCode}, ...), so it compiles without fully qualified names.
    */
   private void insertWithImports(CodeEditor target, String snippet) {
-    target.insertBlock(snippet);
-    addImports(target, snippet);
+    if (target.insertBlock(snippet)) addImports(target, snippet);
   }
 
   /** The imports the library classes in inserted code need (a dropped block's as well). */

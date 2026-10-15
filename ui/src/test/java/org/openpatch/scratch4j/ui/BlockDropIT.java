@@ -224,4 +224,70 @@ class BlockDropIT {
       assertThat(code.area().getText()).contains("this.move(this.getX()speed);");
     });
   }
+
+  @Test
+  void aDoubleClickedBlockGoesInOnlyWhereTheCaretMayTakeIt() throws Exception {
+    LayoutIT.startFx();
+    AtomicReference<CodeEditor> editor = new AtomicReference<>();
+    LayoutIT.onFx(() -> {
+      CodeEditor code = new CodeEditor(tmp.resolve("Cat.java"), CAT, ApiIndex.load(), () -> tmp);
+      Scene scene = new Scene(code, 760, 520);
+      Theme.apply(scene);
+      Stage stage = new Stage();
+      stage.setScene(scene);
+      stage.show();
+      editor.set(code);
+    });
+    LayoutIT.settle();
+    CodeEditor code = editor.get();
+    LayoutIT.onFx(() -> {
+      var area = code.area();
+      // the class body: refused, with a note under the caret saying what to do
+      int field = line("private int speed");
+      area.moveTo(field, area.getParagraph(field).length());
+      assertThat(code.insertBlock(CALL)).isFalse();
+      assertThat(area.getText()).isEqualTo(CAT);
+      assertThat(code.caretNoteText()).isEqualTo(I18n.t("caret.body"));
+      Bounds note = code.dropLayer().lookup(".drop-note").localToScreen(
+          code.dropLayer().lookup(".drop-note").getLayoutBounds());
+      assertThat(note.getMinY()).isGreaterThanOrEqualTo(lineBounds(code, field).getMaxY());
+      UiSmokeIT.snapshot(code, Path.of("target/block-insert-refused.png"));
+      // moving the caret takes the note away
+      area.moveTo(line("this.move(speed)"), area.getParagraph(line("this.move(speed)")).length());
+      assertThat(code.caretNoteText()).isNull();
+      assertThat(code.dropLayer().lookup(".drop-note")).isNull();
+
+      // the end of a statement: on a new line below it
+      assertThat(code.insertBlock(CALL)).isTrue();
+      assertThat(area.getText()).contains("""
+              this.move(speed);
+              this.turnRight(15);
+              if (this.isTouchingEdge()) {
+          """);
+      code.undo();
+
+      // a reporter in a string: refused
+      int path = CAT.indexOf("cat.png");
+      area.moveTo(path);
+      assertThat(code.insertBlock("this.getX()")).isFalse();
+      assertThat(code.caretNoteText()).isEqualTo(I18n.t("caret.text"));
+      assertThat(area.getText()).isEqualTo(CAT);
+
+      // an event block on the blank line between two methods fills it
+      int blank = line("public void run()") - 1;
+      area.moveTo(blank, 0);
+      assertThat(code.insertBlock(EVENT)).isTrue();
+      assertThat(area.getText()).contains("""
+            }
+
+            public void whenClicked() {
+             \s
+            }
+
+            public void run() {
+          """);
+      code.undo();
+      assertThat(area.getText()).isEqualTo(CAT);
+    });
+  }
 }

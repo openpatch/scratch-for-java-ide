@@ -534,22 +534,28 @@ final class CodeEditor extends BorderPane {
   }
 
   /**
-   * Inserts a palette snippet. Statements (ending in a newline) go on their
-   * own line below the caret line, at its indent; expressions go at the caret.
+   * Inserts a palette snippet at the caret (a double-click on a block, the
+   * asset library). A reporter goes at the caret; a stack block on a new line
+   * below the caret line (or on the caret line when it is blank); an event
+   * block in the class body, after the method the caret is in, and when the
+   * class already has that method the caret goes into it instead. Where the
+   * block can't go (the rules of {@link BlockDrop}), nothing changes and a
+   * note at the caret says what to do. Whether code went in.
    */
-  void insertBlock(String snippet) {
-    if (!snippet.endsWith("\n")) {
+  boolean insertBlock(String snippet) {
+    String text = area.getText();
+    BlockDrop.Kind kind = BlockDrop.kindOf(snippet);
+    if (kind == BlockDrop.Kind.EXPRESSION) {
+      BlockDrop.Target target = BlockDrop.inline(text, area.getSelection().getStart(), snippet);
+      if (!target.valid()) return refuseAtCaret(target);
       insertAtCaret(snippet);
-      return;
+      return true;
     }
-    String body = snippet.substring(0, snippet.length() - 1);
-    boolean multiLine = body.contains("\n");
-    var method = BlockDrop.EVENT_METHOD.matcher(body);
-    if (method.find()) {
+    int paragraph = area.getCurrentParagraph();
+    if (kind == BlockDrop.Kind.MEMBER) {
       // an event block is a method: it goes into the class body, not into a method
-      int current = area.getCurrentParagraph();
-      int lineEnd = area.getAbsolutePosition(current, area.getParagraph(current).length());
-      var place = MemberPlacement.place(area.getText(), lineEnd, method.group(1));
+      int lineEnd = area.getAbsolutePosition(paragraph, area.getParagraph(paragraph).length());
+      var place = MemberPlacement.place(text, lineEnd, BlockDrop.eventMethod(snippet));
       if (place != null && place.existing()) {
         // the class already reacts to this event: go there instead of a second copy
         area.moveTo(place.offset());
@@ -561,46 +567,23 @@ final class CodeEditor extends BorderPane {
         area.moveTo(open, area.getParagraph(open).length());
         area.requestFollowCaret();
         area.requestFocus();
-        return;
+        return false;
       }
-      if (place != null) area.moveTo(place.offset());
+      if (place != null) {
+        paragraph = area.offsetToPosition(place.offset(),
+            org.fxmisc.richtext.model.TwoDimensional.Bias.Forward).getMajor();
+      }
     }
-    int paragraph = area.getCurrentParagraph();
-    String line = area.getParagraph(paragraph).getText();
-    boolean blank = line.isBlank();
-    // a blank line has no indent of its own: take it from the code around
-    String indent = blank ? contextIndent(paragraph)
-        : indentOf(line) + (line.strip().endsWith("{") ? INDENT : "");
-    boolean prevIsBlank = blank
-        ? paragraph == 0 || area.getParagraph(paragraph - 1).getText().isBlank()
-        : false;
-    // a closing brace below needs no blank line before it either
-    boolean nextIsBlank = paragraph + 1 >= area.getParagraphs().size()
-        || area.getParagraph(paragraph + 1).getText().isBlank()
-        || area.getParagraph(paragraph + 1).getText().strip().startsWith("}");
-    int lineStart = area.getAbsolutePosition(paragraph, 0);
-    // multi-line snippets (method overrides) keep a blank line on both sides
-    String before = blank ? (multiLine && !prevIsBlank ? "\n" : "")
-        : (multiLine ? "\n\n" : "\n");
-    String indented = body.replace("\n", "\n" + indent);
-    String after = multiLine && !nextIsBlank ? "\n" : "";
-    int insertAt;
-    if (blank) {
-      area.replaceText(lineStart, lineStart + line.length(), before + indent + indented + after);
-      insertAt = lineStart + before.length() + indent.length();
-    } else {
-      int lineEnd = lineStart + line.length();
-      area.insertText(lineEnd, before + indent + indented + after);
-      insertAt = lineEnd + before.length() + indent.length();
-    }
-    // an empty method body: put the caret inside it
-    int emptyBody = indented.indexOf("{\n" + indent + INDENT + "\n");
-    if (emptyBody >= 0) {
-      area.moveTo(insertAt + emptyBody + 2 + indent.length() + INDENT.length());
-    } else {
-      area.moveTo(insertAt + indented.length());
-    }
+    boolean blank = area.getParagraph(paragraph).getText().isBlank();
+    BlockDrop.Target target = BlockDrop.at(text,
+        new BlockDrop.Slot(blank ? paragraph : paragraph + 1, blank), snippet);
+    if (!target.valid()) return refuseAtCaret(target);
+    var insertion = target.insertion();
+    area.replaceText(insertion.start(), insertion.end(), insertion.text());
+    area.moveTo(insertion.caret());
+    area.requestFollowCaret();
     area.requestFocus();
+    return true;
   }
 
   /**
@@ -615,42 +598,6 @@ final class CodeEditor extends BorderPane {
         area.insertText(insertion.offset(), insertion.text());
       }
     }
-  }
-
-  private static String indentOf(String line) {
-    int i = 0;
-    while (i < line.length() && (line.charAt(i) == ' ' || line.charAt(i) == '\t')) {
-      i++;
-    }
-    return line.substring(0, i);
-  }
-
-  /** The indent a new line at blank {@code paragraph} should get. */
-  private String contextIndent(int paragraph) {
-    String previous = null;
-    for (int p = paragraph - 1; p >= 0 && previous == null; p--) {
-      String text = area.getParagraph(p).getText();
-      if (!text.isBlank()) {
-        previous = text;
-      }
-    }
-    String next = null;
-    for (int p = paragraph + 1; p < area.getParagraphs().size() && next == null; p++) {
-      String text = area.getParagraph(p).getText();
-      if (!text.isBlank()) {
-        next = text;
-      }
-    }
-    if (previous != null && previous.strip().endsWith("{")) {
-      return indentOf(previous) + INDENT;
-    }
-    if (next != null && next.strip().startsWith("}")) {
-      return indentOf(next) + INDENT;
-    }
-    if (next != null) {
-      return indentOf(next);
-    }
-    return previous == null ? "" : indentOf(previous);
   }
 
   /** The identifier at (or directly before) the caret. */
@@ -1509,7 +1456,7 @@ final class CodeEditor extends BorderPane {
    * would land, with its code in it, inside a method or constructor; a hat
    * block opens lines between two members of the class; a reporter shows a
    * caret in the line. Where a block can't go, a note says why and the drop is
-   * refused. Other dragged text drops in at the line under the pointer.
+   * refused. Other dragged text drops in at the pointer.
    */
   private void installBlockDrop() {
     dropLayer.setMouseTransparent(true);
@@ -1539,14 +1486,19 @@ final class CodeEditor extends BorderPane {
       if (board.hasString() && board.hasContent(BlockPalette.BLOCK)) {
         done = dropBlock(board.getString(), e.getScreenX(), e.getScreenY());
       } else if (board.hasString()) {
-        area.moveTo(area.hit(e.getX(), e.getY()).getInsertionIndex());
-        insertBlock(board.getString());
+        int index = area.hit(e.getX(), e.getY()).getInsertionIndex();
+        area.insertText(index, board.getString());
+        area.moveTo(index + board.getString().length());
         done = true;
       }
       clearDrop();
       e.setDropCompleted(done);
       e.consume();
     });
+    caretNoteTimer.setOnFinished(e -> hideCaretNote());
+    area.caretPositionProperty().addListener((o, old, now) -> hideCaretNote());
+    area.textProperty().addListener((o, old, now) -> hideCaretNote());
+    area.addEventHandler(KeyEvent.KEY_PRESSED, e -> hideCaretNote());
     // a gesture that ended elsewhere leaves no preview behind
     area.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED, e -> {
       if (dropTarget != null) clearDrop();
@@ -1562,6 +1514,7 @@ final class CodeEditor extends BorderPane {
     BlockDrop.Target target = blockTarget(snippet, screenX, screenY);
     dropTarget = target;
     dropSnippet = snippet;
+    caretNote = null;
     dropLayer.getChildren().clear();
     if (!target.valid()) {
       setDropGap(-1, false, 0);
@@ -1593,6 +1546,7 @@ final class CodeEditor extends BorderPane {
   void clearDrop() {
     dropTarget = null;
     dropSnippet = null;
+    caretNote = null;
     dropLayer.getChildren().clear();
     setDropGap(-1, false, 0);
   }
@@ -1732,31 +1686,76 @@ final class CodeEditor extends BorderPane {
 
   /** A reporter: a caret where it would go in the line. */
   private void showDropCaret(int offset) {
-    String text = area.getText();
-    java.util.Optional<javafx.geometry.Bounds> character;
-    double x;
-    if (offset < text.length() && text.charAt(offset) != '\n') {
-      character = area.getCharacterBoundsOnScreen(offset, offset + 1);
-      x = character.map(javafx.geometry.Bounds::getMinX).orElse(Double.NaN);
-    } else if (offset > 0 && text.charAt(offset - 1) != '\n') {
-      character = area.getCharacterBoundsOnScreen(offset - 1, offset);
-      x = character.map(javafx.geometry.Bounds::getMaxX).orElse(Double.NaN);
-    } else {
-      character = java.util.Optional.empty();
-      x = textColumn()[0];
-    }
-    var visible = area.allParToVisibleParIndex(area.offsetToPosition(offset,
-        org.fxmisc.richtext.model.TwoDimensional.Bias.Forward).getMajor());
-    if (Double.isNaN(x) || visible.isEmpty()) return;
-    javafx.geometry.Bounds line = area.getVisibleParagraphBoundsOnScreen(visible.get());
+    javafx.geometry.Bounds line = caretOnScreen(offset);
+    if (line == null) return;
     Region caret = new Region();
     caret.getStyleClass().add("drop-caret");
     dropLayer.getChildren().add(caret);
     caret.applyCss();
     caret.autosize();
     caret.resize(caret.getWidth(), line.getHeight());
-    javafx.geometry.Point2D at = dropLayer.screenToLocal(x, line.getMinY());
+    javafx.geometry.Point2D at = dropLayer.screenToLocal(line.getMinX(), line.getMinY());
     caret.relocate(at.getX() - caret.getWidth() / 2, at.getY());
+  }
+
+  /** Where a caret at {@code offset} stands on screen, as tall as its line; null: not shown. */
+  private javafx.geometry.Bounds caretOnScreen(int offset) {
+    String text = area.getText();
+    double x;
+    if (offset < text.length() && text.charAt(offset) != '\n') {
+      x = area.getCharacterBoundsOnScreen(offset, offset + 1)
+          .map(javafx.geometry.Bounds::getMinX).orElse(Double.NaN);
+    } else if (offset > 0 && text.charAt(offset - 1) != '\n') {
+      // a character's bounds reach a little past it: its right end is where the next one starts
+      x = area.getCharacterBoundsOnScreen(offset - 1, offset)
+          .map(b -> b.getMinX() + textColumn()[1]).orElse(Double.NaN);
+    } else {
+      x = textColumn()[0];
+    }
+    var visible = area.allParToVisibleParIndex(area.offsetToPosition(offset,
+        org.fxmisc.richtext.model.TwoDimensional.Bias.Forward).getMajor());
+    if (Double.isNaN(x) || visible.isEmpty()) return null;
+    javafx.geometry.Bounds line = area.getVisibleParagraphBoundsOnScreen(visible.get());
+    return new javafx.geometry.BoundingBox(x, line.getMinY(), 0, line.getHeight());
+  }
+
+  /** A block that can't go where the caret is: a note under the caret says why (for a while). */
+  private boolean refuseAtCaret(BlockDrop.Target target) {
+    String message = switch (target.problem()) {
+      case BODY -> I18n.t("caret.body");
+      case STATEMENT -> I18n.t("caret.statement");
+      case CLASS_BODY -> I18n.t("caret.classbody");
+      case MEMBER -> I18n.t("caret.member");
+      case EXISTS -> I18n.t("drop.exists", String.valueOf(target.existingLine()));
+      case TEXT -> I18n.t("caret.text");
+    };
+    area.requestFocus();
+    area.requestFollowCaret();
+    area.layout();
+    hideCaretNote();
+    boolean onScreen = getScene() != null && getScene().getWindow() != null;
+    javafx.geometry.Bounds caret = onScreen ? caretOnScreen(area.getSelection().getStart()) : null;
+    // under the caret, else (scrolled away) at the top of the code
+    javafx.geometry.Point2D at = caret == null ? new javafx.geometry.Point2D(60, 8)
+        : dropLayer.screenToLocal(caret.getMinX(), caret.getMaxY() + 4);
+    caretNote = showNote(message, at);
+    caretNoteTimer.playFromStart();
+    return false;
+  }
+
+  /** The note a refused insertion left at the caret: gone after a while or the next edit. */
+  private Label caretNote;
+  private final javafx.animation.PauseTransition caretNoteTimer =
+      new javafx.animation.PauseTransition(javafx.util.Duration.seconds(6));
+
+  private void hideCaretNote() {
+    if (caretNote != null) dropLayer.getChildren().remove(caretNote);
+    caretNote = null;
+  }
+
+  /** The note a refused insertion shows at the caret, if any (tests). */
+  String caretNoteText() {
+    return caretNote == null ? null : caretNote.getText();
   }
 
   /** Where a block can't go: a note beside the pointer says why. */
@@ -1769,6 +1768,11 @@ final class CodeEditor extends BorderPane {
       case EXISTS -> I18n.t("drop.exists", String.valueOf(target.existingLine()));
       case TEXT -> I18n.t("drop.text");
     };
+    showNote(message, dropLayer.screenToLocal(screenX + 16, screenY + 20));
+  }
+
+  /** A note with its top left corner at {@code at} (in the layer), kept inside the code's view. */
+  private Label showNote(String message, javafx.geometry.Point2D at) {
     Label note = new Label(message);
     note.getStyleClass().add("drop-note");
     note.setWrapText(true);
@@ -1776,11 +1780,10 @@ final class CodeEditor extends BorderPane {
     dropLayer.getChildren().add(note);
     note.applyCss();
     note.autosize();
-    javafx.geometry.Point2D at = dropLayer.screenToLocal(screenX, screenY);
-    double x = Math.max(4, Math.min(at.getX() + 16, dropLayer.getWidth() - note.getWidth() - 4));
-    double y = at.getY() + 20;
-    if (y + note.getHeight() > dropLayer.getHeight() - 4) y = at.getY() - note.getHeight() - 12;
-    note.relocate(x, Math.max(4, y));
+    double x = Math.max(4, Math.min(at.getX(), dropLayer.getWidth() - note.getWidth() - 4));
+    double y = Math.max(4, Math.min(at.getY(), dropLayer.getHeight() - note.getHeight() - 4));
+    note.relocate(x, y);
+    return note;
   }
 
   /**

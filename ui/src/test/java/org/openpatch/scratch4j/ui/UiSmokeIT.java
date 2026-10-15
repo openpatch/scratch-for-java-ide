@@ -98,8 +98,18 @@ class UiSmokeIT {
         palette.selectFirst();
         org.openpatch.scratch4j.core.api.ApiMethod first = palette.selectedItem();
         assertThat(first).isNotNull();
-        area.insertBlock(BlockPalette.snippet(first));
+        // after the class a block can't go: nothing changes, a note says why
+        String beforeBlock = area.content();
+        assertThat(area.insertBlock(BlockPalette.snippet(first))).isFalse();
+        assertThat(area.content()).isEqualTo(beforeBlock);
+        assertThat(area.caretNoteText()).isNotBlank();
+        // inside run() it goes in
+        area.area().moveTo(beforeBlock.indexOf("public void run() {")
+            + "public void run() {".length());
+        assertThat(area.insertBlock(BlockPalette.snippet(first))).isTrue();
         assertThat(area.content()).contains(BlockPalette.snippet(first).strip());
+        area.area().replaceText(beforeBlock);
+        area.area().moveTo(area.area().getLength());
 
         // type-aware completion: Stage members after "this.", with javadoc details
         int runBody = area.content().indexOf("public void run() {") + "public void run() {".length();
