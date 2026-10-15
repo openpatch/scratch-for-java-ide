@@ -105,6 +105,21 @@
   -fx-icon-color: -s-header-fg;
 }
 
+/* dividers in the header: short and faint in the header's own colour, not the
+   theme's full-height border line (bright white on the light theme's blue) */
+.header .separator:vertical {
+  -fx-padding: 0 4 0 4;
+  -fx-max-height: 22;
+}
+
+.header .separator:vertical > .line {
+  -fx-border-color: transparent transparent transparent -s-header-fg;
+  -fx-border-width: 0 0 0 1;
+  -fx-border-insets: 0;
+  -fx-padding: 0;
+  -fx-opacity: 0.35;
+}
+
 .app-logo {
   -fx-padding: 0 4 0 2;
 }
