@@ -11,9 +11,6 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.skin.VirtualFlow;
-import javafx.scene.input.ClipboardContent;
-import javafx.scene.input.DataFormat;
-import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
@@ -42,10 +39,23 @@ import java.util.function.Consumer;
 final class BlockPalette extends BorderPane {
 
   /**
-   * A block dragged from the palette carries its Java code as text and, in
-   * this format, its colour's style class: the code editor shows where it lands.
+   * Where blocks dragged out of the palette go: the code beside it. The
+   * palette follows the pointer itself (no system drag and drop, which
+   * desktops deliver unevenly) and tells the target about every move.
    */
-  static final DataFormat BLOCK = new DataFormat("application/x-scratch4j-block");
+  interface DragTarget {
+    /** A drag begins: {@code chip} is the block as drawn, held at {@code grabX, grabY}. */
+    void startBlockDrag(Node chip, double grabX, double grabY);
+
+    /** The block ({@code category}: its colour's style class) is at a screen point. */
+    void moveBlockDrag(String snippet, String category, double screenX, double screenY);
+
+    /** Let go at a screen point: the block goes in there if it may. */
+    void endBlockDrag(String snippet, double screenX, double screenY);
+  }
+
+  /** How far the pointer moves before a press on a block becomes a drag. */
+  private static final double DRAG_DISTANCE = 5;
 
   /** Scratch's own category order; other categories follow alphabetically. */
   private static final List<String> ORDER = List.of("Motion", "Looks", "Sound", "Events",
@@ -72,6 +82,7 @@ final class BlockPalette extends BorderPane {
   private VisualMode.PaletteContext context = VisualMode.PaletteContext.NONE;
   private boolean open = true;
   private Consumer<Boolean> onOpenChanged = shown -> { };
+  private DragTarget dragTarget;
   /** The rail is being set from the list's scrolling (not a click). */
   private boolean following;
   /** The category last clicked: it stays current while its heading is in view. */
@@ -139,6 +150,11 @@ final class BlockPalette extends BorderPane {
     setMaxWidth(Region.USE_PREF_SIZE);
     refill();
     applyOpen();
+  }
+
+  /** Where dragged blocks go; null: blocks are not dragged. */
+  void setDragTarget(DragTarget target) {
+    this.dragTarget = target;
   }
 
   /** Called when the student folds or unfolds the pane (not when the host does). */
@@ -440,21 +456,57 @@ final class BlockPalette extends BorderPane {
 
   private final class BlockCell extends ListCell<Entry> {
 
+    private double pressX;
+    private double pressY;
+    /** The block being dragged from this cell, else null. */
+    private ApiMethod dragged;
+
     BlockCell() {
       // never wider than the list: no horizontal scrolling
       setPrefWidth(0);
-      setOnDragDetected(e -> {
-        if (getItem() == null || getItem().isHeading()) {
-          return;
+      // the pointer keeps sending its moves here until it is let go
+      setOnMousePressed(e -> {
+        pressX = e.getScreenX();
+        pressY = e.getScreenY();
+        dragged = null;
+      });
+      setOnMouseDragged(e -> {
+        if (dragged == null) {
+          if (dragTarget == null || getItem() == null || getItem().isHeading()
+              || !e.isPrimaryButtonDown()
+              || Math.hypot(e.getScreenX() - pressX, e.getScreenY() - pressY) < DRAG_DISTANCE) {
+            return;
+          }
+          dragged = getItem().method();
+          startDrag();
         }
-        var board = startDragAndDrop(TransferMode.COPY);
-        ClipboardContent content = new ClipboardContent();
-        content.putString(snippet(getItem().method()));
-        content.put(BLOCK, cssKey(getItem().method().category()));
-        board.setContent(content);
-        board.setDragView(snapshot(null, null));
+        dragTarget.moveBlockDrag(snippet(dragged), cssKey(dragged.category()),
+            e.getScreenX(), e.getScreenY());
         e.consume();
       });
+      setOnMouseReleased(e -> {
+        if (dragged != null) {
+          ApiMethod method = dragged;
+          dragged = null;
+          dragTarget.endBlockDrag(snippet(method), e.getScreenX(), e.getScreenY());
+          e.consume();
+        }
+      });
+    }
+
+    /** The block as drawn follows the pointer, held where it was pressed. */
+    private void startDrag() {
+      Node block = getGraphic() instanceof VBox box && !box.getChildren().isEmpty()
+          ? box.getChildren().get(0) : this;
+      var params = new javafx.scene.SnapshotParameters();
+      params.setFill(javafx.scene.paint.Color.TRANSPARENT);
+      var chip = new javafx.scene.image.ImageView(block.snapshot(params, null));
+      javafx.geometry.Point2D grab = block.screenToLocal(pressX, pressY);
+      double grabX = grab == null ? 0 : Math.max(0, Math.min(grab.getX(),
+          block.getLayoutBounds().getWidth()));
+      double grabY = grab == null ? 0 : Math.max(0, Math.min(grab.getY(),
+          block.getLayoutBounds().getHeight()));
+      dragTarget.startBlockDrag(chip, grabX, grabY);
     }
 
     @Override

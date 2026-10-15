@@ -1008,6 +1008,28 @@
   -fx-opacity: 0.85;
 }
 
+/* a value block in the line: its code on a rounded patch of its colour */
+.drop-ghost-value-box {
+  -fx-background-color: -s-code-bg;
+  -fx-background-radius: 999;
+}
+
+.drop-ghost-value {
+  -fx-padding: 0 4 0 4;
+  -fx-opacity: 1;
+}
+
+.drop-ghost-value-tint {
+  -fx-background-color: -color-accent-emphasis;
+  -fx-background-radius: 999;
+  -fx-opacity: 0.22;
+}
+
+/* the block itself while it is dragged from the palette */
+.block-drag-chip {
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.28), 12, 0, 0, 3);
+}
+
 .drop-caret {
   -fx-background-color: -color-accent-emphasis;
   -fx-min-width: 2;

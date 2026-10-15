@@ -209,8 +209,10 @@ class BlockDropIT {
             public void run() {
           """);
       code.undo();
-
-      // a reporter: a caret in the line, then the value right there
+    });
+    LayoutIT.settle();
+    LayoutIT.onFx(() -> {
+      // a reporter: its code in the line where it goes, a caret at its start
       String reporter = "this.getX()";
       int argument = CAT.indexOf("this.move(") + "this.move(".length();
       Bounds character = code.area().getCharacterBoundsOnScreen(argument, argument + 1)
@@ -220,6 +222,16 @@ class BlockDropIT {
       var inline = code.previewBlock(reporter, "cat-motion", x, y);
       assertThat(inline.valid()).isTrue();
       assertThat(code.dropLayer().lookup(".drop-caret")).isNotNull();
+      Label value = (Label) code.dropLayer().lookup(".drop-ghost-value");
+      assertThat(value.getText()).isEqualTo(reporter);
+      Bounds shown = value.localToScreen(value.getLayoutBounds());
+      assertThat(shown.getMinY()).isCloseTo(lineBounds(code, line("this.move(speed)")).getMinY(),
+          within(1.0));
+      assertThat(shown.getMinX()).isCloseTo(character.getMinX(), within(1.5));
+      UiSmokeIT.snapshot(code, Path.of("target/block-drop-value.png"));
+      Bounds after = code.area().getCharacterBoundsOnScreen(argument, argument + 1).orElseThrow();
+      x = after.getMinX() + 1;
+      y = after.getMinY() + after.getHeight() / 2;
       assertThat(code.dropBlock(reporter, x, y)).isTrue();
       assertThat(code.area().getText()).contains("this.move(this.getX()speed);");
     });
@@ -288,6 +300,99 @@ class BlockDropIT {
           """);
       code.undo();
       assertThat(area.getText()).isEqualTo(CAT);
+    });
+  }
+
+  /** A mouse event at a screen point, with the primary button down while it is dragged. */
+  private static void mouse(javafx.scene.Node node,
+      javafx.event.EventType<javafx.scene.input.MouseEvent> type, double screenX, double screenY) {
+    javafx.geometry.Point2D local = node.screenToLocal(screenX, screenY);
+    var eventType = type;
+    boolean down = type != javafx.scene.input.MouseEvent.MOUSE_RELEASED;
+    javafx.event.Event.fireEvent(node, new javafx.scene.input.MouseEvent(eventType,
+        local.getX(), local.getY(), screenX, screenY, javafx.scene.input.MouseButton.PRIMARY, 1,
+        false, false, false, false, down, false, false, true, false, true, null));
+  }
+
+  @Test
+  void aBlockDraggedFromThePaletteFollowsThePointerAndDropsWhereItsPreviewShowed()
+      throws Exception {
+    LayoutIT.startFx();
+    AtomicReference<CodeEditor> editor = new AtomicReference<>();
+    AtomicReference<BlockPalette> palette = new AtomicReference<>();
+    LayoutIT.onFx(() -> {
+      CodeEditor code = new CodeEditor(tmp.resolve("Cat.java"), CAT, ApiIndex.load(), () -> tmp);
+      BlockPalette blocks = new BlockPalette(ApiIndex.load(), m -> { });
+      code.dockPalette(blocks);
+      Scene scene = new Scene(code, 1000, 520);
+      Theme.apply(scene);
+      Stage stage = new Stage();
+      stage.setScene(scene);
+      stage.show();
+      editor.set(code);
+      palette.set(blocks);
+    });
+    LayoutIT.settle();
+    CodeEditor code = editor.get();
+    AtomicReference<javafx.scene.control.ListCell<?>> cell = new AtomicReference<>();
+    AtomicReference<String> snippet = new AtomicReference<>();
+    LayoutIT.onFx(() -> {
+      // the first stack block shown
+      for (var node : palette.get().lookupAll(".list-cell")) {
+        if (node instanceof javafx.scene.control.ListCell<?> c
+            && c.getItem() instanceof BlockPalette.Entry entry && !entry.isHeading()
+            && BlockDrop.kindOf(BlockPalette.snippet(entry.method())) == BlockDrop.Kind.STATEMENT) {
+          cell.set(c);
+          snippet.set(BlockPalette.snippet(entry.method()));
+          break;
+        }
+      }
+      assertThat(cell.get()).isNotNull();
+    });
+    int ifLine = line("if (this.isTouchingEdge");
+    LayoutIT.onFx(() -> {
+      Bounds start = cell.get().localToScreen(cell.get().getLayoutBounds());
+      double[] over = over(code, ifLine, true);
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_PRESSED,
+          start.getMinX() + 20, start.getMinY() + 10);
+      // a little way: not yet a drag
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_DRAGGED,
+          start.getMinX() + 22, start.getMinY() + 11);
+      assertThat(code.lookup(".block-drag-chip")).isNull();
+      // over the palette: the block follows, the code shows nothing
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_DRAGGED,
+          start.getMinX() + 60, start.getMinY() + 30);
+      assertThat(code.lookup(".block-drag-chip")).isNotNull();
+      assertThat(ghostLines(code)).isEmpty();
+      // over the code: the preview opens a line above the if
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_DRAGGED, over[0], over[1]);
+      assertThat(ghostLines(code)).containsExactly(snippet.get().strip());
+    });
+    LayoutIT.settle();
+    LayoutIT.onFx(() -> {
+      double[] over = over(code, ifLine, true);
+      // the line opened under the pointer: moving within it keeps the preview
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_DRAGGED, over[0] + 5, over[1]);
+      assertThat(ghostLines(code)).containsExactly(snippet.get().strip());
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_RELEASED, over[0] + 5, over[1]);
+      assertThat(code.lookup(".block-drag-chip")).isNull();
+      assertThat(code.dropLayer().getChildren()).isEmpty();
+      assertThat(code.area().getText()).contains("    this.move(speed);\n    "
+          + snippet.get().strip() + "\n    if (this.isTouchingEdge()) {");
+      code.undo();
+
+      // let go over the palette: nothing goes in
+      Bounds start = cell.get().localToScreen(cell.get().getLayoutBounds());
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_PRESSED,
+          start.getMinX() + 20, start.getMinY() + 10);
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_DRAGGED, over[0], over[1]);
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_DRAGGED,
+          start.getMinX() + 40, start.getMinY() + 10);
+      assertThat(ghostLines(code)).isEmpty();
+      mouse(cell.get(), javafx.scene.input.MouseEvent.MOUSE_RELEASED,
+          start.getMinX() + 40, start.getMinY() + 10);
+      assertThat(code.area().getText()).isEqualTo(CAT);
+      assertThat(code.lookup(".block-drag-chip")).isNull();
     });
   }
 }

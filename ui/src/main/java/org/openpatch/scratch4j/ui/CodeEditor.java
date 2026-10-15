@@ -60,7 +60,7 @@ import java.util.stream.Stream;
  * keywords, words in the file, and built-in/project asset names inside
  * {@code addCostume("…")}, {@code addSound("…")} ...).
  */
-final class CodeEditor extends BorderPane {
+final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   /** One diagnostic shown in the editor (1-based line/column; column 0 = whole line). */
   record Diagnostic(long line, long column, String message, String explanation,
@@ -199,7 +199,11 @@ final class CodeEditor extends BorderPane {
     codeColumn.getStyleClass().add("code-column");
     codeSide.setCenter(codeColumn);
     codeSide.getStyleClass().add("code-side");
-    setCenter(codeSide);
+    // a block dragged from the palette is drawn above both the palette and the code
+    dragLayer.setMouseTransparent(true);
+    dragLayer.setManaged(false);
+    codeHolder.getChildren().setAll(codeSide, dragLayer);
+    setCenter(codeHolder);
     installLinks();
     installContextMenu();
     area.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, e -> {
@@ -223,6 +227,9 @@ final class CodeEditor extends BorderPane {
   private final BorderPane codeColumn = new BorderPane();
   /** The block pane (when docked here) and the code. */
   private final BorderPane codeSide = new BorderPane();
+  /** The code side with the layer a block dragged from the palette is drawn on. */
+  private final StackPane codeHolder = new StackPane();
+  private final javafx.scene.layout.Pane dragLayer = new javafx.scene.layout.Pane();
   private javafx.scene.Node sidePanel;
   private String sidePanelKey;
   private javafx.scene.control.SplitPane split;
@@ -255,7 +262,7 @@ final class CodeEditor extends BorderPane {
     sidePanel = null;
     sidePanelKey = null;
     visualOnly = false;
-    setCenter(codeSide);
+    setCenter(codeHolder);
   }
 
   /** The visual editor alone (the code hidden), or back beside the code. */
@@ -282,7 +289,7 @@ final class CodeEditor extends BorderPane {
       setCenter(sidePanel);
     } else {
       setCenter(null);
-      split.getItems().setAll(codeSide, sidePanel);
+      split.getItems().setAll(codeHolder, sidePanel);
       split.setDividerPositions(splitPosition);
       setCenter(split);
     }
@@ -291,10 +298,13 @@ final class CodeEditor extends BorderPane {
   /** The block pane at the left of the code (one pane, moved to the tab shown). */
   void dockPalette(javafx.scene.Node palette) {
     if (codeSide.getLeft() != palette) codeSide.setLeft(palette);
+    if (palette instanceof BlockPalette blocks) blocks.setDragTarget(this);
   }
 
   void undockPalette() {
+    if (codeSide.getLeft() instanceof BlockPalette blocks) blocks.setDragTarget(null);
     codeSide.setLeft(null);
+    endDragChip();
   }
 
   /** The block pane docked here, or null. */
@@ -1505,30 +1515,20 @@ final class CodeEditor extends BorderPane {
     area.setOnDragOver(e -> {
       var board = e.getDragboard();
       if (e.getGestureSource() != area && board.hasString()) {
-        if (board.hasContent(BlockPalette.BLOCK)) {
-          String category = (String) board.getContent(BlockPalette.BLOCK);
-          var target = previewBlock(board.getString(), category, e.getScreenX(), e.getScreenY());
-          if (target.valid()) e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
-        } else {
-          e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
-          area.moveTo(area.hit(e.getX(), e.getY()).getInsertionIndex());
-        }
+        e.acceptTransferModes(javafx.scene.input.TransferMode.COPY);
+        area.moveTo(area.hit(e.getX(), e.getY()).getInsertionIndex());
       }
       e.consume();
     });
-    area.setOnDragExited(e -> clearDrop());
     area.setOnDragDropped(e -> {
       var board = e.getDragboard();
       boolean done = false;
-      if (board.hasString() && board.hasContent(BlockPalette.BLOCK)) {
-        done = dropBlock(board.getString(), e.getScreenX(), e.getScreenY());
-      } else if (board.hasString()) {
+      if (board.hasString()) {
         int index = area.hit(e.getX(), e.getY()).getInsertionIndex();
         area.insertText(index, board.getString());
         area.moveTo(index + board.getString().length());
         done = true;
       }
-      clearDrop();
       e.setDropCompleted(done);
       e.consume();
     });
@@ -1536,10 +1536,61 @@ final class CodeEditor extends BorderPane {
     area.caretPositionProperty().addListener((o, old, now) -> hideCaretNote());
     area.textProperty().addListener((o, old, now) -> hideCaretNote());
     area.addEventHandler(KeyEvent.KEY_PRESSED, e -> hideCaretNote());
-    // a gesture that ended elsewhere leaves no preview behind
-    area.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED, e -> {
-      if (dropTarget != null) clearDrop();
-    });
+  }
+
+  // the palette's drag: the block follows the pointer, over the code it shows where it goes
+
+  private Node dragChip;
+  private double grabX;
+  private double grabY;
+
+  @Override
+  public void startBlockDrag(Node chip, double grabX, double grabY) {
+    this.grabX = grabX;
+    this.grabY = grabY;
+    dragChip = chip;
+    chip.getStyleClass().add("block-drag-chip");
+    dragLayer.getChildren().setAll(chip);
+    dragLayer.resizeRelocate(0, 0, codeHolder.getWidth(), codeHolder.getHeight());
+    setCursor(javafx.scene.Cursor.CLOSED_HAND);
+  }
+
+  @Override
+  public void moveBlockDrag(String snippet, String category, double screenX, double screenY) {
+    if (dragChip != null) {
+      javafx.geometry.Point2D at = dragLayer.screenToLocal(screenX, screenY);
+      dragChip.relocate(at.getX() - grabX, at.getY() - grabY);
+    }
+    if (overCode(screenX, screenY)) {
+      BlockDrop.Target target = previewBlock(snippet, category, screenX, screenY);
+      // the preview in the code is what counts: the block itself fades over it
+      if (dragChip != null) dragChip.setOpacity(target.valid() ? 0.35 : 0.85);
+    } else {
+      if (dropTarget != null || !dropLayer.getChildren().isEmpty()) clearDrop();
+      if (dragChip != null) dragChip.setOpacity(0.85);
+    }
+  }
+
+  @Override
+  public void endBlockDrag(String snippet, double screenX, double screenY) {
+    endDragChip();
+    if (overCode(screenX, screenY)) {
+      dropBlock(snippet, screenX, screenY);
+    } else {
+      clearDrop();
+    }
+  }
+
+  private void endDragChip() {
+    dragChip = null;
+    dragLayer.getChildren().clear();
+    setCursor(null);
+  }
+
+  /** Whether a screen point is over the code (not the palette, not outside the editor). */
+  private boolean overCode(double screenX, double screenY) {
+    javafx.geometry.Bounds code = codeColumn.localToScreen(codeColumn.getLayoutBounds());
+    return code != null && code.contains(screenX, screenY);
   }
 
   /**
@@ -1549,6 +1600,10 @@ final class CodeEditor extends BorderPane {
   BlockDrop.Target previewBlock(String snippet, String category, double screenX,
       double screenY) {
     BlockDrop.Target target = blockTarget(snippet, screenX, screenY);
+    if (target.valid() && target.equals(dropTarget) && snippet.equals(dropSnippet)
+        && !dropLayer.getChildren().isEmpty()) {
+      return target; // the same place: the preview stays as it is
+    }
     dropTarget = target;
     dropSnippet = snippet;
     caretNote = null;
@@ -1558,7 +1613,7 @@ final class CodeEditor extends BorderPane {
       showDropNote(target, screenX, screenY);
     } else if (target.kind() == BlockDrop.Kind.EXPRESSION) {
       setDropGap(-1, false, 0);
-      showDropCaret(target.insertion().start());
+      showDropValue(target.insertion().start(), snippet, category);
     } else {
       showDropLines(target, category);
     }
@@ -1721,18 +1776,33 @@ final class CodeEditor extends BorderPane {
     ghost.relocate(at.getX() - GHOST_INSET, at.getY());
   }
 
-  /** A reporter: a caret where it would go in the line. */
-  private void showDropCaret(int offset) {
+  /** A reporter: its code in the line where it would go, a caret at its start. */
+  private void showDropValue(int offset, String snippet, String category) {
     javafx.geometry.Bounds line = caretOnScreen(offset);
     if (line == null) return;
+    Label code = new Label(snippet);
+    code.getStyleClass().addAll("drop-ghost-code", "drop-ghost-value");
+    code.setMinHeight(line.getHeight());
+    code.setPrefHeight(line.getHeight());
+    code.setMaxHeight(line.getHeight());
+    Region tint = new Region();
+    tint.getStyleClass().addAll("drop-ghost-value-tint", category);
+    tint.setManaged(false);
     Region caret = new Region();
     caret.getStyleClass().add("drop-caret");
-    dropLayer.getChildren().add(caret);
+    caret.setManaged(false);
+    StackPane ghost = new StackPane(tint, code, caret);
+    ghost.getStyleClass().add("drop-ghost-value-box");
+    ghost.setAlignment(Pos.TOP_LEFT);
+    dropLayer.getChildren().add(ghost);
+    ghost.applyCss();
+    ghost.autosize();
+    // over the text after it, as if the text had moved aside
+    tint.resizeRelocate(0, 0, ghost.getWidth(), ghost.getHeight());
     caret.applyCss();
-    caret.autosize();
-    caret.resize(caret.getWidth(), line.getHeight());
+    caret.resizeRelocate(-1, 0, Math.max(2, caret.prefWidth(-1)), ghost.getHeight());
     javafx.geometry.Point2D at = dropLayer.screenToLocal(line.getMinX(), line.getMinY());
-    caret.relocate(at.getX() - caret.getWidth() / 2, at.getY());
+    ghost.relocate(at.getX(), at.getY());
   }
 
   /** Where a caret at {@code offset} stands on screen, as tall as its line; null: not shown. */
