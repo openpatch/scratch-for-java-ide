@@ -35,6 +35,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.util.StringConverter;
+import org.openpatch.scratch4j.core.io.EditorHistory;
 import org.openpatch.scratch4j.core.io.LocalHistory;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.tiled.TmxCompatibility;
@@ -89,6 +90,10 @@ final class MapEditorView extends BorderPane implements SavableTool {
   private final Map<Path, Image> images = new HashMap<>();
   private final Deque<TmxDocument.State> undo = new ArrayDeque<>();
   private final Deque<TmxDocument.State> redo = new ArrayDeque<>();
+  /** The undo steps as kept in the editor history, so a save writes only new ones. */
+  private final java.util.Map<TmxDocument.State, byte[]> xmlOfState =
+      new java.util.IdentityHashMap<>();
+  private static final String HISTORY = "map";
 
   private Tool tool = Tool.PAINT;
   private double zoom = 2;
@@ -135,6 +140,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
     this.file = file;
     this.onSaved = onSaved;
     this.doc = TmxDocument.open(file);
+    loadHistory();
     getStyleClass().add("map-editor");
 
     setTop(new VBox(toolbar(), banner));
@@ -1727,6 +1733,55 @@ final class MapEditorView extends BorderPane implements SavableTool {
 
   // --- undo, save, use in a stage ---------------------------------------------------------------
 
+  /** The undo and redo steps kept when the map was last saved (if it is unchanged since). */
+  private void loadHistory() {
+    var steps = EditorHistory.read(project.root(), file, HISTORY);
+    try {
+      for (byte[] step : steps.undo()) undo.addLast(stateOf(step));
+      for (byte[] step : steps.redo()) redo.addLast(stateOf(step));
+    } catch (IOException | RuntimeException e) {
+      undo.clear(); // steps from a map the editor can't read: none
+      redo.clear();
+    }
+  }
+
+  private TmxDocument.State stateOf(byte[] step) throws IOException {
+    TmxDocument.State state = TmxDocument.open(file,
+        new String(step, java.nio.charset.StandardCharsets.UTF_8)).snapshot();
+    xmlOfState.put(state, step);
+    return state;
+  }
+
+  /** Keeps the undo and redo steps with the map just saved as {@code xml}. */
+  private void saveHistory(String xml) {
+    try {
+      // the steps are written by a copy of the map: the one in the editor stays as it is
+      TmxDocument scratch = TmxDocument.open(file, xml);
+      java.util.Map<TmxDocument.State, byte[]> known = new java.util.IdentityHashMap<>();
+      List<byte[]> undoSteps = new ArrayList<>();
+      List<byte[]> redoSteps = new ArrayList<>();
+      for (TmxDocument.State state : undo) undoSteps.add(xmlOf(scratch, state, known));
+      for (TmxDocument.State state : redo) redoSteps.add(xmlOf(scratch, state, known));
+      xmlOfState.clear();
+      xmlOfState.putAll(known);
+      EditorHistory.write(project.root(), file, HISTORY,
+          new EditorHistory.Steps(undoSteps, redoSteps, null));
+    } catch (IOException | RuntimeException e) {
+      status.setText(I18n.t("history.notkept", e.getMessage()));
+    }
+  }
+
+  private byte[] xmlOf(TmxDocument scratch, TmxDocument.State state,
+      java.util.Map<TmxDocument.State, byte[]> known) {
+    byte[] xml = xmlOfState.get(state);
+    if (xml == null) {
+      scratch.restore(state);
+      xml = scratch.toXml().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+    known.put(state, xml);
+    return xml;
+  }
+
   private void record() {
     undo.push(doc.snapshot());
     if (undo.size() > 60) undo.removeLast();
@@ -1771,6 +1826,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
       reloadAll();
       onSaved.accept(file);
       status.setText(I18n.t("status.saved"));
+      saveHistory(xml);
     } catch (IOException | RuntimeException e) {
       alert(I18n.t("error.save", e.getMessage()));
     }

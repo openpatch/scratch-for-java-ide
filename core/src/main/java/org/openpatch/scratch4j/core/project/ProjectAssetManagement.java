@@ -129,6 +129,15 @@ public final class ProjectAssetManagement {
    */
   static Path relocate(ScratchProject project, Path source, Path target, FileUsages.Mode mode)
       throws IOException {
+    Path moved = relocateFiles(project, source, target, mode);
+    // the editors' undo steps go along
+    org.openpatch.scratch4j.core.io.EditorHistory.move(project.root().toRealPath(), source,
+        moved);
+    return moved;
+  }
+
+  private static Path relocateFiles(ScratchProject project, Path source, Path target,
+      FileUsages.Mode mode) throws IOException {
     boolean folder = Files.isDirectory(source);
     if (folder) {
       for (Path file : files(source)) {

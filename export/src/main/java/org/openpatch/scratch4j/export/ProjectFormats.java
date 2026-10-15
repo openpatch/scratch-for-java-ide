@@ -72,6 +72,7 @@ public final class ProjectFormats {
     return first.equals("export") || first.equals("target") || first.equals("build")
         || first.equals("out") || relative.toString().replace('\\', '/').startsWith(".scratch4j/build")
         || relative.toString().replace('\\', '/').startsWith(".scratch4j/history")
+        || relative.toString().replace('\\', '/').startsWith(".scratch4j/editor")
         || relative.toString().replace('\\', '/').startsWith(".scratch4j/trash")
         || relative.getFileName().toString().endsWith(".class")
         || relative.getFileName().toString().endsWith(".ctxt");

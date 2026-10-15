@@ -32,6 +32,7 @@ import javafx.scene.layout.Background;
 import javafx.scene.control.Separator;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import org.openpatch.scratch4j.core.io.EditorHistory;
 import org.openpatch.scratch4j.core.io.LocalHistory;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.region.SpriteRegionWriter;
@@ -197,6 +198,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         e.consume();
       }
     });
+    loadHistory();
     updateApplyButton();
     updateStatus();
     redrawOverlay();
@@ -1646,9 +1648,107 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       status.setText(I18n.t("status.saved"));
       dirty.set(false);
       onSaved.accept(file);
+      saveHistory();
     } catch (IOException e) {
       alert(I18n.t("error.save", e.getMessage()));
     }
+  }
+
+  // --- layers and undo steps kept with the file --------------------------------
+
+  private static final String HISTORY = "image";
+  /** The undo steps as kept in the editor history, so a save encodes only new ones. */
+  private final java.util.Map<Snapshot, byte[]> encoded = new java.util.IdentityHashMap<>();
+
+  /**
+   * The layers and the undo and redo steps kept when the picture was last
+   * saved, if it is unchanged since (the file holds the layers flattened).
+   */
+  private void loadHistory() {
+    if (project == null) return;
+    var steps = EditorHistory.read(project.root(), file, HISTORY);
+    try {
+      List<Snapshot> undo = new ArrayList<>();
+      List<Snapshot> redo = new ArrayList<>();
+      for (byte[] step : steps.undo()) undo.add(snapshotOf(step));
+      for (byte[] step : steps.redo()) redo.add(snapshotOf(step));
+      Snapshot current = steps.current() == null ? null : snapshotOf(steps.current());
+      if (current != null && (current.layers().get(0).getWidth() != image.getWidth()
+          || current.layers().get(0).getHeight() != image.getHeight())) {
+        return;
+      }
+      undoStack.addAll(undo);
+      redoStack.addAll(redo);
+      if (current != null) restore(current);
+    } catch (IOException | RuntimeException e) {
+      undoStack.clear(); // steps the editor can't read: none
+      redoStack.clear();
+    }
+  }
+
+  private void saveHistory() {
+    if (project == null) return;
+    try {
+      java.util.Map<Snapshot, byte[]> known = new java.util.IdentityHashMap<>();
+      List<byte[]> undo = new ArrayList<>();
+      List<byte[]> redo = new ArrayList<>();
+      for (Snapshot step : undoStack) undo.add(bytesOf(step, known));
+      for (Snapshot step : redoStack) redo.add(bytesOf(step, known));
+      encoded.clear();
+      encoded.putAll(known);
+      // one layer is the file itself; more are kept beside it
+      byte[] current = layers.size() == 1 ? null : encode(snapshot());
+      EditorHistory.write(project.root(), file, HISTORY,
+          new EditorHistory.Steps(undo, redo, current));
+    } catch (IOException | RuntimeException e) {
+      status.setText(I18n.t("history.notkept", e.getMessage()));
+    }
+  }
+
+  private byte[] bytesOf(Snapshot step, java.util.Map<Snapshot, byte[]> known)
+      throws IOException {
+    byte[] bytes = encoded.get(step);
+    if (bytes == null) bytes = encode(step);
+    known.put(step, bytes);
+    return bytes;
+  }
+
+  /** The layers as PNGs, bottom first, each with whether it shows, and the active one. */
+  private static byte[] encode(Snapshot step) throws IOException {
+    return EditorHistory.encode(out -> {
+      out.writeInt(step.active());
+      out.writeInt(step.layers().size());
+      for (int i = 0; i < step.layers().size(); i++) {
+        out.writeBoolean(step.visible().get(i));
+        java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+        if (!ImageIO.write(SwingFXUtils.fromFXImage(step.layers().get(i), null), "png", png)) {
+          throw new IOException("no PNG writer");
+        }
+        out.writeInt(png.size());
+        png.writeTo(out);
+      }
+    });
+  }
+
+  private Snapshot snapshotOf(byte[] bytes) throws IOException {
+    Snapshot step = EditorHistory.decode(bytes, in -> {
+      int active = in.readInt();
+      int count = in.readInt();
+      if (count < 1 || count > 1000) throw new IOException("not an image step");
+      List<WritableImage> layerImages = new ArrayList<>();
+      List<Boolean> visible = new ArrayList<>();
+      for (int i = 0; i < count; i++) {
+        visible.add(in.readBoolean());
+        byte[] png = in.readNBytes(in.readInt());
+        Image layer = new Image(new java.io.ByteArrayInputStream(png));
+        if (layer.isError()) throw new IOException("not an image step");
+        layerImages.add(new WritableImage(layer.getPixelReader(),
+            (int) layer.getWidth(), (int) layer.getHeight()));
+      }
+      return new Snapshot(layerImages, List.copyOf(visible), active);
+    });
+    encoded.put(step, bytes);
+    return step;
   }
 
   private void saveHitbox() {

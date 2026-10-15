@@ -222,6 +222,22 @@ public final class TmxDocument {
     } catch (Exception e) {
       throw new IOException("Cannot read " + file.getFileName() + ": " + e.getMessage(), e);
     }
+    return doc.read();
+  }
+
+  /** The map {@code xml} as if it were in {@code file} (its tilesets are found from there). */
+  public static TmxDocument open(Path file, String xml) throws IOException {
+    TmxDocument doc = new TmxDocument(file);
+    try {
+      doc.dom = builder().parse(new org.xml.sax.InputSource(new java.io.StringReader(xml)));
+    } catch (Exception e) {
+      throw new IOException("Cannot read " + file.getFileName() + ": " + e.getMessage(), e);
+    }
+    return doc.read();
+  }
+
+  private TmxDocument read() throws IOException {
+    TmxDocument doc = this;
     doc.mapElement = doc.dom.getDocumentElement();
     if (!"map".equals(doc.mapElement.getTagName())) {
       throw new IOException(file.getFileName() + " is not a Tiled map");
@@ -562,18 +578,40 @@ public final class TmxDocument {
     return new State(width, height, ts, ls, nextObjectId);
   }
 
+  /**
+   * Back to {@code state}. A state taken from another document (the map
+   * before it was saved and opened again, or read back from the editor's
+   * history) brings copies of its elements into this one.
+   */
   public void restore(State state) {
     width = state.width();
     height = state.height();
     tilesets.clear();
     for (Tileset t : state.tilesets()) {
-      tilesets.add(t.copy());
+      Tileset copy = t.copy();
+      copy.element = adopt(copy.element);
+      tilesets.add(copy);
     }
     layers.clear();
     for (Layer l : state.layers()) {
-      layers.add(l.copy());
+      Layer copy = l.copy();
+      copy.element = adopt(copy.element);
+      if (copy instanceof ObjectLayer objects) {
+        for (MapObject o : objects.objects) {
+          o.element = adopt(o.element);
+        }
+      }
+      layers.add(copy);
     }
     nextObjectId = state.nextObjectId();
+  }
+
+  /** An element of this document: itself, or a copy of one from another document. */
+  private Element adopt(Element element) {
+    if (element == null || element.getOwnerDocument() == dom) {
+      return element;
+    }
+    return (Element) dom.importNode(element, true);
   }
 
   // --- saving ------------------------------------------------------------------------

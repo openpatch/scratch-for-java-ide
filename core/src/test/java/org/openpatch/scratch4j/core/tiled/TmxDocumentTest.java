@@ -182,4 +182,27 @@ class TmxDocumentTest {
     assertThat(doc.tilesets.stream().filter(t -> t.name.equals(tileset.name)).findFirst()
         .orElseThrow().animations).doesNotContainKey(0);
   }
+
+  @Test
+  void aStateFromAnotherCopyOfTheMapIsRestoredAndSaved() throws Exception {
+    Path mapFile = tmp.resolve("level.tmx");
+    TmxDocument doc = TmxDocument.create(mapFile, 4, 3, 16, 16);
+    var objects = (TmxDocument.ObjectLayer) doc.layers.get(1);
+    doc.addObject(objects, TmxDocument.Shape.RECTANGLE, 8, 8, 16, 16);
+    ((TmxDocument.TileLayer) doc.layers.get(0)).gids[0] = 7;
+    doc.save();
+    TmxDocument.State before = doc.snapshot();
+
+    // the map saved and opened again (as the editor does), and read back from XML
+    TmxDocument reopened = TmxDocument.open(mapFile);
+    ((TmxDocument.TileLayer) reopened.layers.get(0)).gids[0] = 9;
+    reopened.restore(before);
+    reopened.restore(TmxDocument.open(mapFile, doc.toXml()).snapshot());
+    reopened.save();
+
+    TmxDocument saved = TmxDocument.open(mapFile);
+    assertThat(((TmxDocument.TileLayer) saved.layers.get(0)).gids[0]).isEqualTo(7);
+    assertThat(((TmxDocument.ObjectLayer) saved.layers.get(1)).objects).hasSize(1);
+    assertThat(Files.readString(mapFile).split("<object ", -1)).hasSize(2);
+  }
 }

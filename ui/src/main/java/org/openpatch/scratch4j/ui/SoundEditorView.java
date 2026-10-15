@@ -24,6 +24,7 @@ import org.openpatch.scratch4j.sound.SoundEffects;
 import org.openpatch.scratch4j.sound.SoundIO;
 import org.openpatch.scratch4j.sound.SoundPlayer;
 import org.openpatch.scratch4j.core.io.AtomicFiles;
+import org.openpatch.scratch4j.core.io.EditorHistory;
 import org.openpatch.scratch4j.core.io.LocalHistory;
 
 import java.io.IOException;
@@ -65,6 +66,7 @@ final class SoundEditorView extends BorderPane implements SavableTool {
     this.projectRoot = projectRoot;
     this.file = file;
     this.clip = SoundIO.decode(file);
+    loadHistory();
     getStyleClass().add("sound-editor");
 
     // the usual shortcuts anywhere in the editor (Ctrl is Cmd on macOS)
@@ -406,6 +408,77 @@ final class SoundEditorView extends BorderPane implements SavableTool {
     }
   }
 
+  // --- undo steps kept with the file -----------------------------------------
+
+  private static final String HISTORY = "sound";
+  /** The clips as kept in the editor history, so a save encodes only new ones. */
+  private final java.util.Map<SoundClip, byte[]> encoded = new java.util.IdentityHashMap<>();
+
+  /** The undo and redo steps kept when the sound was last saved (if it is unchanged since). */
+  private void loadHistory() {
+    var steps = EditorHistory.read(projectRoot, file, HISTORY);
+    try {
+      for (byte[] step : steps.undo()) undoStack.addLast(clipOf(step));
+      for (byte[] step : steps.redo()) redoStack.addLast(clipOf(step));
+    } catch (IOException | RuntimeException e) {
+      undoStack.clear();
+      redoStack.clear();
+    }
+  }
+
+  private void saveHistory(Path target) {
+    try {
+      java.util.Map<SoundClip, byte[]> known = new java.util.IdentityHashMap<>();
+      List<byte[]> undo = new ArrayList<>();
+      List<byte[]> redo = new ArrayList<>();
+      for (SoundClip step : undoStack) undo.add(bytesOf(step, known));
+      for (SoundClip step : redoStack) redo.add(bytesOf(step, known));
+      encoded.clear();
+      encoded.putAll(known);
+      EditorHistory.write(projectRoot, target, HISTORY, new EditorHistory.Steps(undo, redo, null));
+    } catch (IOException | RuntimeException e) {
+      status.setText(I18n.t("history.notkept", e.getMessage()));
+    }
+  }
+
+  private byte[] bytesOf(SoundClip step, java.util.Map<SoundClip, byte[]> known) {
+    byte[] bytes = encoded.get(step);
+    if (bytes == null) {
+      // the samples exactly as edited, not as 16-bit WAV
+      int channels = step.channelCount();
+      int samples = step.sampleCount();
+      long size = 12 + 4L * channels * samples;
+      if (size > Integer.MAX_VALUE) throw new IllegalStateException("sound too long");
+      java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate((int) size);
+      buffer.putFloat(step.sampleRate()).putInt(channels).putInt(samples);
+      for (int c = 0; c < channels; c++) {
+        buffer.asFloatBuffer().put(step.channel(c));
+        buffer.position(buffer.position() + 4 * samples);
+      }
+      bytes = buffer.array();
+    }
+    known.put(step, bytes);
+    return bytes;
+  }
+
+  private SoundClip clipOf(byte[] bytes) throws IOException {
+    java.nio.ByteBuffer buffer = java.nio.ByteBuffer.wrap(bytes);
+    float rate = buffer.getFloat();
+    int channels = buffer.getInt();
+    int samples = buffer.getInt();
+    if (channels < 1 || samples < 0 || bytes.length != 12 + 4L * channels * samples) {
+      throw new IOException("not a sound step");
+    }
+    float[][] data = new float[channels][samples];
+    for (int c = 0; c < channels; c++) {
+      buffer.asFloatBuffer().get(data[c]);
+      buffer.position(buffer.position() + 4 * samples);
+    }
+    SoundClip step = new SoundClip(data, rate);
+    encoded.put(step, bytes);
+    return step;
+  }
+
   @Override
   public void save() {
     try {
@@ -425,6 +498,7 @@ final class SoundEditorView extends BorderPane implements SavableTool {
       dirty.set(false);
       boolean converted = !target.equals(file);
       status.setText(converted ? I18n.t("soundeditor.mp3.saved") : I18n.t("imageeditor.save"));
+      saveHistory(target);
     } catch (IOException e) {
       status.setText("Could not save: " + e.getMessage());
     }
