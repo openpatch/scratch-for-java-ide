@@ -186,11 +186,16 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     rehighlight();
     updateRegions();
 
+    area.plainTextChanges().subscribe(change -> {
+      if (closed) return;
+      regionRequest++; // invalidate an analysis even before the edit debounce fires
+    });
     area.multiPlainChanges().successionEnds(Duration.ofMillis(40)).subscribe(ignore -> {
-      rehighlight();
-      updateRegions();
+      if (closed) return;
       dirty.set(!area.getText().equals(savedText));
       onEdited.run();
+      rehighlight();
+      updateRegions();
     });
     area.caretPositionProperty().addListener((o, old, pos) -> {
       markBrackets();
@@ -547,8 +552,13 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   /** The text was written to disk. */
   void markSaved() {
-    savedText = area.getText();
-    dirty.set(false);
+    markSaved(area.getText());
+  }
+
+  /** A background save owns its snapshot, not text typed since it started. */
+  void markSaved(String text) {
+    savedText = text;
+    dirty.set(!area.getText().equals(savedText));
   }
 
   /** Replaces the text (file changed on disk), keeping the caret line. */
@@ -908,6 +918,20 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   /** Line (0-based) -> what the gutter says about it (the block's editor, own code). */
   private final javafx.collections.ObservableMap<Integer, String> regionNotes =
       javafx.collections.FXCollections.observableHashMap();
+  private static final java.util.concurrent.ExecutorService REGION_WORKER =
+      java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "editor-regions");
+        thread.setDaemon(true);
+        return thread;
+      });
+  private record RegionWork(long version, String text) {}
+  private record RegionMarks(Map<Integer, String> styles, Map<Integer, String> notes) {}
+  private final java.util.concurrent.atomic.AtomicReference<RegionWork> nextRegions =
+      new java.util.concurrent.atomic.AtomicReference<>();
+  private final java.util.concurrent.atomic.AtomicBoolean regionsRunning =
+      new java.util.concurrent.atomic.AtomicBoolean();
+  private volatile long regionRequest;
+  private boolean closed;
 
   /**
    * Finds the blocks a visual editor owns ({@code // begin stage designer}) and
@@ -916,6 +940,37 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
    */
   private void updateRegions() {
     String text = area.getText();
+    long version = ++regionRequest;
+    if (closed) return;
+    if (!text.contains("// begin ") && !text.contains("//begin ")) {
+      nextRegions.set(null);
+      applyRegions(new RegionMarks(Map.of(), Map.of()));
+      return;
+    }
+    nextRegions.set(new RegionWork(version, text));
+    startRegionWorker();
+  }
+
+  private void startRegionWorker() {
+    if (!regionsRunning.compareAndSet(false, true)) return;
+    REGION_WORKER.execute(() -> {
+      try {
+        RegionWork work;
+        while ((work = nextRegions.getAndSet(null)) != null) {
+          RegionWork current = work;
+          RegionMarks marks = analyzeRegions(work.text());
+          Platform.runLater(() -> {
+            if (!closed && current.version() == regionRequest) applyRegions(marks);
+          });
+        }
+      } finally {
+        regionsRunning.set(false);
+        if (nextRegions.get() != null) startRegionWorker();
+      }
+    });
+  }
+
+  private static RegionMarks analyzeRegions(String text) {
     java.util.Map<Integer, String> styles = new java.util.HashMap<>();
     java.util.Map<Integer, String> notes = new java.util.HashMap<>();
     if (text.contains("// begin ") || text.contains("//begin ")) {
@@ -927,29 +982,46 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
           styles.put(begin, "region-marker");
           styles.put(end, "region-marker");
           for (int l = begin + 1; l < end; l++) styles.put(l, "region-line");
-          notes.put(begin, I18n.t("code.region." + switch (region.editor()) {
+          notes.put(begin, "code.region." + switch (region.editor()) {
             case org.openpatch.scratch4j.core.region.RegionParser.STAGE_DESIGNER -> "stage";
             case org.openpatch.scratch4j.core.region.RegionParser.SPRITE_EDITOR -> "sprite";
             default -> "settings";
-          }));
+          });
         }
         if (text.contains("// begin stage designer")) {
           for (var own : org.openpatch.scratch4j.core.region.StageDocument.read(text).foreign()) {
             styles.put(own.line() - 1, "region-own");
-            notes.put(own.line() - 1, I18n.t("code.region.own"));
+            notes.put(own.line() - 1, "code.region.own");
           }
         }
       } catch (RuntimeException unfinished) {
         // markers that do not pair up yet, unfinished Java: no blocks to show
       }
     }
+    return new RegionMarks(styles, notes);
+  }
+
+  private void applyRegions(RegionMarks marks) {
     java.util.Set<Integer> changed = new java.util.HashSet<>(regionStyles.keySet());
-    changed.addAll(styles.keySet());
+    changed.addAll(marks.styles().keySet());
+    changed.removeIf(line -> java.util.Objects.equals(regionStyles.get(line),
+        marks.styles().get(line)));
     regionStyles.clear();
-    regionStyles.putAll(styles);
-    regionNotes.keySet().retainAll(notes.keySet());
-    regionNotes.putAll(notes);
+    regionStyles.putAll(marks.styles());
+    regionNotes.keySet().retainAll(marks.notes().keySet());
+    marks.notes().forEach((line, key) -> regionNotes.put(line, I18n.t(key)));
     for (int line : changed) paragraphStyle(line + 1);
+  }
+
+  /** Queued analyses must not update a tab after it has been closed. */
+  void close() {
+    closed = true;
+    regionRequest++;
+    nextRegions.set(null);
+    semanticRequest++;
+    semanticDelay.stop();
+    completionPopup.hide();
+    hoverPopup.hide();
   }
 
   private static int[] lineStarts(String text) {

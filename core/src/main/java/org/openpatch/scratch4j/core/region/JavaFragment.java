@@ -17,12 +17,13 @@ final class JavaFragment {
     List<String> writtenArguments() {
       if (!(tree instanceof ExpressionStatementTree statement)
           || !(statement.getExpression() instanceof AssignmentTree assignment)
-          || !(assignment.getExpression() instanceof NewClassTree)) {
+          || !(assignment.getExpression() instanceof NewClassTree creation)) {
         return null;
       }
       int open = source.indexOf('(', source.indexOf("new"));
       int close = source.lastIndexOf(')');
-      return open < 0 || close < open ? null : literalArguments(source.substring(open + 1, close));
+      return open < 0 || close < open ? null
+          : JavaFragment.writtenArguments(source.substring(open + 1, close), creation.getArguments());
     }
   }
 
@@ -71,18 +72,22 @@ final class JavaFragment {
     var statement = statements(call, false).get(0);
     NewClassTree creation = (NewClassTree) ((ExpressionStatementTree) statement.tree())
         .getExpression();
+    return writtenArguments(arguments, creation.getArguments());
+  }
+
+  /** Reuse the parsed creation: each sprite must not start another javac task. */
+  private static List<String> writtenArguments(String arguments,
+      List<? extends ExpressionTree> trees) {
     List<String> out = new ArrayList<>();
-    // the arguments' own text: split at the commas between them (javac reprints literals)
-    int from = "new Fragment(".length();
-    List<? extends ExpressionTree> trees = creation.getArguments();
+    int from = 0;
     for (int i = 0; i < trees.size(); i++) {
       ExpressionTree argument = trees.get(i);
       if (!literal(argument)) {
         throw new RegionStatements.UnsupportedRegionException(
             "Constructor arguments must be Java literals: " + argument);
       }
-      int to = i == trees.size() - 1 ? call.lastIndexOf(')') : nextComma(call, from);
-      out.add(call.substring(from, to).strip());
+      int to = i == trees.size() - 1 ? arguments.length() : nextComma(arguments, from);
+      out.add(arguments.substring(from, to).strip());
       from = to + 1;
     }
     return List.copyOf(out);

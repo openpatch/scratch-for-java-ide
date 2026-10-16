@@ -38,6 +38,22 @@ final class EditorTabs extends TabPane {
   private final Supplier<Path> projectRoot;
   private Map<Path, List<CodeEditor.Diagnostic>> diagnostics = Map.of();
   private Consumer<Path> onSaved = file -> { };
+  private static final java.util.concurrent.ExecutorService SAVE_WORKER =
+      java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "editor-autosave");
+        thread.setDaemon(true);
+        return thread;
+      });
+  private record SaveRequest(Path root, CodeEditor editor, String text) {}
+  private final Map<Path, SaveRequest> pendingSaves = new java.util.concurrent.ConcurrentHashMap<>();
+  private final java.util.Set<Path> savesQueued = java.util.concurrent.ConcurrentHashMap.newKeySet();
+  private final Object saveLock = new Object();
+  private Consumer<IOException> onSaveFailed = error -> { };
+  @FunctionalInterface
+  interface SaveWriter {
+    void write(Path root, Path file, String text) throws IOException;
+  }
+  private final SaveWriter saveWriter;
   private Consumer<String> browse = url -> { };
   private java.util.function.BiConsumer<CodeEditor, Integer> onGoToDefinition = (e, o) -> { };
   private java.util.function.BiConsumer<CodeEditor, Integer> onRename = (e, o) -> { };
@@ -45,8 +61,13 @@ final class EditorTabs extends TabPane {
   private Consumer<String> onFindInProject = query -> { };
 
   EditorTabs(ApiIndex apiIndex, Supplier<Path> projectRoot) {
+    this(apiIndex, projectRoot, LocalHistory::writeString);
+  }
+
+  EditorTabs(ApiIndex apiIndex, Supplier<Path> projectRoot, SaveWriter saveWriter) {
     this.apiIndex = apiIndex;
     this.projectRoot = projectRoot;
+    this.saveWriter = saveWriter;
     setTabClosingPolicy(TabClosingPolicy.ALL_TABS);
     getStyleClass().add("editor-tabs");
     setTabDragPolicy(TabDragPolicy.REORDER);
@@ -74,6 +95,10 @@ final class EditorTabs extends TabPane {
   /** Called after a code tab was written to disk (autosave or save). */
   void setOnSaved(Consumer<Path> onSaved) {
     this.onSaved = onSaved;
+  }
+
+  void setOnSaveFailed(Consumer<IOException> onSaveFailed) {
+    this.onSaveFailed = onSaveFailed;
   }
 
   void setOnGoToDefinition(java.util.function.BiConsumer<CodeEditor, Integer> action) {
@@ -183,10 +208,12 @@ final class EditorTabs extends TabPane {
     tab.setTooltip(new javafx.scene.control.Tooltip(file.toString()));
 
     PauseTransition autosave = new PauseTransition(AUTOSAVE_DELAY);
-    autosave.setOnFinished(e -> save(editor));
+    autosave.setOnFinished(e -> autosave(editor));
     editor.setOnEdited(() -> {
-      if (editor.dirtyProperty().get()) {
+      if (editor.hasUnsavedChanges() || pendingSaves.containsKey(file)) {
         autosave.playFromStart();
+      } else {
+        autosave.stop();
       }
     });
     Tab created = tab;
@@ -196,9 +223,13 @@ final class EditorTabs extends TabPane {
         e.consume();
         return;
       }
-      save(editor);
+      if (!save(editor)) e.consume();
     });
-    tab.setOnClosed(e -> openTabs.remove(file, created));
+    tab.setOnClosed(e -> {
+      autosave.stop();
+      editor.close();
+      openTabs.remove(file, created);
+    });
     tab.setContextMenu(tabMenu(tab));
     openTabs.put(file, tab);
     getTabs().add(tab);
@@ -389,26 +420,87 @@ final class EditorTabs extends TabPane {
     }
   }
 
-  private void save(CodeEditor editor) {
-    if (!editor.hasUnsavedChanges()) {
-      return;
-    }
+  private boolean save(CodeEditor editor) {
     try {
-      LocalHistory.writeString(projectRoot.get(), editor.file(), editor.content());
-      editor.markSaved();
-      onSaved.accept(editor.file());
+      if (saveNow(editor)) onSaved.accept(editor.file());
+      return true;
     } catch (IOException e) {
-      // keep the dirty marker; the next save or Run retries
+      onSaveFailed.accept(e);
+      return false;
     }
+  }
+
+  private void autosave(CodeEditor editor) {
+    if (!editor.hasUnsavedChanges() && !pendingSaves.containsKey(editor.file())) return;
+    SaveRequest request = new SaveRequest(projectRoot.get(), editor, editor.content());
+    pendingSaves.put(editor.file(), request);
+    scheduleSave(editor.file());
+  }
+
+  /** At most one running/queued job per file, even during rapid tab switches. */
+  private void scheduleSave(Path file) {
+    if (!savesQueued.add(file)) return;
+    SAVE_WORKER.execute(() -> {
+      IOException failure = null;
+      SaveRequest request;
+      synchronized (saveLock) {
+        request = pendingSaves.get(file);
+        try {
+          if (request != null) saveWriter.write(request.root(), file, request.text());
+        } catch (IOException e) {
+          failure = e;
+        }
+      }
+      IOException error = failure;
+      if (request != null) {
+        javafx.application.Platform.runLater(() -> {
+          if (pendingSaves.get(file) != request) return;
+          CodeEditor editor = request.editor();
+          boolean current = editorFor(file) == editor
+              && java.util.Objects.equals(request.root(), projectRoot.get());
+          if (error == null) {
+            pendingSaves.remove(file, request);
+            if (current) {
+              editor.markSaved(request.text());
+              onSaved.accept(file);
+            }
+          } else if (current) {
+            // Leave the request dirty/retryable, including an undo to saved text
+            // while an older snapshot was being written.
+            onSaveFailed.accept(error);
+          }
+        });
+      }
+      savesQueued.remove(file);
+      SaveRequest latest = pendingSaves.get(file);
+      if (latest != null && latest != request) scheduleSave(file);
+    });
+  }
+
+  /** Tab switches save in the background, like the typing timer. */
+  void autosaveAll() {
+    for (Tab tab : getTabs()) {
+      if (tab.getContent() instanceof CodeEditor editor) autosave(editor);
+    }
+  }
+
+  /** Explicit saves/Run/close must finish in order before reading or moving files. */
+  private boolean saveNow(CodeEditor editor) throws IOException {
+    if (!editor.hasUnsavedChanges() && !pendingSaves.containsKey(editor.file())) return false;
+    SaveRequest request = new SaveRequest(projectRoot.get(), editor, editor.content());
+    pendingSaves.put(editor.file(), request); // supersede any queued older snapshot
+    synchronized (saveLock) {
+      saveWriter.write(request.root(), editor.file(), request.text());
+      pendingSaves.remove(editor.file(), request);
+    }
+    editor.markSaved(request.text());
+    return true;
   }
 
   /** Writes every dirty file back to disk. */
   void saveAll() throws IOException {
     for (Map.Entry<Path, Tab> entry : openTabs.entrySet()) {
-      if (entry.getValue().getContent() instanceof CodeEditor editor && editor.hasUnsavedChanges()) {
-        LocalHistory.writeString(projectRoot.get(), entry.getKey(), editor.content());
-        editor.markSaved();
-      }
+      if (entry.getValue().getContent() instanceof CodeEditor editor) saveNow(editor);
     }
   }
 
@@ -447,6 +539,9 @@ final class EditorTabs extends TabPane {
 
   /** Drops every tab without asking (the project closes or another one opens). */
   void clear() {
+    for (Tab tab : List.copyOf(getTabs())) {
+      if (tab.getOnClosed() != null) tab.getOnClosed().handle(null);
+    }
     getTabs().clear();
     openTabs.clear();
     toolTabs.clear();

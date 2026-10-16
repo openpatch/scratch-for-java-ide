@@ -289,18 +289,19 @@ public class StudioApp extends javafx.application.Application {
     editor.setOnBlockDropped(this::addImports);
     editor.setOnBrowse(this::browse);
     editor.setOnSaved(this::onCodeSaved);
+    editor.setOnSaveFailed(error -> {
+      String message = I18n.t("error.save", error.getMessage());
+      setStatus(message);
+      console.err(message);
+    });
     editor.getSelectionModel().selectedItemProperty().addListener((o, old, tab) -> {
       // leaving a code tab saves it, entering a designer catches up with the code
-      saveAll();
+      editor.autosaveAll();
       Path shown = EditorTabs.fileOf(tab);
       if (shown != null) fileTree.selectPath(shown); // the tree follows the tab
-      if (tab != null && tab.getContent() instanceof CodeEditor code
-          && code.sidePanel() instanceof StageDesignerView designer) {
-        designer.reload();
-      } else if (tab != null && tab.getContent() instanceof StageDesignerView designer) {
-        designer.reload();
-      } else if (tab != null && tab.getContent() instanceof AnimationEditorView animation) {
-        animation.reload(); // frames may have been painted in another tab
+      if (tab != null) {
+        Node tool = tab.getContent() instanceof CodeEditor code ? code.sidePanel() : tab.getContent();
+        if (tool != null) refreshTool(tool);
       }
       updatePaletteContext();
     });
@@ -2747,16 +2748,17 @@ public class StudioApp extends javafx.application.Application {
 
   private void reloadDesigners() {
     for (Node tool : editor.tools()) {
-      if (tool instanceof DiagramView diagrams) {
-        diagrams.refresh();
-      } else if (tool instanceof StageDesignerView designer) {
-        designer.reload();
-      } else if (tool instanceof SpriteAssetsView assets) {
-        assets.reload();
-      } else if (tool instanceof AnimationEditorView animation) {
-        animation.reload();
-      }
+      // Hidden tabs catch up when selected. A save must not rebuild every
+      // diagram, sprite list and animation just because their tabs are open.
+      if (showing(tool)) refreshTool(tool);
     }
+  }
+
+  private void refreshTool(Node tool) {
+    if (tool instanceof DiagramView diagrams) diagrams.refresh();
+    else if (tool instanceof StageDesignerView designer) designer.reload();
+    else if (tool instanceof SpriteAssetsView assets) assets.reload();
+    else if (tool instanceof AnimationEditorView animation) animation.reload();
   }
 
   /** The stage designers on screen now (the others catch up when their tab is shown). */
@@ -3516,18 +3518,35 @@ public class StudioApp extends javafx.application.Application {
 
   private void stopProgram() {
     teachingRunGeneration.incrementAndGet();
-    endDebugSession();
-    closeLiveSession(liveSession);
+    var debug = debugger;
+    var live = liveSession;
+    debugger = null;
+    liveSession = null;
+    liveSwap = null;
+    debugPaused = false;
+    if (debug != null) {
+      debuggerView.running(null);
+      showDebugLine(-1);
+    }
     RunHandle handle = currentRun.getAndSet(null);
-    if (handle != null) {
-      handle.stop();
+    if (handle != null || debug != null || live != null) {
+      // Finish terminating child processes even if closing the last IDE window
+      // shuts down JavaFX while this worker is still waiting for their exit.
+      Thread.ofPlatform().daemon(false).name("stop-program").start(() -> {
+        try {
+          if (handle != null) handle.stop();
+        } finally {
+          if (debug != null) debug.close();
+          if (live != null && live != debug) live.close();
+        }
+      });
     }
   }
 
   private void closeLiveSession(org.openpatch.scratch4j.runner.Debugger session) {
     if (session != null && liveSession == session) {
       liveSession = null;
-      session.close();
+      Thread.ofVirtual().name("close-live-session").start(session::close);
     }
   }
 
@@ -3627,7 +3646,7 @@ public class StudioApp extends javafx.application.Application {
     debugger = null;
     debugPaused = false;
     if (session != null) {
-      session.close();
+      Thread.ofVirtual().name("close-debug-session").start(session::close);
       debuggerView.running(null);
       showDebugLine(-1);
     }

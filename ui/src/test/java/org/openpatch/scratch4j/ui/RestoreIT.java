@@ -34,6 +34,7 @@ class RestoreIT {
   @Test
   void goingBackClearsTheProblemsOfTheReplacedCode() throws Exception {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
+    Prefs.language(I18n.Language.EN); // StudioApp restores the saved language on startup
     I18n.set(I18n.Language.EN);
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "restore",
         NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));

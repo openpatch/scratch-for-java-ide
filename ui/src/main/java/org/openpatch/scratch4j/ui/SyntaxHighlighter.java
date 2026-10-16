@@ -43,9 +43,15 @@ final class SyntaxHighlighter {
       "mat2", "mat3", "mat4", "sampler2D", "samplerCube", "#version", "#ifdef", "#endif",
       "#define", "#else", "#if"};
 
+  // Flat character scans and possessive repetitions keep long/pasted tokens
+  // off the regex engine's recursive path. Unfinished tokens extend to EOF/line end.
+  private static final String BLOCK_COMMENT = "/\\*(?s:.*?)(?:\\*/|\\z)";
+  private static final String QUOTED = "\"[^\"\\\\\r\n]*+(?:\\\\[^\r\n][^\"\\\\\r\n]*+)*+\"?";
+  private static final String CHARACTER = "'[^'\\\\\r\n]*+(?:\\\\[^\r\n][^'\\\\\r\n]*+)*+'?";
+
   private static final Pattern JAVA = Pattern.compile(
-      "(?<COMMENT>//[^\n]*|/\\*(.|\\R)*?\\*/)"
-          + "|(?<STRING>\"\"\"(.|\\R)*?\"\"\"|\"([^\"\\\\\n]|\\\\.)*\"|'([^'\\\\\n]|\\\\.)*')"
+      "(?<COMMENT>//[^\n]*|" + BLOCK_COMMENT + ")"
+          + "|(?<STRING>\"\"\"(?s:.*?)(?:\"\"\"|\\z)|" + QUOTED + "|" + CHARACTER + ")"
           + "|(?<ANNOTATION>@\\w+)"
           + "|(?<KEYWORD>\\b(" + String.join("|", JAVA_KEYWORDS) + ")\\b)"
           + "|(?<TYPE>\\b[A-Z][A-Za-z0-9_]*\\b)"
@@ -54,20 +60,20 @@ final class SyntaxHighlighter {
           + "|(?<BRACE>[{}])|(?<PAREN>[()])|(?<BRACKET>[\\[\\]])|(?<SEMICOLON>;)");
 
   private static final Pattern JSON = Pattern.compile(
-      "(?<KEY>\"([^\"\\\\\n]|\\\\.)*\"(?=\\s*:))"
-          + "|(?<STRING>\"([^\"\\\\\n]|\\\\.)*\")"
+      "(?<KEY>\"[^\"\\\\\r\n]*+(?:\\\\[^\r\n][^\"\\\\\r\n]*+)*+\"(?=\\s*:))"
+          + "|(?<STRING>" + QUOTED + ")"
           + "|(?<NUMBER>-?\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b)"
           + "|(?<KEYWORD>\\b(true|false|null)\\b)"
           + "|(?<BRACE>[{}\\[\\]])");
 
   private static final Pattern XML = Pattern.compile(
-      "(?<COMMENT><!--(.|\\R)*?-->)"
+      "(?<COMMENT><!--(?s:.*?)(?:-->|\\z))"
           + "|(?<TAG></?[A-Za-z_][\\w:.-]*|/?>|<\\?xml|\\?>)"
           + "|(?<ATTR>\\b[A-Za-z_][\\w:.-]*(?=\\s*=))"
           + "|(?<STRING>\"[^\"]*\"|'[^']*')");
 
   private static final Pattern GLSL = Pattern.compile(
-      "(?<COMMENT>//[^\n]*|/\\*(.|\\R)*?\\*/)"
+      "(?<COMMENT>//[^\n]*|" + BLOCK_COMMENT + ")"
           + "|(?<KEYWORD>(?<![\\w#])(" + String.join("|", GLSL_KEYWORDS)
               .replace("#", "\\#") + ")\\b)"
           + "|(?<NUMBER>\\b\\d+(\\.\\d+)?\\b)"
