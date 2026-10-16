@@ -65,6 +65,7 @@ jobs:
             start: ./run.command
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
         with:
           name: exports
@@ -80,6 +81,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: test -f "${{ matrix.folder }}/cat.exe"
+      - name: Set up Windows software OpenGL
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/setup-windows-opengl
       - name: Run with the smoke switch
         shell: bash
         env:
