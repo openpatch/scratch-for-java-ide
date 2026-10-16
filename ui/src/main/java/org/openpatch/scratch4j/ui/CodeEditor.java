@@ -93,6 +93,16 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         return t;
       });
 
+  /**
+   * The javac request waiting for the worker. One runs and at most one waits:
+   * a newer request replaces the waiting one instead of queueing behind it,
+   * so fast typing on a slow machine does not pile up whole-project analyses.
+   */
+  private static final java.util.concurrent.atomic.AtomicReference<Runnable> NEXT_COMPLETION =
+      new java.util.concurrent.atomic.AtomicReference<>();
+  /** How long typing must pause before javac is asked (Ctrl+Space asks at once). */
+  private static final javafx.util.Duration SEMANTIC_DELAY = javafx.util.Duration.millis(150);
+
   private static final String INDENT = "  ";
   private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*$");
   private static final Pattern WORD = Pattern.compile("\\b[A-Za-z_][A-Za-z0-9_]{2,}\\b");
@@ -153,6 +163,10 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   private int semanticStart = -1;
   private boolean semanticMemberAccess;
   private long semanticRequest;
+  /** The identifier start a javac request is waiting or running for, -1 for none. */
+  private int semanticPending = -1;
+  private final javafx.animation.PauseTransition semanticDelay =
+      new javafx.animation.PauseTransition(SEMANTIC_DELAY);
   private final Popup hoverPopup = new Popup();
 
   CodeEditor(Path file, String text, ApiIndex apiIndex, Supplier<Path> projectRoot) {
@@ -1099,6 +1113,13 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   private void installKeys() {
     area.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+      if (!completionPopup.isShowing() && (semanticPending >= 0 || semanticItems != null)) {
+        switch (e.getCode()) {
+          case ESCAPE, LEFT, RIGHT, UP, DOWN, HOME, END, PAGE_UP, PAGE_DOWN, ENTER, TAB ->
+              cancelSemanticCompletion();
+          default -> { }
+        }
+      }
       if (completionPopup.isShowing() && handleCompletionKey(e)) {
         e.consume();
         return;
@@ -2006,12 +2027,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         e.consume();
       }
     });
-    completionPopup.setOnHidden(e -> {
-      semanticItems = null;
-      semanticStart = -1;
-      // an answer still on its way doesn't open closed suggestions again
-      semanticRequest++;
-    });
+    completionPopup.setOnHidden(e -> cancelSemanticCompletion());
     completionList.getStyleClass().add("completion-list");
     completionList.setPrefSize(380, 230);
     completionList.setFocusTraversable(false);
@@ -2064,10 +2080,23 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     area.focusedProperty().addListener((o, was, focused) -> {
       if (!focused) {
         completionPopup.hide();
+        cancelSemanticCompletion();
       }
     });
     // auto-hide leaves clicks on its owner, the code, alone: they close it here
-    area.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, e -> completionPopup.hide());
+    area.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED, e -> {
+      completionPopup.hide();
+      cancelSemanticCompletion();
+    });
+  }
+
+  private void cancelSemanticCompletion() {
+    semanticItems = null;
+    semanticStart = -1;
+    // A lookup still on its way must not reopen dismissed suggestions.
+    semanticRequest++;
+    semanticPending = -1;
+    semanticDelay.stop();
   }
 
   private Node completionIcon(Completion item) {
@@ -2220,6 +2249,11 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     if (semanticItems != null && semanticStart == completionStart) {
       return filterSemantic(prefix);
     }
+    // The catalog contains methods of every library class. Wait for javac to
+    // resolve the receiver/scope instead of briefly offering unrelated methods.
+    if (semanticCompleter != null) {
+      return List.of();
+    }
     return identifierCompletions(prefix, afterDot);
   }
 
@@ -2266,43 +2300,77 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   }
 
   /**
-   * Asks javac for the names at the caret off the FX thread; when the answer
-   * arrives and the caret is still on the same identifier, the popup switches
-   * to it and keeps it while the user types.
+   * Asks javac for the names at the identifier's start off the FX thread
+   * (after a short pause in typing); when the answer arrives and the caret is
+   * still on the same identifier, the popup opens and narrows the list
+   * while the user types.
    */
   private void requestSemantic(boolean explicit) {
     if (semanticCompleter == null || insideAssetString()) {
       return;
     }
-    int caret = area.getCaretPosition();
+    if (!explicit && wordBeforeCaret().isEmpty()
+        && !textBeforeCaretOnLine().stripTrailing().endsWith(".")) {
+      return;
+    }
     int start = completionStart;
-    if (semanticItems != null && semanticStart == start) {
+    // already known, or already asked for this identifier: the answer covers every
+    // prefix of it, since javac is asked for all names at the identifier's start
+    if (semanticItems != null && semanticStart == start || semanticPending == start) {
+      return;
+    }
+    semanticPending = start;
+    long request = ++semanticRequest;
+    semanticDelay.setOnFinished(e -> submitSemantic(start, request));
+    if (explicit) {
+      semanticDelay.stop();
+      submitSemantic(start, request);
+    } else {
+      semanticDelay.playFromStart();
+    }
+  }
+
+  private void submitSemantic(int start, long request) {
+    if (request != semanticRequest) {
       return;
     }
     String text = area.getText();
-    long request = ++semanticRequest;
-    COMPLETION_WORKER.submit(() -> {
+    Runnable job = () -> {
+      if (request != semanticRequest) {
+        return; // the user moved on while this waited
+      }
       try {
-        var result = semanticCompleter.complete(file, text, caret);
+        var result = semanticCompleter.complete(file, text, start);
         List<Completion> items = new ArrayList<>();
         for (var item : result.items()) {
           items.add(semanticCompletion(item));
         }
         Platform.runLater(() -> {
-          if (request != semanticRequest || completionStart != result.start()) {
+          if (request != semanticRequest) {
+            return;
+          }
+          semanticPending = -1;
+          if (area.getCaretPosition() - wordBeforeCaret().length() != result.start()) {
             return;
           }
           semanticItems = items;
           semanticStart = result.start();
           semanticMemberAccess = result.memberAccess();
-          if (completionPopup.isShowing() || explicit || result.memberAccess()) {
-            showCompletion(false);
-          }
+          showCompletion(false);
         });
       } catch (java.io.IOException | RuntimeException e) {
-        // keep the name-based list
+        // Leave suggestions closed when the type lookup fails.
+        Platform.runLater(() -> {
+          if (request == semanticRequest) semanticPending = -1;
+        });
       }
-    });
+    };
+    if (NEXT_COMPLETION.getAndSet(job) == null) {
+      COMPLETION_WORKER.submit(() -> {
+        Runnable next = NEXT_COMPLETION.getAndSet(null);
+        if (next != null) next.run();
+      });
+    }
   }
 
   private Completion semanticCompletion(org.openpatch.scratch4j.core.compile.Completions.Item item) {
@@ -2504,12 +2572,16 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   private void showCompletion(boolean explicit) {
     List<Completion> candidates = completions();
-    requestSemantic(explicit);
     if (candidates.isEmpty() || !explicit && candidates.size() == 1
-        && candidates.get(0).text().equals(wordBeforeCaret())) {
+        && candidates.get(0).text().equals(wordBeforeCaret())
+        && candidates.get(0).kind() != Completion.Kind.METHOD) {
       completionPopup.hide();
+      // The first list may still be waiting for its type lookup. Hide the old
+      // popup before requesting it, since hiding cancels the previous lookup.
+      requestSemantic(explicit);
       return;
     }
+    requestSemantic(explicit);
     if (explicit && candidates.size() == 1 && completionStart >= 0
         && !insideAssetString()) {
       completionList.getItems().setAll(candidates);

@@ -56,8 +56,13 @@ public final class ApiIndex {
       entry.path("params").forEach(value -> params.add(value.asText()));
       List<String> paramDocs = new ArrayList<>();
       entry.path("paramDocs").forEach(value -> paramDocs.add(value.asText()));
+      // Keep the modifier used by the sources adapter and palette call generation.
+      String returnType = entry.path("returnType").asText();
+      if (entry.path("static").asBoolean() && !returnType.startsWith("static ")) {
+        returnType = "static " + returnType;
+      }
       ApiMethod method = new ApiMethod(entry.path("className").asText(), entry.path("methodName").asText(),
-          entry.path("returnType").asText(), params, entry.path("summary").asText(),
+          returnType, params, entry.path("summary").asText(),
           entry.path("scratchblock").isNull() ? null : entry.path("scratchblock").asText(),
           "", entry.path("docsUrl").asText(), entry.path("description").asText(), paramDocs,
           entry.path("returns").isNull() || entry.path("returns").isMissingNode() ? null : entry.path("returns").asText());

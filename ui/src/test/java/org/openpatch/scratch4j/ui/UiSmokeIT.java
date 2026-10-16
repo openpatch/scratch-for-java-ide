@@ -107,9 +107,8 @@ class UiSmokeIT {
         editor.saveAll();
         assertThat(java.nio.file.Files.readString(stage)).contains("edited by smoke test");
 
-        // completion over the identifier prefix "addCo"
-        assertThat(area.completionCandidates())
-            .contains("addCostume", "addCostumes");
+        // Until the type lookup finishes, unrelated Sprite methods are not offered.
+        assertThat(area.completionCandidates()).isEmpty();
 
         // block palette: categories populated, first entry carries a scratch block
         var inserted = new java.util.ArrayList<org.openpatch.scratch4j.core.api.ApiMethod>();

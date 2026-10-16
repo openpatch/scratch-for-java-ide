@@ -42,6 +42,16 @@ class ApiIndexTest {
   }
 
   @Test
+  void catalogPreservesStaticMethods() {
+    assertThat(index.byName("randomInt")).allSatisfy(method -> {
+      assertThat(method.className()).isEqualTo("Random");
+      assertThat(method.returnType()).isEqualTo("static int");
+    });
+    assertThat(index.byName("move")).allSatisfy(method ->
+        assertThat(method.returnType()).isEqualTo("void"));
+  }
+
+  @Test
   void constructorsAndCallSkeletonsAreIndexed() {
     ApiMethod ctor = index.methods().stream()
         .filter(m -> m.className().equals("Sprite") && m.methodName().equals("constructor"))

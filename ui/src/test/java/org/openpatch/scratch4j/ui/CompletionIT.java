@@ -167,8 +167,10 @@ class CompletionIT {
     Stage window = opened.window();
     CodeEditor code = opened.code();
     CountDownLatch answer = new CountDownLatch(1);
+    CountDownLatch started = new CountDownLatch(1);
     try {
       LayoutIT.onFx(() -> code.setSemanticCompleter((source, content, offset) -> {
+        started.countDown();
         try {
           answer.await();
         } catch (InterruptedException e) {
@@ -177,7 +179,15 @@ class CompletionIT {
         return new Completions.Result(offset, "", true, List.of(new Completions.Item("mode",
             Completions.Kind.FIELD, "mode", "int", "Player", false, List.of())));
       }));
-      openSuggestions(window, code, end);
+      LayoutIT.onFx(() -> {
+        window.toFront();
+        window.requestFocus();
+        code.area().requestFocus();
+        code.area().moveTo(end);
+        code.area().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+            "", "", KeyCode.SPACE, false, true, false, false));
+      });
+      assertThat(started.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
       LayoutIT.onFx(() -> new Robot().keyType(KeyCode.ESCAPE));
       LayoutIT.settle();
       LayoutIT.onFx(() -> assertThat(code.completionShowing()).isFalse());
@@ -187,6 +197,138 @@ class CompletionIT {
     } finally {
       answer.countDown();
       LayoutIT.onFx(window::hide);
+    }
+  }
+
+  @Test
+  void fastTypingAsksJavacOncePerIdentifierNotOncePerKey() throws Exception {
+    String text = """
+        class Player {
+          void run() {
+            boolean b = false
+          }
+        }
+        """;
+    int end = text.indexOf("false") + "false".length();
+    Opened opened = openEditor(text, editor -> editor);
+    CodeEditor code = opened.code();
+    java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
+    try {
+      LayoutIT.onFx(() -> {
+        // a slow machine: every javac run takes a while
+        code.setSemanticCompleter((source, content, offset) -> {
+          runs.incrementAndGet();
+          try {
+            Thread.sleep(400);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          // like javac after "this.": the members, among them the one being typed
+          return new Completions.Result(offset, "", true, List.of(new Completions.Item(
+              "isKeyPressed", Completions.Kind.METHOD, "isKeyPressed(int keyCode)", "boolean",
+              "org.openpatch.scratch.Sprite", false, List.of("int"))));
+        });
+        code.area().requestFocus();
+        code.area().moveTo(end);
+      });
+      // a fast typist: a key every 80 ms
+      for (char c : " || this.isKeyPressed(".toCharArray()) {
+        LayoutIT.onFx(() -> code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+            String.valueOf(c), "", KeyCode.UNDEFINED, false, false, false, false)));
+        Thread.sleep(80);
+      }
+      Thread.sleep(1500);
+      LayoutIT.settle();
+      // before: one whole-project analysis per key (10 here)
+      assertThat(runs.get()).isBetween(1, 2);
+    } finally {
+      LayoutIT.onFx(opened.window()::hide);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"held", "Random", ""})
+  void suggestionsWaitForTheReceiverAndScope(String receiver) throws Exception {
+    String text = """
+        import org.openpatch.scratch.*;
+        class Player extends Sprite {
+          void example() {
+            Sprite held = this;
+            %s
+          }
+        }
+        """.formatted(receiver);
+    int caret = text.indexOf("    " + receiver + "\n") + ("    " + receiver).length();
+    Opened opened = openEditor(text, editor -> editor);
+    CodeEditor code = opened.code();
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch answer = new CountDownLatch(1);
+    CountDownLatch analyzed = new CountDownLatch(1);
+    try {
+      LayoutIT.onFx(() -> {
+        code.setSemanticCompleter((source, content, offset) -> {
+          started.countDown();
+          try {
+            answer.await();
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new java.io.IOException(e);
+          }
+          var result = Completions.complete(source, content, offset, List.of(source),
+              List.of(NewProject.classpathJar(org.openpatch.scratch.Sprite.class)));
+          analyzed.countDown();
+          return result;
+        });
+        code.area().requestFocus();
+        code.area().moveTo(caret);
+        for (char c : (receiver.isEmpty() ? "ra" : ".").toCharArray()) {
+          code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+              String.valueOf(c), "", KeyCode.UNDEFINED, false, false, false, false));
+        }
+      });
+      LayoutIT.settle();
+      assertThat(started.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionCandidates()).as("only type-checked names are offered").isEmpty();
+        assertThat(code.completionShowing()).isFalse();
+      });
+      answer.countDown();
+      assertThat(analyzed.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionShowing()).isTrue();
+        if (receiver.equals("held")) {
+          assertThat(code.completionCandidates()).contains("move", "goToRandomPosition")
+              .doesNotContain("random", "randomInt", "randomVector2");
+        } else if (receiver.equals("Random")) {
+          assertThat(code.completionCandidates()).contains("random", "randomInt", "randomVector2")
+              .doesNotContain("move", "goToRandomPosition");
+        } else {
+          assertThat(code.completionCandidates()).contains("Random")
+              .doesNotContain("random", "randomInt", "randomVector2");
+        }
+      });
+      for (char c : (receiver.isEmpty() ? "ndom" : "random").toCharArray()) {
+        LayoutIT.onFx(() -> code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+            String.valueOf(c), "", KeyCode.UNDEFINED, false, false, false, false)));
+      }
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        if (receiver.equals("held")) {
+          assertThat(code.completionCandidates()).isEmpty();
+          assertThat(code.completionShowing()).as("held.random is not a Sprite member").isFalse();
+        } else {
+          assertThat(code.completionShowing()).isTrue();
+          if (receiver.equals("Random")) {
+            assertThat(code.completionCandidates()).contains("random", "randomInt", "randomVector2");
+          } else {
+            assertThat(code.completionCandidates()).containsExactly("Random");
+          }
+        }
+      });
+    } finally {
+      answer.countDown();
+      LayoutIT.onFx(opened.window()::hide);
     }
   }
 
@@ -231,6 +373,56 @@ class CompletionIT {
     Robot robot = new Robot();
     robot.mouseMove(onScreen.getCenterX(), onScreen.getCenterY());
     robot.mouseClick(MouseButton.PRIMARY);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"random()", "random(int max)"})
+  void fullyTypedMethodStaysOpenAndInsertsTheCall(String signature) throws Exception {
+    String text = """
+        class Held {
+          int %s { return 0; }
+        }
+        class Player {
+          Held held = new Held();
+          void run() {
+            held.ra
+          }
+        }
+        """.formatted(signature);
+    int caret = text.indexOf("held.ra") + "held.ra".length();
+    Opened opened = openEditor(text, editor -> editor);
+    CodeEditor code = opened.code();
+    CountDownLatch analyzed = new CountDownLatch(1);
+    try {
+      LayoutIT.onFx(() -> code.setSemanticCompleter((source, content, offset) -> {
+        var result = Completions.complete(source, content, offset, List.of(source), List.of());
+        analyzed.countDown();
+        return result;
+      }));
+      openSuggestions(opened.window(), code, caret);
+      assertThat(analyzed.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> assertThat(code.completions())
+          .extracting(CodeEditor.Completion::label).containsExactly(signature));
+      for (char c : "ndom".toCharArray()) {
+        LayoutIT.onFx(() -> code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+            String.valueOf(c), "", KeyCode.UNDEFINED, false, false, false, false)));
+      }
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionShowing()).as("held.random remains a callable suggestion")
+            .isTrue();
+        code.area().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+            "", "", KeyCode.ENTER, false, false, false, false));
+        assertThat(code.content()).isEqualTo(text.replace("held.ra\n", "held.random()\n"));
+        int end = code.content().indexOf("held.random()") + "held.random()".length();
+        assertThat(code.area().getCaretPosition())
+            .isEqualTo(end - (signature.equals("random()") ? 0 : 1));
+        assertThat(code.completionShowing()).isFalse();
+      });
+    } finally {
+      LayoutIT.onFx(opened.window()::hide);
+    }
   }
 
   @ParameterizedTest

@@ -81,6 +81,35 @@ class CompletionsTest {
   }
 
   @Test
+  void randomUtilitiesBelongToRandomRatherThanASprite() throws Exception {
+    var sprite = complete("""
+        import org.openpatch.scratch.*;
+        public class MyStage extends Stage {
+          Player held = new Player();
+          public void run() {
+            held.|
+          }
+        }
+        """, "held.|");
+    assertThat(names(sprite)).contains("goToRandomPosition", "pickRandom")
+        .doesNotContain("random", "randomInt", "randomVector2");
+
+    var random = complete("""
+        import org.openpatch.scratch.*;
+        public class MyStage extends Stage {
+          public void run() {
+            Random.ra|
+          }
+        }
+        """, "Random.ra|");
+    assertThat(names(random)).contains("random", "randomInt", "randomVector2");
+    assertThat(random.items()).allSatisfy(item -> {
+      assertThat(item.isStatic()).isTrue();
+      assertThat(item.owner()).isEqualTo("org.openpatch.scratch.Random");
+    });
+  }
+
+  @Test
   void staticMembersAfterATypeName() throws Exception {
     var result = complete("""
         import org.openpatch.scratch.*;
