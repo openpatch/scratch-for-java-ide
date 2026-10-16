@@ -216,6 +216,11 @@ final class BlockDrop {
   }
 
   /** One indent step of the file (from a line opening a brace to the next), else two spaces. */
+  /** The file's indentation step: two or four spaces, a tab (two spaces when unclear). */
+  static String indentUnit(String text) {
+    return indentUnit(text, lineStarts(text));
+  }
+
   private static String indentUnit(String text, int[] starts) {
     String opener = null;
     int smallest = Integer.MAX_VALUE;

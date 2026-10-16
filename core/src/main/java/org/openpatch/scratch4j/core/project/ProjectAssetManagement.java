@@ -22,6 +22,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -49,6 +50,12 @@ public final class ProjectAssetManagement {
 
   public static Path rename(ScratchProject project, Path asset, String newBaseName,
       FileUsages.Mode mode) throws IOException {
+    return rename(project, asset, newBaseName, mode, Set.of());
+  }
+
+  /** {@link #rename(ScratchProject, Path, String, FileUsages.Mode)}, leaving the {@code skipped} usages as they are. */
+  public static Path rename(ScratchProject project, Path asset, String newBaseName,
+      FileUsages.Mode mode, Set<FileUsages.Usage> skipped) throws IOException {
     Path source = validate(project, asset);
     if (!newBaseName.matches("[A-Za-z0-9_][A-Za-z0-9_ -]*")) {
       throw new IOException("Use letters, digits, spaces, hyphens or underscores");
@@ -60,7 +67,7 @@ public final class ProjectAssetManagement {
     if (source.equals(target) || Files.exists(target)) {
       throw new IOException("Choose an unused asset name");
     }
-    return relocate(project, source, target, mode);
+    return relocate(project, source, target, mode, skipped);
   }
 
   /**
@@ -98,6 +105,12 @@ public final class ProjectAssetManagement {
     return distinct(usages);
   }
 
+  /** Whether the user turned off the usage of this string (its path sits inside the quotes). */
+  private static boolean isSkipped(Set<FileUsages.Usage> skipped, Path file, Span span) {
+    return skipped.stream().anyMatch(u -> u.updatable() && u.file().equals(file)
+        && u.start() == span.start() + 1);
+  }
+
   private static List<FileUsages.Usage> distinct(List<FileUsages.Usage> usages) {
     Map<String, FileUsages.Usage> seen = new java.util.LinkedHashMap<>();
     for (FileUsages.Usage usage : usages) {
@@ -129,7 +142,17 @@ public final class ProjectAssetManagement {
    */
   static Path relocate(ScratchProject project, Path source, Path target, FileUsages.Mode mode)
       throws IOException {
-    Path moved = relocateFiles(project, source, target, mode);
+    return relocate(project, source, target, mode, Set.of());
+  }
+
+  /**
+   * {@link #relocate(ScratchProject, Path, Path, FileUsages.Mode)}, leaving the
+   * {@code skipped} usages (from {@link FileUsages#find}) as they are: the user
+   * turned them off in the preview.
+   */
+  static Path relocate(ScratchProject project, Path source, Path target, FileUsages.Mode mode,
+      Set<FileUsages.Usage> skipped) throws IOException {
+    Path moved = relocateFiles(project, source, target, mode, skipped);
     // the editors' undo steps go along
     org.openpatch.scratch4j.core.io.EditorHistory.move(project.root().toRealPath(), source,
         moved);
@@ -137,7 +160,7 @@ public final class ProjectAssetManagement {
   }
 
   private static Path relocateFiles(ScratchProject project, Path source, Path target,
-      FileUsages.Mode mode) throws IOException {
+      FileUsages.Mode mode, Set<FileUsages.Usage> skipped) throws IOException {
     boolean folder = Files.isDirectory(source);
     if (folder) {
       for (Path file : files(source)) {
@@ -154,7 +177,8 @@ public final class ProjectAssetManagement {
     }
     Map<Path, String> original = new HashMap<>();
     Map<Path, List<Span>> spans = new HashMap<>();
-    Map<Span, String> replacements = new HashMap<>();
+    // per file: two files can have a path at the same offsets
+    Map<Path, Map<Span, String>> replacements = new HashMap<>();
     Map<String, String> refs = new HashMap<>();
     List<FileUsages.Usage> manual = new ArrayList<>();
     for (Path file : files(source)) {
@@ -166,9 +190,13 @@ public final class ProjectAssetManagement {
       manual.addAll(scan.manual());
       original.putAll(scan.original());
       for (Map.Entry<Path, List<Span>> entry : scan.literals().entrySet()) {
-        spans.computeIfAbsent(entry.getKey(), key -> new ArrayList<>())
-            .addAll(entry.getValue());
-        entry.getValue().forEach(span -> replacements.put(span, "\"" + newRef + "\""));
+        List<Span> kept = entry.getValue().stream()
+            .filter(span -> !isSkipped(skipped, entry.getKey(), span))
+            .toList();
+        if (kept.isEmpty()) continue;
+        spans.computeIfAbsent(entry.getKey(), key -> new ArrayList<>()).addAll(kept);
+        kept.forEach(span -> replacements.computeIfAbsent(entry.getKey(), key -> new HashMap<>())
+            .put(span, "\"" + newRef + "\""));
       }
     }
     if (folder) {
@@ -184,11 +212,13 @@ public final class ProjectAssetManagement {
       StringBuilder code = new StringBuilder(original.get(entry.getKey()));
       entry.getValue().stream().distinct()
           .sorted(Comparator.comparingInt(Span::start).reversed())
-          .forEach(span -> code.replace(span.start(), span.end(), replacements.get(span)));
+          .forEach(span -> code.replace(span.start(), span.end(),
+              replacements.get(entry.getKey()).get(span)));
       changes.put(entry.getKey(), code.toString());
     }
     String oldSplash = project.settings().splashLogo;
-    String newSplash = oldSplash == null ? null : refs.get(oldSplash);
+    boolean keepSplash = skipped.stream().anyMatch(u -> u.updatable() && u.line() == 0);
+    String newSplash = oldSplash == null || keepSplash ? null : refs.get(oldSplash);
     List<Path> written = new ArrayList<>();
     boolean done = false;
     try {

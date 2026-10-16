@@ -68,6 +68,15 @@ final class SoundEditorView extends BorderPane implements SavableTool {
     this.clip = SoundIO.decode(file);
     loadHistory();
     getStyleClass().add("sound-editor");
+    // a closed tab falls silent and lets go of the microphone, however it closed (its
+    // close button, the file moved or deleted, another project); switching to another
+    // tab keeps the editor in the scene, so the sound plays on there
+    sceneProperty().addListener((o, old, scene) -> {
+      if (scene == null) {
+        player.stop();
+        if (recorder.isRecording()) recorder.stop();
+      }
+    });
 
     // the usual shortcuts anywhere in the editor (Ctrl is Cmd on macOS)
     addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
@@ -380,6 +389,11 @@ final class SoundEditorView extends BorderPane implements SavableTool {
     clip = redoStack.pop();
     selection = null;
     redraw();
+  }
+
+  /** Whether a sound is playing (tests). */
+  boolean playing() {
+    return player.isPlaying();
   }
 
   private void play() {

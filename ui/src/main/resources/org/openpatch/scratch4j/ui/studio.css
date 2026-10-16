@@ -606,7 +606,7 @@
 .code-editor .attr { -fx-fill: -s-code-type; }
 
 .code-editor .bracket-match {
-  -rtfx-background-color: -s-code-bracket-bg;
+  -fx-highlight-fill: -s-code-bracket-bg;
 }
 
 .code-editor .diag-error {
@@ -1674,3 +1674,40 @@
   -fx-background-color: rgba(232, 163, 23, 0.16);
 }
 .gutter-region .ikonli-font-icon { -fx-icon-color: -color-accent-emphasis; }
+
+/* the move preview: the old path struck through, the new one after it */
+.usage-old {
+  -fx-text-fill: -color-danger-fg;
+  -fx-strikethrough: true;
+}
+.usage-old .text { -fx-strikethrough: true; }
+.usage-new {
+  -fx-text-fill: -color-success-fg;
+  -fx-font-weight: bold;
+  -fx-padding: 0 0 0 6;
+}
+
+/* the code changed since the last check: the list waits for the next one */
+.problems-pane:outdated .problems { -fx-opacity: 0.55; }
+
+/* the card over the work area while a project opens */
+.loading-overlay {
+  -fx-background-color: rgba(0, 0, 0, 0.18);
+}
+.loading-card {
+  -fx-background-color: -s-card-bg;
+  -fx-border-color: -s-card-border;
+  -fx-background-radius: 10;
+  -fx-border-radius: 10;
+  -fx-padding: 18 20 16 20;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 18, 0, 0, 4);
+}
+.loading-title {
+  -fx-font-weight: bold;
+  -fx-font-size: 1.1em;
+}
+/* the program starting: a small bar beside the status text */
+.status-bar .run-progress {
+  -fx-pref-width: 120;
+  -fx-pref-height: 10;
+}

@@ -21,6 +21,9 @@ project format may change while we test it with students and teachers.
   stage or sprite editor. The switch at the end of the tab strip shows the
   code, both side by side, or the visual editor alone.
 - Edit images, sounds, sprite sheets, hitboxes, shaders, and Tiled maps.
+- Drag images (PNG, JPG, GIF) and sounds (WAV, OGG, MP3, AIFF, AU) from your
+  file manager onto the Files pane to copy them into the project. Existing
+  files keep their contents; matching names get a number.
 - Run programs in a separate JVM, use the console and debugger, and export a
   runnable JAR, a portable app folder, or a BlueJ/VS Code project ZIP.
 

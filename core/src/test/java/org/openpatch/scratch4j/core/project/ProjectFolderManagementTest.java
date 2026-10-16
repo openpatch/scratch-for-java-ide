@@ -70,6 +70,30 @@ class ProjectFolderManagementTest {
   }
 
   @Test
+  void aMoveLeavesTheUsagesTurnedOffInThePreview() throws IOException {
+    Path custom = Files.createDirectories(root.resolve("assets/custom"));
+    Files.writeString(custom.resolve("cat.png"), "pixels");
+    Files.writeString(custom.resolve("dog.png"), "pixels");
+    Files.createDirectories(root.resolve("assets/images"));
+    // the same offsets in both files: each keeps its own path
+    Files.writeString(root.resolve("A.java"), "class A { String s = \"assets/custom/cat.png\"; }");
+    Files.writeString(root.resolve("B.java"), "class B { String s = \"assets/custom/dog.png\"; }");
+    Files.writeString(root.resolve("C.java"), "class C { String s = \"assets/custom/cat.png\"; }");
+    ScratchProject project = ScratchProject.open(root);
+    var usages = FileUsages.find(project, custom);
+    var inC = usages.stream()
+        .filter(u -> u.file().getFileName().toString().equals("C.java")).toList();
+    assertThat(inC).hasSize(1);
+
+    ProjectFolderManagement.move(project, custom, root.resolve("assets/images"),
+        FileUsages.Mode.UPDATE, java.util.Set.copyOf(inC));
+
+    assertThat(Files.readString(root.resolve("A.java"))).contains("\"assets/images/custom/cat.png\"");
+    assertThat(Files.readString(root.resolve("B.java"))).contains("\"assets/images/custom/dog.png\"");
+    assertThat(Files.readString(root.resolve("C.java"))).contains("\"assets/custom/cat.png\"");
+  }
+
+  @Test
   void refusesToMoveAFolderThatCodeBuildsPathsFrom() throws IOException {
     Path custom = Files.createDirectories(root.resolve("assets/custom"));
     Files.writeString(custom.resolve("sprite.png"), "pixels");

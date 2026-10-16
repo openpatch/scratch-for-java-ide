@@ -217,19 +217,22 @@ public final class MapLinter {
   }
 
   private Layers layers(Path map) {
-    return cache.computeIfAbsent(map, m -> {
-      try {
-        TmxDocument doc = TmxDocument.open(m);
-        List<String> tiles = new ArrayList<>();
-        List<String> objects = new ArrayList<>();
-        for (TmxDocument.Layer layer : doc.layers) {
-          (layer instanceof TmxDocument.TileLayer ? tiles : objects).add(layer.name);
-        }
-        return new Layers(m, tiles, objects);
-      } catch (IOException | RuntimeException e) {
-        return null;
+    return cache.computeIfAbsent(map, MapLinter::readLayers);
+  }
+
+  /** The tile and object layer names of one map, or null when it cannot be read. */
+  public static Layers readLayers(Path map) {
+    try {
+      TmxDocument doc = TmxDocument.open(map);
+      List<String> tiles = new ArrayList<>();
+      List<String> objects = new ArrayList<>();
+      for (TmxDocument.Layer layer : doc.layers) {
+        (layer instanceof TmxDocument.TileLayer ? tiles : objects).add(layer.name);
       }
-    });
+      return new Layers(map, tiles, objects);
+    } catch (IOException | RuntimeException e) {
+      return null;
+    }
   }
 
   private boolean de() {

@@ -73,8 +73,68 @@ public final class Completions {
 
   private Completions() {}
 
+  /**
+   * What completion keeps between requests of one project: javac's file
+   * manager (the library jars stay open) and the other sources' texts (read
+   * again only when the file changed on disk). Used from one thread at a time.
+   */
+  public static final class Cache implements AutoCloseable {
+    private final JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+    private StandardJavaFileManager files;
+    private List<Path> classpath;
+    private final Map<Path, Text> texts = new java.util.HashMap<>();
+
+    private record Text(java.nio.file.attribute.FileTime modified, long size, String text) {}
+
+    StandardJavaFileManager files(List<Path> classpath) throws IOException {
+      if (files == null || !classpath.equals(this.classpath)) {
+        close();
+        files = compiler.getStandardFileManager(d -> { }, null, StandardCharsets.UTF_8);
+        if (!classpath.isEmpty()) {
+          files.setLocation(StandardLocation.CLASS_PATH,
+              classpath.stream().map(Path::toFile).collect(Collectors.toList()));
+        }
+        this.classpath = List.copyOf(classpath);
+      }
+      return files;
+    }
+
+    String read(Path source) throws IOException {
+      var attributes = Files.readAttributes(source,
+          java.nio.file.attribute.BasicFileAttributes.class);
+      Text cached = texts.get(source);
+      if (cached == null || !cached.modified().equals(attributes.lastModifiedTime())
+          || cached.size() != attributes.size()) {
+        cached = new Text(attributes.lastModifiedTime(), attributes.size(),
+            Files.readString(source, StandardCharsets.UTF_8));
+        texts.put(source, cached);
+      }
+      return cached.text();
+    }
+
+    void retain(java.util.Collection<Path> sources) {
+      texts.keySet().retainAll(sources);
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (files != null) {
+        files.close();
+        files = null;
+      }
+    }
+  }
+
   public static Result complete(Path file, String text, int offset, List<Path> sources,
       List<Path> classpath) throws IOException {
+    try (Cache cache = new Cache()) {
+      return complete(file, text, offset, sources, classpath, cache);
+    }
+  }
+
+  /** {@link #complete(Path, String, int, List, List)} reusing what {@code cache} keeps. */
+  public static Result complete(Path file, String text, int offset, List<Path> sources,
+      List<Path> classpath, Cache cache) throws IOException {
     int start = offset;
     while (start > 0 && Character.isJavaIdentifierPart(text.charAt(start - 1))) {
       start--;
@@ -95,24 +155,25 @@ public final class Completions {
     String filler = restOfLine.isBlank() ? "();" : "";
     String probe = text.substring(0, start) + PLACEHOLDER + filler + text.substring(end);
 
-    JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+    JavaCompiler compiler = cache.compiler;
     if (compiler == null) {
       return new Result(start, prefix, memberAccess, List.of());
     }
-    try (StandardJavaFileManager files = compiler.getStandardFileManager(d -> { }, null,
-        StandardCharsets.UTF_8)) {
-      if (!classpath.isEmpty()) {
-        files.setLocation(StandardLocation.CLASS_PATH,
-            classpath.stream().map(Path::toFile).collect(Collectors.toList()));
-      }
+    { // the file manager belongs to the cache: it stays open for the next request
+      StandardJavaFileManager files = cache.files(classpath);
       Path current = file.toAbsolutePath().normalize();
       List<JavaFileObject> units = new ArrayList<>();
       for (Path source : sources) {
         Path normalized = source.toAbsolutePath().normalize();
         if (!normalized.equals(current)) {
-          units.add(new Source(normalized, Files.readString(normalized, StandardCharsets.UTF_8)));
+          try {
+            units.add(new Source(normalized, cache.read(normalized)));
+          } catch (java.nio.file.NoSuchFileException gone) {
+            // deleted since the sources were listed
+          }
         }
       }
+      cache.retain(sources.stream().map(p -> p.toAbsolutePath().normalize()).toList());
       Source edited = new Source(current, probe);
       units.add(edited);
       JavacTask task = (JavacTask) compiler.getTask(null, files, d -> { },

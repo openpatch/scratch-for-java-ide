@@ -40,7 +40,7 @@ final class Icons {
     if (name.matches(".*\\.(png|jpg|jpeg|gif)$")) {
       return of("fth-image");
     }
-    if (name.matches(".*\\.(wav|ogg|mp3|aiff|au)$")) {
+    if (name.matches(".*\\.(wav|ogg|mp3|aif|aiff|au)$")) {
       return of("fth-music");
     }
     if (name.endsWith(".jar")) {

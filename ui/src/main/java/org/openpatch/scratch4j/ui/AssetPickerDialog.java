@@ -192,7 +192,7 @@ final class AssetPickerDialog {
     try (Stream<Path> walk = Files.walk(dir)) {
       walk.filter(Files::isRegularFile)
           .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT)
-              .matches(".*\\.(wav|ogg|aiff|aif|au)$"))
+              .matches(".*\\.(wav|ogg|mp3|aiff|aif|au)$"))
           .sorted()
           .forEach(p -> files.add(root.relativize(p).toString().replace('\\', '/')));
     } catch (IOException ignored) {

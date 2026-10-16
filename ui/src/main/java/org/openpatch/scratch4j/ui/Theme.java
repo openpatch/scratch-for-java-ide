@@ -101,6 +101,13 @@ final class Theme {
     pane.setStyle("-fx-font-size: " + Math.round(14 * scale) + "px;");
   }
 
+  /** Keeps a modal dialog attached to its window, including under XWayland. */
+  static void style(javafx.scene.control.Dialog<?> dialog, javafx.stage.Window owner) {
+    dialog.initOwner(owner);
+    dialog.initModality(javafx.stage.Modality.WINDOW_MODAL);
+    style(dialog);
+  }
+
   /** Styles another window's scene like the main window. */
   static void style(Scene scene) {
     scene.getStylesheets().addAll(stylesheets());

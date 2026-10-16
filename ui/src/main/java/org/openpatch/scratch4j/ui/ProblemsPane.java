@@ -172,6 +172,17 @@ final class ProblemsPane extends BorderPane {
     list.getItems().setAll(problems);
   }
 
+  /**
+   * The code changed since the list was made: it is dimmed until the next
+   * check, so a fixed error does not look current.
+   */
+  void setOutdated(boolean outdated) {
+    pseudoClassStateChanged(OUTDATED, outdated);
+  }
+
+  private static final javafx.css.PseudoClass OUTDATED =
+      javafx.css.PseudoClass.getPseudoClass("outdated");
+
   long errorCount() {
     return list.getItems().stream().filter(Problem::error).count();
   }

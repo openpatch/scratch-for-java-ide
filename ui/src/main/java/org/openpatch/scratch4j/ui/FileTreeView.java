@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -13,6 +14,10 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
 import javafx.scene.control.skin.VirtualFlow;
+import javafx.scene.input.Dragboard;
+import javafx.scene.input.DragEvent;
+import javafx.scene.input.TransferMode;
+import org.openpatch.scratch4j.core.assets.AssetCopier;
 
 /**
  * The project file tree with file-type icons. Generated/build folders are
@@ -38,13 +43,15 @@ final class FileTreeView extends TreeView<Path> {
   private Consumer<Path> onMoveTo = path -> { };
   private Consumer<Path> onDuplicate = file -> { };
   private java.util.function.BiConsumer<Path, Path> onMove = (path, folder) -> { };
+  private Consumer<List<Path>> onImport = files -> { };
   private Path root;
+  /** In-window drags avoid a native GTK mouse grab that can outlive the drop on XWayland. */
+  private Path dragging;
+  /** Read a native file drag only once, rather than on every mouse move. */
+  private Dragboard externalDragboard;
+  private List<Path> importing = List.of();
   /** Folders made in the IDE this session: shown even while still empty. */
   private final Set<Path> keepVisible = new HashSet<>();
-
-  /** What a drag inside the tree carries: the dragged file or folder. */
-  static final javafx.scene.input.DataFormat PROJECT_PATH =
-      new javafx.scene.input.DataFormat("application/x-scratch4j-project-path");
 
   FileTreeView() {
     setShowRoot(false);
@@ -53,13 +60,16 @@ final class FileTreeView extends TreeView<Path> {
     setOnMouseClicked(e -> {
       TreeItem<Path> item = getSelectionModel().getSelectedItem();
       if (item != null && Files.isRegularFile(item.getValue())
-          && e.getButton() == javafx.scene.input.MouseButton.PRIMARY) {
+          && e.getButton() == javafx.scene.input.MouseButton.PRIMARY && e.isStillSincePress()) {
         onOpen.accept(item.getValue());
       }
     });
     setOnKeyPressed(e -> {
       TreeItem<Path> item = getSelectionModel().getSelectedItem();
-      if (e.getCode() == javafx.scene.input.KeyCode.ENTER && item != null
+      if (e.getCode() == javafx.scene.input.KeyCode.ESCAPE && dragging != null) {
+        clearInternalDrag();
+        e.consume();
+      } else if (e.getCode() == javafx.scene.input.KeyCode.ENTER && item != null
           && Files.isRegularFile(item.getValue())) {
         onOpen.accept(item.getValue());
       } else if (e.getCode() == javafx.scene.input.KeyCode.DELETE
@@ -73,24 +83,23 @@ final class FileTreeView extends TreeView<Path> {
         e.consume();
       }
     });
-    // a drop on the empty space below the last row moves into the project folder
+    // Empty space moves internal files into the root, or imports external assets.
     setOnDragOver(e -> {
-      Path dragged = draggedPath(e.getDragboard());
-      if (dragged != null && root != null && canMoveInto(dragged, root)) {
-        e.acceptTransferModes(javafx.scene.input.TransferMode.MOVE);
-      }
+      TransferMode mode = dropMode(e.getDragboard(), root);
+      if (mode != null) e.acceptTransferModes(mode);
       e.consume();
     });
-    setOnDragDropped(e -> {
-      Path dragged = draggedPath(e.getDragboard());
-      boolean done = dragged != null && root != null && canMoveInto(dragged, root);
-      if (done) {
-        Path target = root;
-        javafx.application.Platform.runLater(() -> onMove.accept(dragged, target));
-      }
-      e.setDropCompleted(done);
+    setOnDragDropped(e -> drop(e, root));
+    setOnDragExited(e -> clearExternalDrag());
+    setOnMouseDragOver(e -> {
+      setCursor(canDropMove(root) ? javafx.scene.Cursor.MOVE : javafx.scene.Cursor.DEFAULT);
       e.consume();
     });
+    setOnMouseDragReleased(e -> {
+      dropMove(root);
+      e.consume();
+    });
+    setOnMouseReleased(e -> javafx.application.Platform.runLater(this::clearInternalDrag));
     MenuItem newClass = new MenuItem(I18n.t("menu.file.newclass"), Icons.of("fth-file-plus"));
     newClass.setOnAction(e -> onNewClass.run());
     MenuItem refresh = new MenuItem(I18n.t("tree.refresh"), Icons.of("fth-refresh-cw"));
@@ -187,6 +196,11 @@ final class FileTreeView extends TreeView<Path> {
     onMove = action;
   }
 
+  /** Files from the system file manager are copied into the project's asset folders. */
+  void setOnImport(Consumer<List<Path>> action) {
+    onImport = action;
+  }
+
   void setOnDuplicate(Consumer<Path> action) {
     onDuplicate = action;
   }
@@ -224,17 +238,59 @@ final class FileTreeView extends TreeView<Path> {
     return file != null ? file : selectedDirectory();
   }
 
-  /** Whether dropping {@code dragged} on {@code folder} would move it somewhere new. */
-  private boolean canMoveInto(Path dragged, Path folder) {
+  /**
+   * Whether dropping {@code dragged} on {@code folder} (a folder of the tree)
+   * would move it somewhere new. No disk access: it runs on every mouse move.
+   */
+  private static boolean canMoveInto(Path dragged, Path folder) {
     Path source = dragged.toAbsolutePath().normalize();
     Path target = folder.toAbsolutePath().normalize();
-    return Files.isDirectory(target) && !target.equals(source.getParent())
-        && !target.startsWith(source);
+    return !target.equals(source.getParent()) && !target.startsWith(source);
   }
 
-  private static Path draggedPath(javafx.scene.input.Dragboard board) {
-    Object value = board.getContent(PROJECT_PATH);
-    return value instanceof String text ? Path.of(text) : null;
+  private TransferMode dropMode(Dragboard board, Path folder) {
+    if (root == null || folder == null) return null;
+    if (externalDragboard != board) {
+      externalDragboard = board;
+      importing = board.hasFiles()
+          ? board.getFiles().stream().map(java.io.File::toPath).toList() : List.of();
+      if (!importing.stream().allMatch(AssetCopier::canImport)) importing = List.of();
+    }
+    return importing.isEmpty() ? null : TransferMode.COPY;
+  }
+
+  private void drop(DragEvent event, Path folder) {
+    TransferMode mode = dropMode(event.getDragboard(), folder);
+    if (mode == TransferMode.COPY) {
+      List<Path> files = importing;
+      javafx.application.Platform.runLater(() -> onImport.accept(files));
+    }
+    clearExternalDrag();
+    event.setDropCompleted(mode != null);
+    event.consume();
+  }
+
+  private boolean canDropMove(Path folder) {
+    return dragging != null && root != null && folder != null && canMoveInto(dragging, folder);
+  }
+
+  private void dropMove(Path folder) {
+    if (canDropMove(folder)) {
+      Path source = dragging;
+      javafx.application.Platform.runLater(() -> onMove.accept(source, folder));
+    }
+    clearInternalDrag();
+  }
+
+  private void clearInternalDrag() {
+    dragging = null;
+    setCursor(null);
+    lookupAll(".drop-target").forEach(cell -> cell.getStyleClass().removeAll("drop-target"));
+  }
+
+  private void clearExternalDrag() {
+    externalDragboard = null;
+    importing = List.of();
   }
 
   Path folderForCreation() {
@@ -337,6 +393,11 @@ final class FileTreeView extends TreeView<Path> {
   }
 
   private final class PathTreeCell extends javafx.scene.control.TreeCell<Path> {
+    /** Whether the row is a folder (looked up when the row is filled, not while dragging). */
+    private boolean directory;
+    /** Whether the drag over this row may drop here. */
+    private TransferMode accepts;
+
     PathTreeCell() {
       setOnDragDetected(e -> {
         Path path = getItem();
@@ -344,38 +405,49 @@ final class FileTreeView extends TreeView<Path> {
             || getTreeItem() == null || getTreeItem().getParent() == null) {
           return;
         }
-        var board = startDragAndDrop(javafx.scene.input.TransferMode.MOVE);
-        javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
-        content.put(PROJECT_PATH, path.toString());
-        board.setContent(content);
+        startFullDrag();
+        dragging = path;
         e.consume();
       });
-      setOnDragOver(e -> {
-        Path dragged = draggedPath(e.getDragboard());
-        Path folder = dropFolder();
-        if (dragged != null && folder != null && canMoveInto(dragged, folder)) {
-          e.acceptTransferModes(javafx.scene.input.TransferMode.MOVE);
-        }
+      setOnMouseDragEntered(e -> {
+        if (canDropMove(dropFolder())) getStyleClass().add("drop-target");
         e.consume();
       });
+      setOnMouseDragOver(e -> {
+        FileTreeView.this.setCursor(canDropMove(dropFolder())
+            ? javafx.scene.Cursor.MOVE : javafx.scene.Cursor.DEFAULT);
+        e.consume();
+      });
+      setOnMouseDragExited(e -> {
+        getStyleClass().removeAll("drop-target");
+        e.consume();
+      });
+      setOnMouseDragReleased(e -> {
+        getStyleClass().removeAll("drop-target");
+        dropMove(dropFolder());
+        e.consume();
+      });
+      // decided once when the drag enters the row, not on every mouse move
       setOnDragEntered(e -> {
-        Path dragged = draggedPath(e.getDragboard());
-        Path folder = dropFolder();
-        if (dragged != null && folder != null && canMoveInto(dragged, folder)) {
+        accepts = dropMode(e.getDragboard(), dropFolder());
+        if (accepts != null) {
           getStyleClass().add("drop-target");
         }
       });
-      setOnDragExited(e -> getStyleClass().removeAll("drop-target"));
-      setOnDragDropped(e -> {
-        Path dragged = draggedPath(e.getDragboard());
-        Path folder = dropFolder();
-        boolean done = dragged != null && folder != null && canMoveInto(dragged, folder);
-        if (done) {
-          // after the drag gesture ends: the host may show a dialog
-          javafx.application.Platform.runLater(() -> onMove.accept(dragged, folder));
+      setOnDragOver(e -> {
+        if (accepts != null) {
+          e.acceptTransferModes(accepts);
         }
-        e.setDropCompleted(done);
         e.consume();
+      });
+      setOnDragExited(e -> {
+        accepts = null;
+        getStyleClass().removeAll("drop-target");
+      });
+      setOnDragDropped(e -> {
+        getStyleClass().removeAll("drop-target");
+        accepts = null;
+        drop(e, dropFolder());
       });
       setOnMousePressed(e -> {
         if (e.isSecondaryButtonDown() && getTreeItem() != null) {
@@ -395,7 +467,7 @@ final class FileTreeView extends TreeView<Path> {
       if (path == null || isEmpty()) {
         return root;
       }
-      return Files.isDirectory(path) ? path : path.getParent();
+      return directory ? path : path.getParent();
     }
 
     @Override
@@ -406,6 +478,7 @@ final class FileTreeView extends TreeView<Path> {
         setGraphic(null);
         return;
       }
+      directory = Files.isDirectory(path);
       setText(path.getFileName().toString());
       var icon = Icons.forFile(path);
       icon.getStyleClass().add("tree-icon");

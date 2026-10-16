@@ -8,16 +8,46 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Locale;
 
 /**
  * "Copy built-in costume/sound into the project to edit": crops a built-in
  * image out of its Kenney atlas (pre-rotated to face right, as the library's
  * loader does) into {@code assets/images}, and copies a built-in sound file
- * into {@code assets/sounds}. The project then owns an editable file.
+ * into {@code assets/sounds}. Also imports image and sound files from the
+ * system file manager. The project then owns an editable file.
  */
 public final class AssetCopier {
 
   private AssetCopier() {}
+
+  /** Supported external assets, checked without reading the disk during a drag. */
+  public static boolean canImport(Path source) {
+    return importFolder(source) != null;
+  }
+
+  /** Copies an external asset into its project folder, keeping the original and any namesakes. */
+  public static Path copyExternalFile(Path source, Path projectRoot) throws IOException {
+    String folder = importFolder(source);
+    if (folder == null || !Files.isRegularFile(source)) {
+      throw new IOException("Choose an image or sound file: " + source.getFileName());
+    }
+    Path target = uniqueTarget(projectRoot.resolve("assets").resolve(folder),
+        source.getFileName().toString());
+    return Files.copy(source, target);
+  }
+
+  private static String importFolder(Path source) {
+    if (source == null || source.getFileName() == null) return null;
+    String name = source.getFileName().toString().toLowerCase(Locale.ROOT);
+    int dot = name.lastIndexOf('.');
+    if (dot <= 0) return null;
+    return switch (name.substring(dot + 1)) {
+      case "png", "jpg", "jpeg", "gif" -> "images";
+      case "wav", "ogg", "mp3", "aif", "aiff", "au" -> "sounds";
+      default -> null;
+    };
+  }
 
   /** Copies the built-in image into assets/images/&lt;name&gt;.png; returns the file. */
   public static Path copyBuiltinImage(BuiltinImage entry, Path projectRoot)

@@ -2,6 +2,8 @@ package org.openpatch.scratch4j.core.assets;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.openpatch.scratch4j.core.project.NewProject;
 
 import javax.imageio.ImageIO;
@@ -91,5 +93,56 @@ class AssetCopierTest {
     assertThatThrownBy(() -> AssetCopier.copyBuiltinSound("no_such_sound", root))
         .isInstanceOf(java.io.IOException.class)
         .hasMessageContaining("no_such_sound");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"png", "JPG", "jpeg", "gif", "wav", "OGG", "mp3", "aif", "aiff", "au"})
+  void importsExternalImagesAndSoundsWithoutChangingTheOriginal(String extension) throws Exception {
+    Path root = projectRoot();
+    Path source = tmp.resolve("Mein Bild und Klang \u00e4." + extension);
+    byte[] content = {0, 1, 2, 3, -1};
+    Files.write(source, content);
+
+    Path copied = AssetCopier.copyExternalFile(source, root);
+
+    boolean image = extension.matches("(?i)png|jpg|jpeg|gif");
+    assertThat(copied).isEqualTo(root.resolve(image ? "assets/images" : "assets/sounds")
+        .resolve(source.getFileName()));
+    assertThat(Files.readAllBytes(copied)).isEqualTo(content);
+    assertThat(Files.readAllBytes(source)).isEqualTo(content);
+  }
+
+  @Test
+  void externalImportsKeepExistingAssetsAndChooseDistinctNames() throws Exception {
+    Path root = projectRoot();
+    Path existing = root.resolve("assets/images/cat.png");
+    Files.writeString(existing, "existing");
+    Path source = Files.writeString(tmp.resolve("cat.png"), "imported");
+
+    Path second = AssetCopier.copyExternalFile(source, root);
+    Path third = AssetCopier.copyExternalFile(source, root);
+
+    assertThat(second).hasFileName("cat2.png");
+    assertThat(third).hasFileName("cat3.png");
+    assertThat(Files.readString(existing)).isEqualTo("existing");
+    assertThat(Files.readString(second)).isEqualTo("imported");
+    assertThat(Files.readString(third)).isEqualTo("imported");
+    assertThat(source).hasContent("imported");
+  }
+
+  @Test
+  void refusesDirectoriesMissingFilesAndUnsupportedFiles() throws Exception {
+    Path root = projectRoot();
+    Path directory = Files.createDirectory(tmp.resolve("folder.png"));
+    Path unsupported = Files.writeString(tmp.resolve("notes.txt"), "notes");
+    for (Path source : java.util.List.of(directory, unsupported, tmp.resolve("missing.wav"))) {
+      assertThatThrownBy(() -> AssetCopier.copyExternalFile(source, root))
+          .isInstanceOf(java.io.IOException.class);
+    }
+    try (var images = Files.list(root.resolve("assets/images"));
+         var sounds = Files.list(root.resolve("assets/sounds"))) {
+      assertThat(images).isEmpty();
+      assertThat(sounds).isEmpty();
+    }
   }
 }

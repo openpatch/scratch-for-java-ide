@@ -70,6 +70,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -88,7 +89,20 @@ public class StudioApp extends javafx.application.Application {
   private final ApiIndex apiIndex = ApiIndex.load();
   private final ProjectRunner runner = new ProjectRunner();
   private final AtomicReference<RunHandle> currentRun = new AtomicReference<>();
-  private final java.util.concurrent.atomic.AtomicLong teachingRunGeneration = new java.util.concurrent.atomic.AtomicLong();
+  /**
+   * Counts the starts and stops of runs. A start that is no longer the newest
+   * once it has compiled (the flag pressed again, Stop meanwhile) ends at once:
+   * only one program runs.
+   */
+  private final java.util.concurrent.atomic.AtomicLong runGeneration = new java.util.concurrent.atomic.AtomicLong();
+  /**
+   * Counts the starts only: a program that a newer start replaced may still
+   * report (its exit, its output); that no longer changes what the IDE shows.
+   */
+  private final java.util.concurrent.atomic.AtomicLong runStart = new java.util.concurrent.atomic.AtomicLong();
+  /** Programs that were started and kept (tests). */
+  private final java.util.concurrent.atomic.AtomicInteger keptRuns =
+      new java.util.concurrent.atomic.AtomicInteger();
   private final AtomicReference<ScratchProject> project = new AtomicReference<>();
   private final BooleanProperty running = new SimpleBooleanProperty(false);
   private final ToggleButton debugToggle = new ToggleButton(null, Icons.of("fth-target"));
@@ -169,6 +183,13 @@ public class StudioApp extends javafx.application.Application {
   private volatile boolean debugPaused;
   private Path debugFile;
   private SplitPane workArea;
+  /** The work area with the loading card over it while a project opens. */
+  private StackPane workHost;
+  private final LoadingOverlay loading = new LoadingOverlay();
+  /** Beside the status text while the program starts (compile, Java, its assets). */
+  private javafx.scene.control.ProgressBar runProgress;
+  /** The stage being started, for the status once its first frame is drawn. */
+  private String startingStage;
   private SplitPane centerSplit;
   private StackPane centerStack;
   /** The code tab the block pane is docked in (one pane, moved to the tab shown). */
@@ -205,6 +226,8 @@ public class StudioApp extends javafx.application.Application {
     I18n.set(Prefs.language());
     // once, not per language switch: the UI they touch is looked up when they fire
     running.addListener((o, was, isRunning) -> {
+      // stopped, crashed or not compiled: the starting bar goes with it
+      if (!isRunning && runProgress != null) showRunProgress(false);
       if (isRunning) {
         showTab(variablesTab, false); // the Variables tab while a program runs
       } else if (bottomTabs.getSelectionModel().getSelectedItem() != variablesTab) {
@@ -257,7 +280,9 @@ public class StudioApp extends javafx.application.Application {
     fileTree.setOnReveal(folder -> browse(folder.toUri().toString()));
     fileTree.setOnRenameAsset(this::renameFile);
     fileTree.setOnMoveTo(this::moveTo);
-    fileTree.setOnMove(this::movePath);
+    // a drop always shows the preview: a slip of the mouse moves nothing
+    fileTree.setOnMove((path, folder) -> movePath(path, folder, true));
+    fileTree.setOnImport(this::importAssetFiles);
     fileTree.setOnDuplicate(this::duplicateFile);
     fileTree.setOnRenameClass(this::renameClass);
     fileTree.setOnDeleteFile(this::deleteFile);
@@ -293,6 +318,10 @@ public class StudioApp extends javafx.application.Application {
       String message = I18n.t("error.save", error.getMessage());
       setStatus(message);
       console.err(message);
+    });
+    // typing makes the problems list out of date until the check after the autosave
+    editor.setOnEdited(() -> {
+      if (problems != null) problems.setOutdated(true);
     });
     editor.getSelectionModel().selectedItemProperty().addListener((o, old, tab) -> {
       // leaving a code tab saves it, entering a designer catches up with the code
@@ -401,6 +430,7 @@ public class StudioApp extends javafx.application.Application {
     workArea.getStyleClass().addAll("work-area", "work-split");
     workArea.setDividerPositions(0.18);
     SplitPane.setResizableWithParent(sidebarCard, false);
+    workHost = new StackPane(workArea, loading);
 
     status = new Label(I18n.t("status.no.project"));
     status.getStyleClass().add("status-text");
@@ -408,7 +438,11 @@ public class StudioApp extends javafx.application.Application {
     HBox.setHgrow(spacer, Priority.ALWAYS);
     Label hint = new Label(I18n.t("status.shortcuts"));
     hint.getStyleClass().add("status-hint");
-    HBox statusBar = new HBox(12, status, spacer, hint);
+    runProgress = new javafx.scene.control.ProgressBar(
+        javafx.scene.control.ProgressBar.INDETERMINATE_PROGRESS);
+    runProgress.getStyleClass().add("run-progress");
+    showRunProgress(false);
+    HBox statusBar = new HBox(12, runProgress, status, spacer, hint);
     statusBar.setAlignment(Pos.CENTER_LEFT);
     statusBar.getStyleClass().add("status-bar");
     root.setBottom(statusBar);
@@ -1209,7 +1243,8 @@ public class StudioApp extends javafx.application.Application {
     selector.setOnDeleteRequest(name -> deleteFile(p.root().resolve(name + ".java")));
     sidebar.getTabs().get(0).setContent(selector);
     sidebar.getSelectionModel().select(0);
-    root.setCenter(workArea);
+    root.setCenter(workHost);
+    loading.show(I18n.t("loading.project", p.name()), I18n.t("loading.files"), 0.2);
     updatePaletteContext();
     console.clear();
     problems.setProblems(List.of());
@@ -1242,6 +1277,24 @@ public class StudioApp extends javafx.application.Application {
     problems.hideStuck();
     updateProblemsPlaceholder();
     setStatus(I18n.t("status.opened", p.name()));
+    // the start stage's designer takes the longest (most of the opening): after a
+    // frame, so the card is drawn first and says what is loading
+    loading.step(I18n.t("loading.stage"), 0.4);
+    LoadingOverlay.next(() -> {
+      if (project.get() != p) return; // another project was opened meanwhile
+      try {
+        openStart(p);
+      } finally {
+        loading.step(I18n.t("loading.ready"), 1);
+        LoadingOverlay.next(loading::hide);
+      }
+      checkProject();
+      checkLibrary(p, false);
+    });
+  }
+
+  /** Shows the start stage in its designer, or the code of a Window class or main class. */
+  private void openStart(ScratchProject p) {
     try {
       String start = p.firstStage();
       if (p.stageClasses().contains(start)) {
@@ -1254,8 +1307,21 @@ public class StudioApp extends javafx.application.Application {
     } catch (IOException ignored) {
       // no stage yet: the welcome hint in the centre explains what to do
     }
-    checkProject();
-    checkLibrary(p, false);
+  }
+
+  /** The loading card over the work area (tests). */
+  boolean loadingShowing() {
+    return loading.showing();
+  }
+
+  /** Whether the bar beside the status text shows the program starting (tests). */
+  boolean runProgressShowing() {
+    return runProgress.isVisible();
+  }
+
+  private void showRunProgress(boolean show) {
+    runProgress.setVisible(show);
+    runProgress.setManaged(show);
   }
 
   /** Opens a file in the right editor by its type (code, image, sound). */
@@ -1273,7 +1339,7 @@ public class StudioApp extends javafx.application.Application {
           return null;
         }
       });
-    } else if (name.matches(".*\\.(wav|ogg|mp3|aiff|au)$")) {
+    } else if (name.matches(".*\\.(wav|ogg|mp3|aif|aiff|au)$")) {
       editor.openTool("sound:" + file, file.getFileName().toString(), "fth-music", () -> {
         try {
           return new SoundEditorView(project.get().root(), file);
@@ -1671,6 +1737,15 @@ public class StudioApp extends javafx.application.Application {
    */
   void watchdog(long frames, boolean loading) {
     long now = System.currentTimeMillis();
+    if (runProgress.isVisible() && running.get()) {
+      if (frames > 0 && !loading) {
+        // the first frame is drawn: the program runs
+        showRunProgress(false);
+        setStatus(I18n.t("status.running", startingStage));
+      } else if (loading) {
+        setStatus(I18n.t("run.phase.loading", startingStage));
+      }
+    }
     if (frames != watchFrames) {
       if (watchWarned && frames > watchFrames && watchFrames >= 0) {
         console.info("\u2714 " + I18n.t("run.unfrozen"));
@@ -1997,6 +2072,38 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
+  /** Copies dropped images and sounds off the FX thread, then shows the new files. */
+  private void importAssetFiles(List<Path> files) {
+    ScratchProject p = project.get();
+    if (p == null || files.isEmpty()) return;
+    setStatus(I18n.t("asset.import.running"));
+    Thread.ofVirtual().name("scratch4j-import-assets").start(() -> {
+      List<Path> imported = new ArrayList<>();
+      List<String> failures = new ArrayList<>();
+      for (Path source : files) {
+        try {
+          imported.add(org.openpatch.scratch4j.core.assets.AssetCopier.copyExternalFile(
+              source, p.root()));
+        } catch (IOException | RuntimeException e) {
+          failures.add(source.getFileName() + ": " + e.getMessage());
+        }
+      }
+      Platform.runLater(() -> {
+        if (project.get() != p) return;
+        fileTree.reload();
+        if (!imported.isEmpty()) {
+          fileTree.selectPath(imported.getFirst());
+          reloadDesigners();
+          scheduleCheck();
+        }
+        setStatus(I18n.t("asset.import.done", imported.size()));
+        if (!failures.isEmpty()) {
+          alert(I18n.t("asset.import.error", String.join("\n", failures)));
+        }
+      });
+    });
+  }
+
   private boolean saveBeforeAssetChange() {
     saveAll();
     boolean dirty = editor.openFiles().stream()
@@ -2019,17 +2126,20 @@ public class StudioApp extends javafx.application.Application {
     Theme.style(dialog);
     dialog.showAndWait().map(String::trim).filter(name -> !name.equals(base)).ifPresent(name -> {
       List<FileUsages.Usage> usages = usagesOf(p, file);
-      FileUsages.Mode mode = usages == null ? null : askMoveMode(p, file, usages, true);
-      if (mode == null) return;
+      Set<FileUsages.Usage> skipped = usages == null ? null
+          : askMove(p, file, file.resolveSibling(name + oldName.substring(base.length())),
+              usages, true, false);
+      if (skipped == null) return;
       try {
-        Path renamed = ProjectAssetManagement.rename(p, file, name, mode);
+        Path renamed = ProjectAssetManagement.rename(p, file, name, FileUsages.Mode.UPDATE,
+            skipped);
         editor.closeForFile(file);
         for (Path source : editor.openFiles()) editor.reloadIfOpen(source);
         fileTree.reload();
         reloadDesigners();
         scheduleCheck();
         setStatus(I18n.t("asset.renamed", renamed.getFileName()));
-        showLeftUsages(p, file, usages, mode);
+        showLeftUsages(p, file, usages, skipped);
       } catch (IOException e) {
         alert(e.getMessage(), e);
       }
@@ -2128,13 +2238,15 @@ public class StudioApp extends javafx.application.Application {
         .filter(name -> !name.equals(file.getFileName().toString()))
         .ifPresent(name -> {
           List<FileUsages.Usage> usages = usagesOf(p, file);
-          FileUsages.Mode mode = usages == null ? null : askMoveMode(p, file, usages, true);
-          if (mode == null) return;
+          Set<FileUsages.Usage> skipped = usages == null ? null
+              : askMove(p, file, file.resolveSibling(name), usages, true, false);
+          if (skipped == null) return;
           try {
-            Path renamed = ProjectFileManagement.rename(p, file, name, mode);
-            afterMove(file, renamed);
+            Path renamed = ProjectFileManagement.rename(p, file, name, FileUsages.Mode.UPDATE,
+                skipped);
+            afterMove(file, renamed, usages, skipped);
             setStatus(I18n.t("file.renamed", renamed.getFileName()));
-            showLeftUsages(p, file, usages, mode);
+            showLeftUsages(p, file, usages, skipped);
           } catch (IOException e) {
             alert(e.getMessage(), e);
           }
@@ -2181,25 +2293,52 @@ public class StudioApp extends javafx.application.Application {
     dialog.setTitle(I18n.t("tree.moveto"));
     dialog.setHeaderText(I18n.t("move.header", path.getFileName()));
     dialog.setContentText(I18n.t("move.folder"));
-    Theme.style(dialog);
-    dialog.showAndWait().map(byName::get).ifPresent(folder -> movePath(path, folder));
+    Theme.style(dialog, stage);
+    dialog.showAndWait().map(byName::get).ifPresent(folder ->
+        Platform.runLater(() -> movePath(path, folder, false)));
   }
 
   /** Moves a file or folder (drag and drop or "Move to...") and updates what names it. */
-  private void movePath(Path path, Path folder) {
+  private void movePath(Path path, Path folder, boolean ask) {
     ScratchProject p = project.get();
     if (p == null || path == null || folder == null || !saveBeforeAssetChange()) return;
     // a Java class moves back into the project folder unchanged (nothing names its path)
     boolean java = path.getFileName().toString().endsWith(".java");
-    List<FileUsages.Usage> usages = java ? List.of() : usagesOf(p, path);
-    FileUsages.Mode mode = usages == null ? null : askMoveMode(p, path, usages, false);
-    if (mode == null) return;
+    if (java) {
+      movePath(p, path, folder, List.of(), ask);
+      return;
+    }
+    // the search reads and parses the project's sources: off the FX thread, so the
+    // window stays responsive on slow machines
+    setStatus(I18n.t("usages.searching", path.getFileName()));
+    Thread worker = new Thread(() -> {
+      try {
+        List<FileUsages.Usage> usages = FileUsages.find(p, path);
+        Platform.runLater(() -> {
+          if (project.get() == p) movePath(p, path, folder, usages, ask);
+        });
+      } catch (IOException | RuntimeException e) {
+        Platform.runLater(() -> alert(I18n.t("usages.error", e.getMessage()), e));
+      }
+    }, "move-usages");
+    worker.setDaemon(true);
+    worker.start();
+  }
+
+  private void movePath(ScratchProject p, Path path, Path folder, List<FileUsages.Usage> usages,
+      boolean ask) {
+    Set<FileUsages.Usage> skipped = askMove(p, path, folder.resolve(path.getFileName()), usages,
+        false, ask);
+    if (skipped == null) {
+      setStatus("");
+      return;
+    }
     try {
       Path moved = Files.isDirectory(path)
-          ? ProjectFolderManagement.move(p, path, folder, mode)
-          : ProjectFileManagement.move(p, path, folder, mode);
-      afterMove(path, moved);
-      showLeftUsages(p, path, usages, mode);
+          ? ProjectFolderManagement.move(p, path, folder, FileUsages.Mode.UPDATE, skipped)
+          : ProjectFileManagement.move(p, path, folder, FileUsages.Mode.UPDATE, skipped);
+      afterMove(path, moved, usages, skipped);
+      showLeftUsages(p, path, usages, skipped);
       String where = p.root().toRealPath().relativize(moved.getParent()).toString();
       setStatus(I18n.t("file.moved", moved.getFileName(),
           where.isEmpty() ? I18n.t("move.projectfolder") : where.replace('\\', '/')));
@@ -2208,8 +2347,20 @@ public class StudioApp extends javafx.application.Application {
     }
   }
 
-  /** After a file or folder moved: tabs on the old path reopen on the new one. */
-  private void afterMove(Path from, Path to) {
+  /**
+   * After a file or folder moved: tabs on the old path reopen on the new one.
+   * Only what the move touched is loaded again (the code it rewrote; the
+   * designers only when code names the file), which keeps a drop quick.
+   */
+  private void afterMove(Path from, Path to, List<FileUsages.Usage> usages,
+      Set<FileUsages.Usage> skipped) {
+    Set<Path> rewritten = new java.util.HashSet<>();
+    for (FileUsages.Usage u : usages) {
+      if (u.updatable() && !skipped.contains(u)) {
+        rewritten.add(u.file().toAbsolutePath().normalize());
+      }
+    }
+    boolean java = from.getFileName().toString().endsWith(".java");
     Path oldPath = from.toAbsolutePath().normalize();
     List<Path> reopen = new ArrayList<>();
     for (Path open : editor.openFiles()) {
@@ -2223,11 +2374,15 @@ public class StudioApp extends javafx.application.Application {
     } else {
       editor.closeForFile(from);
     }
-    for (Path source : editor.openFiles()) editor.reloadIfOpen(source);
+    for (Path source : editor.openFiles()) {
+      if (rewritten.contains(source.toAbsolutePath().normalize())) editor.reloadIfOpen(source);
+    }
     fileTree.reload();
     fileTree.selectPath(to);
-    reloadDesigners();
-    if (selector != null) selector.refresh();
+    if (java || !usages.isEmpty()) {
+      reloadDesigners();
+      if (selector != null) selector.refresh();
+    }
     scheduleCheck();
     for (Path file : reopen) {
       if (Files.isRegularFile(file)) {
@@ -2521,39 +2676,32 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /**
-   * Before a move or rename: with no usages, just go ahead (updating);
-   * otherwise ask whether the paths should follow. Null when cancelled.
+   * Before a move or rename to {@code target}: the preview of what changes
+   * (see {@link UsagesDialog#forMove}). The usages the user turned off, or
+   * null when cancelled.
    */
-  private FileUsages.Mode askMoveMode(ScratchProject p, Path path, List<FileUsages.Usage> usages,
-      boolean rename) {
-    if (usages.isEmpty()) {
-      return FileUsages.Mode.UPDATE;
+  private Set<FileUsages.Usage> askMove(ScratchProject p, Path path, Path target,
+      List<FileUsages.Usage> usages, boolean rename, boolean ask) {
+    String from;
+    String to;
+    try {
+      Path root = p.root().toRealPath();
+      from = root.relativize(path.toRealPath()).toString().replace('\\', '/');
+      to = root.relativize(target.getParent().toRealPath().resolve(target.getFileName()))
+          .toString().replace('\\', '/');
+    } catch (IOException e) {
+      alert(e.getMessage(), e);
+      return null;
     }
-    return switch (UsagesDialog.forMove(p.root(), path.getFileName().toString(), usages,
-        rename)) {
-      case UPDATE -> FileUsages.Mode.UPDATE;
-      case IGNORE -> FileUsages.Mode.IGNORE;
-      default -> null;
-    };
+    return UsagesDialog.forMove(stage, p.root(), path.getFileName().toString(), from, to, usages,
+        rename, ask);
   }
 
   /**
-   * Before a delete: a file nothing uses gets the usual "really?" question, a
-   * used one a warning that lists where it is used. True when the user agreed.
+   * Before a delete: preview the path and warn about every reference that will break.
    */
-  private boolean confirmDelete(ScratchProject p, Path path, String warningKey) {
-    List<FileUsages.Usage> usages = usagesOf(p, path);
-    if (usages == null) {
-      return false;
-    }
-    if (usages.isEmpty()) {
-      Alert confirmation = new Alert(Alert.AlertType.CONFIRMATION,
-          I18n.t(warningKey, path.getFileName()), I18n.ok(), I18n.cancel());
-      confirmation.setHeaderText(null);
-      Theme.style(confirmation);
-      return confirmation.showAndWait().orElse(null) == I18n.ok();
-    }
-    switch (UsagesDialog.forDelete(p.root(), path.getFileName().toString(), usages)) {
+  private boolean confirmDelete(ScratchProject p, Path path, List<FileUsages.Usage> usages) {
+    switch (UsagesDialog.forDelete(stage, p.root(), path, usages)) {
       case DELETE:
         return true;
       case SHOW:
@@ -2570,9 +2718,9 @@ public class StudioApp extends javafx.application.Application {
    * when the user chose not to) go to the Search tab, to be fixed by hand.
    */
   private void showLeftUsages(ScratchProject p, Path path, List<FileUsages.Usage> usages,
-      FileUsages.Mode mode) {
+      Set<FileUsages.Usage> skipped) {
     List<FileUsages.Usage> left = usages.stream()
-        .filter(u -> mode == FileUsages.Mode.IGNORE || !u.updatable())
+        .filter(u -> skipped.contains(u) || !u.updatable())
         .toList();
     if (!left.isEmpty()) {
       showUsages(p, I18n.t("usages.left.title", path.getFileName(), left.size()), left, true);
@@ -2618,26 +2766,12 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void deleteFile(Path file) {
-    ScratchProject p = project.get();
-    if (p == null) return;
+    if (project.get() == null) return;
     if (file == null) {
       alert(I18n.t("file.delete.select"));
       return;
     }
-    if (!saveBeforeAssetChange()) return;
-    if (!confirmDelete(p, file, "file.delete.warning")) return;
-    try {
-      // the usages were checked (and accepted) above
-      ProjectFileManagement.delete(p, file, true);
-      editor.closeForFile(file);
-      fileTree.reload();
-      reloadDesigners();
-      if (selector != null) selector.refresh();
-      scheduleCheck();
-      setStatus(I18n.t("file.deleted", file.getFileName()));
-    } catch (IOException e) {
-      alert(e.getMessage(), e);
-    }
+    deletePath(file, false);
   }
 
   private void createFolder(Path parent) {
@@ -2673,13 +2807,15 @@ public class StudioApp extends javafx.application.Application {
     dialog.showAndWait().map(String::trim)
         .filter(name -> !name.equals(folder.getFileName().toString())).ifPresent(name -> {
       List<FileUsages.Usage> usages = usagesOf(p, folder);
-      FileUsages.Mode mode = usages == null ? null : askMoveMode(p, folder, usages, true);
-      if (mode == null) return;
+      Set<FileUsages.Usage> skipped = usages == null ? null
+          : askMove(p, folder, folder.resolveSibling(name), usages, true, false);
+      if (skipped == null) return;
       try {
-        Path renamed = ProjectFolderManagement.rename(p, folder, name, mode);
-        afterMove(folder, renamed);
+        Path renamed = ProjectFolderManagement.rename(p, folder, name, FileUsages.Mode.UPDATE,
+            skipped);
+        afterMove(folder, renamed, usages, skipped);
         setStatus(I18n.t("folder.renamed", renamed.getFileName()));
-        showLeftUsages(p, folder, usages, mode);
+        showLeftUsages(p, folder, usages, skipped);
       } catch (IOException e) {
         alert(e.getMessage(), e);
       }
@@ -2687,19 +2823,46 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void deleteFolder(Path folder) {
+    if (folder != null) deletePath(folder, true);
+  }
+
+  /** Look for references off the FX thread, then ask before moving anything to trash. */
+  private void deletePath(Path path, boolean folder) {
     ScratchProject p = project.get();
-    if (p == null || folder == null || !saveBeforeAssetChange()) return;
-    if (!confirmDelete(p, folder, "folder.delete.warning")) return;
-    try {
-      ProjectFolderManagement.delete(p, folder, true);
-      editor.closeUnderFolder(folder);
-      fileTree.reload();
-      reloadDesigners();
-      scheduleCheck();
-      setStatus(I18n.t("folder.deleted", folder.getFileName()));
-    } catch (IOException e) {
-      alert(e.getMessage(), e);
-    }
+    if (p == null || !saveBeforeAssetChange()) return;
+    setStatus(I18n.t("usages.searching", path.getFileName()));
+    Thread.ofVirtual().name("delete-usages").start(() -> {
+      try {
+        List<FileUsages.Usage> usages = FileUsages.find(p, path);
+        Platform.runLater(() -> {
+          if (project.get() != p) return;
+          setStatus("");
+          if (!confirmDelete(p, path, usages)) return;
+          try {
+            if (folder) {
+              ProjectFolderManagement.delete(p, path, true);
+              editor.closeUnderFolder(path);
+            } else {
+              ProjectFileManagement.delete(p, path, true);
+              editor.closeForFile(path);
+            }
+            fileTree.reload();
+            reloadDesigners();
+            if (selector != null) selector.refresh();
+            scheduleCheck();
+            setStatus(I18n.t(folder ? "folder.deleted" : "file.deleted", path.getFileName()));
+          } catch (IOException e) {
+            alert(e.getMessage(), e);
+          }
+        });
+      } catch (IOException | RuntimeException e) {
+        Platform.runLater(() -> {
+          if (project.get() != p) return;
+          setStatus("");
+          alert(I18n.t("usages.error", e.getMessage()), e);
+        });
+      }
+    });
   }
 
   // --- saving and checking -----------------------------------------------------------
@@ -2778,10 +2941,43 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void scheduleCheck() {
+    if (problems != null) problems.setOutdated(true);
     checkDelay.playFromStart();
   }
 
   /** Full check off the FX thread (compile + asset lints); one at a time. */
+  /** Starts the project's program like the green flag (tests). */
+  void runForTests() {
+    runProgram();
+  }
+
+  /** As after the green flag for {@code stage}, without a program (tests). */
+  void startingForTests(String stage, boolean isRunning) {
+    startingStage = stage;
+    showRunProgress(isRunning);
+    running.set(isRunning);
+  }
+
+  /** The status line's text (tests). */
+  String statusForTests() {
+    return status.getText();
+  }
+
+  /** How many started programs were kept, not ended at once as replaced (tests). */
+  int keptRunsForTests() {
+    return keptRuns.get();
+  }
+
+  /** Whether a program runs or starts (tests). */
+  boolean runningForTests() {
+    return running.get();
+  }
+
+  /** Stops the program (tests). */
+  void stopForTests() {
+    stopProgram();
+  }
+
   /** Runs the project check now (tests). */
   void recheckForTests() {
     checkProject();
@@ -2816,10 +3012,13 @@ public class StudioApp extends javafx.application.Application {
       List<Problem> result = found;
       Platform.runLater(() -> {
         checkRunning.set(false);
-        if (project.get() == p) {
+        boolean outdated = checkAgain.getAndSet(false);
+        // the code changed while this check ran: its problems may be ones the user
+        // just fixed, so the newer check shows its own instead
+        if (project.get() == p && !outdated) {
           showProblems(result);
         }
-        if (checkAgain.getAndSet(false)) {
+        if (outdated) {
           checkProject();
         }
       });
@@ -2838,6 +3037,7 @@ public class StudioApp extends javafx.application.Application {
 
   private void showProblems(List<Problem> checked) {
     checkedProblems = checked;
+    problems.setOutdated(false);
     List<Problem> found = new ArrayList<>(crashProblems);
     found.addAll(checked);
     problems.setProblems(found);
@@ -3074,7 +3274,7 @@ public class StudioApp extends javafx.application.Application {
     if (p == null) return;
     saveAll();
     stopProgram();
-    long generation = teachingRunGeneration.incrementAndGet();
+    long generation = runGeneration.incrementAndGet();
     running.set(true);
     bottomTabs.getSelectionModel().select(consoleTab);
     Thread.ofVirtual().start(() -> {
@@ -3084,18 +3284,18 @@ public class StudioApp extends javafx.application.Application {
           public void onStdout(String line) { Platform.runLater(() -> console.info(line)); }
           public void onStderr(String line) { Platform.runLater(() -> console.err(line)); }
         });
-        if (teachingRunGeneration.get() != generation || !currentRun.compareAndSet(null, handle)) {
+        if (runGeneration.get() != generation || !currentRun.compareAndSet(null, handle)) {
           handle.stop();
           return;
         }
-        if (teachingRunGeneration.get() != generation) {
+        if (runGeneration.get() != generation) {
           currentRun.compareAndSet(handle, null);
           handle.stop();
           return;
         }
         int code = handle.exitFuture().get(30, java.util.concurrent.TimeUnit.SECONDS);
         Platform.runLater(() -> {
-          if (teachingRunGeneration.get() == generation) setStatus(I18n.t("tests.result", code));
+          if (runGeneration.get() == generation) setStatus(I18n.t("tests.result", code));
         });
       } catch (Exception error) {
         if (handle != null) handle.stop();
@@ -3103,7 +3303,7 @@ public class StudioApp extends javafx.application.Application {
       } finally {
         currentRun.compareAndSet(handle, null);
         Platform.runLater(() -> {
-          if (teachingRunGeneration.get() == generation) running.set(false);
+          if (runGeneration.get() == generation) running.set(false);
         });
       }
     });
@@ -3198,6 +3398,10 @@ public class StudioApp extends javafx.application.Application {
       return;
     }
     stopProgram();
+    long generation = runGeneration.incrementAndGet();
+    long start = runStart.incrementAndGet();
+    // this start is still the newest (not replaced by another one)
+    java.util.function.BooleanSupplier current = () -> runStart.get() == start;
     console.clear();
     crashProblems.clear();
     showProblems(checkedProblems);
@@ -3208,6 +3412,8 @@ public class StudioApp extends javafx.application.Application {
     console.info("▶ " + I18n.t("status.compiling", startStage));
     setStatus(I18n.t("status.compiling", startStage));
     running.set(true);
+    startingStage = startStage;
+    showRunProgress(true);
     Thread worker = new Thread(() -> {
       try {
         Platform.runLater(() -> {
@@ -3257,11 +3463,14 @@ public class StudioApp extends javafx.application.Application {
         RunHandle handle = runner.run(p, config,
             new RunListener() {
           @Override public void onFrames(long frames, boolean loading) {
-            Platform.runLater(() -> watchdog(frames, loading));
+            Platform.runLater(() -> {
+              if (current.getAsBoolean()) watchdog(frames, loading);
+            });
           }
 
           @Override public void onPaused(long frame) {
             Platform.runLater(() -> {
+              if (!current.getAsBoolean()) return;
               programPaused = true;
               pauseToggle.setSelected(true);
               setStatus(I18n.t("run.paused", String.valueOf(frame)));
@@ -3274,6 +3483,7 @@ public class StudioApp extends javafx.application.Application {
 
           @Override public void onResumed() {
             Platform.runLater(() -> {
+              if (!current.getAsBoolean()) return;
               programPaused = false;
               pauseToggle.setSelected(false);
               setStatus(I18n.t("status.running", startStage));
@@ -3282,7 +3492,7 @@ public class StudioApp extends javafx.application.Application {
 
           @Override public void onState(org.openpatch.scratch4j.runner.ProgramState state) {
             Platform.runLater(() -> {
-              if (running.get()) variablesView.show(state);
+              if (running.get() && current.getAsBoolean()) variablesView.show(state);
             });
           }
 
@@ -3298,10 +3508,11 @@ public class StudioApp extends javafx.application.Application {
             if (session.offer(line)) {
               return; // the debug agent's port, not the student's output
             }
-            console.out(line);
+            if (current.getAsBoolean()) console.out(line);
           }
 
           @Override public void onStderr(String line) {
+            if (!current.getAsBoolean()) return; // a replaced program's last words
             console.err(line);
             crashes.feed(line);
             // the graphics driver cannot run OpenGL: once, start again in software
@@ -3314,6 +3525,7 @@ public class StudioApp extends javafx.application.Application {
 
           @Override public void onCompileFailed(CompileResult r) {
             Platform.runLater(() -> {
+              if (!current.getAsBoolean()) return;
               // the full check gives these errors explanations and did-you-mean
               checkProject();
               bottomTabs.getSelectionModel().select(problemsTab);
@@ -3326,6 +3538,8 @@ public class StudioApp extends javafx.application.Application {
             crashes.flush();
             Platform.runLater(() -> {
               closeLiveSession(session);
+              // a program replaced by a newer start: the new one runs on
+              if (!current.getAsBoolean()) return;
               resetGameLoop();
               variablesView.ended();
               running.set(false);
@@ -3338,19 +3552,29 @@ public class StudioApp extends javafx.application.Application {
             console.err(message);
           }
         });
-        currentRun.set(handle);
+        // pressed again or stopped while this one compiled: it does not run as well
+        if (runGeneration.get() != generation || !currentRun.compareAndSet(null, handle)) {
+          handle.stop();
+          return;
+        }
+        keptRuns.incrementAndGet();
         if (debugToggle.isSelected()) {
           handle.send("debug on");
         }
-        Platform.runLater(() -> setStatus(I18n.t("status.running", startStage)));
+        // compiled and launched: Java starts, then the library loads the assets
+        Platform.runLater(() -> {
+          if (runProgress.isVisible()) setStatus(I18n.t("run.phase.starting", startStage));
+        });
       } catch (ProjectRunner.CompilationFailedException e) {
         Platform.runLater(() -> {
+          if (!current.getAsBoolean()) return;
           running.set(false);
           endDebugSession(); // no program will ever connect to it
         });
       } catch (IOException | RuntimeException e) {
-        console.err(String.valueOf(e.getMessage()));
+        if (current.getAsBoolean()) console.err(String.valueOf(e.getMessage()));
         Platform.runLater(() -> {
+          if (!current.getAsBoolean()) return;
           running.set(false);
           endDebugSession();
           setStatus(String.valueOf(e.getMessage()));
@@ -3517,7 +3741,7 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void stopProgram() {
-    teachingRunGeneration.incrementAndGet();
+    runGeneration.incrementAndGet();
     var debug = debugger;
     var live = liveSession;
     debugger = null;

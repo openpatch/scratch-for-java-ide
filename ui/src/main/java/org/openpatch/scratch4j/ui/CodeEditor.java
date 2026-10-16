@@ -92,7 +92,6 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         t.setDaemon(true);
         return t;
       });
-
   /**
    * The javac request waiting for the worker. One runs and at most one waits:
    * a newer request replaces the waiting one instead of queueing behind it,
@@ -143,7 +142,15 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   private List<Diagnostic> diagnostics = List.of();
   private final List<int[]> diagnosticRanges = new ArrayList<>();
-  private final List<Integer> bracketMarks = new ArrayList<>();
+  /**
+   * The bracket at the caret and its partner, drawn like a selection behind
+   * the text. Not a text style: restyling rebuilds the line's text nodes, and
+   * a mouse press next to a bracket then lost its drag (nothing got selected).
+   */
+  private final org.fxmisc.richtext.Selection<Collection<String>, String, Collection<String>>
+      bracketMark = bracketSelection("bracket-open");
+  private final org.fxmisc.richtext.Selection<Collection<String>, String, Collection<String>>
+      partnerMark = bracketSelection("bracket-partner");
   private String savedText;
   private Runnable onEdited = () -> { };
   private java.util.function.IntConsumer onGoToDefinition = offset -> { };
@@ -189,6 +196,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     area.plainTextChanges().subscribe(change -> {
       if (closed) return;
       regionRequest++; // invalidate an analysis even before the edit debounce fires
+      forgetEditedProblems(change);
     });
     area.multiPlainChanges().successionEnds(Duration.ofMillis(40)).subscribe(ignore -> {
       if (closed) return;
@@ -712,13 +720,51 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   /** Shows the given diagnostics as squiggles, gutter markers and hover text. */
   void setDiagnostics(List<Diagnostic> diagnostics) {
+    keepDiagnostics(diagnostics);
+    rehighlight();
+  }
+
+  private void keepDiagnostics(List<Diagnostic> diagnostics) {
     this.diagnostics = List.copyOf(diagnostics);
     errorLines.clear();
     warningLines.clear();
     for (Diagnostic d : diagnostics) {
       (d.error() ? errorLines : warningLines).add((int) d.line() - 1);
     }
-    rehighlight();
+  }
+
+  /**
+   * An edit makes the last check's marks on the edited lines out of date: they
+   * go at once (the next check brings back what is still wrong), marks below
+   * move with their lines. A beginner who fixed an error must not see it
+   * stay until the project is compiled again. Light bulbs from the edit on go
+   * too: their fix belongs to the line number the check saw.
+   */
+  private void forgetEditedProblems(org.fxmisc.richtext.model.PlainTextChange change) {
+    if (diagnostics.isEmpty() && fixes.isEmpty()) {
+      return;
+    }
+    // 1-based, as the check counts lines
+    int first = area.offsetToPosition(change.getPosition(),
+        org.fxmisc.richtext.model.TwoDimensional.Bias.Forward).getMajor() + 1;
+    long removed = change.getRemoved().chars().filter(c -> c == '\n').count();
+    long inserted = change.getInserted().chars().filter(c -> c == '\n').count();
+    long last = first + removed;
+    if (!diagnostics.isEmpty()) {
+      List<Diagnostic> kept = new ArrayList<>();
+      for (Diagnostic d : diagnostics) {
+        if (d.line() < first) {
+          kept.add(d);
+        } else if (d.line() > last) {
+          kept.add(new Diagnostic(d.line() + inserted - removed, d.column(), d.message(),
+              d.explanation(), d.error()));
+        }
+      }
+      if (kept.size() != diagnostics.size() || inserted != removed) {
+        keepDiagnostics(kept); // the highlighting after the edit shows them
+      }
+    }
+    fixes.keySet().removeIf(line -> line >= first);
   }
 
   // --- highlighting ----------------------------------------------------------
@@ -763,12 +809,10 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         });
       }
     }
-    bracketMarks.clear();
     if (text.isEmpty()) {
       return;
     }
     area.setStyleSpans(0, spans);
-    markBrackets();
   }
 
   /** Character range a diagnostic underlines: the token at its column, or the line. */
@@ -804,15 +848,15 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return new int[] {lineStart + col, lineStart + end};
   }
 
+  private org.fxmisc.richtext.Selection<Collection<String>, String, Collection<String>>
+      bracketSelection(String name) {
+    var mark = new org.fxmisc.richtext.SelectionImpl<>(name, area,
+        path -> path.getStyleClass().add("bracket-match"));
+    area.addSelection(mark);
+    return mark;
+  }
+
   private void markBrackets() {
-    for (int pos : bracketMarks) {
-      if (pos < area.getLength()) {
-        List<String> styles = new ArrayList<>(area.getStyleOfChar(pos));
-        styles.remove("bracket-match");
-        area.setStyle(pos, pos + 1, styles);
-      }
-    }
-    bracketMarks.clear();
     String text = area.getText();
     int caret = area.getCaretPosition();
     int at = -1;
@@ -821,20 +865,14 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     } else if (caret < text.length() && "(){}[]".indexOf(text.charAt(caret)) >= 0) {
       at = caret;
     }
-    if (at < 0) {
-      return;
-    }
-    int match = matchingBracket(text, at);
+    int match = at < 0 ? -1 : matchingBracket(text, at);
     if (match < 0) {
+      bracketMark.selectRange(caret, caret);
+      partnerMark.selectRange(caret, caret);
       return;
     }
-    for (int pos : new int[] {at, match}) {
-      List<String> styles =
-          new ArrayList<>(area.getStyleSpans(pos, pos + 1).getStyleSpan(0).getStyle());
-      styles.add("bracket-match");
-      area.setStyle(pos, pos + 1, styles);
-      bracketMarks.add(pos);
-    }
+    bracketMark.selectRange(at, at + 1);
+    partnerMark.selectRange(match, match + 1);
   }
 
   static int matchingBracket(String text, int at) {
@@ -1196,7 +1234,9 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         e.consume();
         return;
       }
-      boolean shortcut = e.isShortcutDown();
+      // AltGr arrives as Ctrl+Alt: on a German keyboard AltGr+0 types "}" and AltGr++ "~",
+      // which must not reset or change the zoom
+      boolean shortcut = e.isShortcutDown() && !e.isAltDown();
       if (shortcut && e.getCode() == KeyCode.SPACE) {
         showCompletion(true);
         e.consume();
@@ -1246,7 +1286,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       } else if (shortcut && e.isShiftDown() && e.getCode() == KeyCode.K) {
         deleteLines();
         e.consume();
-      } else if (e.isAltDown() && !shortcut
+      } else if (e.isAltDown() && !e.isShortcutDown()
           && (e.getCode() == KeyCode.UP || e.getCode() == KeyCode.DOWN)) {
         moveLines(e.getCode() == KeyCode.UP ? -1 : 1);
         e.consume();
@@ -1266,8 +1306,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     });
     area.addEventFilter(KeyEvent.KEY_TYPED, e -> {
       String ch = e.getCharacter();
-      if ("}".equals(ch)) {
-        dedentBeforeCaret();
+      if (ch.length() == 1 && AutoIndent.isCloser(ch.charAt(0))) {
+        alignCloser();
       }
     });
     area.addEventHandler(KeyEvent.KEY_TYPED, e -> {
@@ -1305,19 +1345,36 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return line.substring(0, i);
   }
 
+  /**
+   * Enter: the new line is indented for the brackets open at the caret
+   * ({@link AutoIndent}), in the file's own step. A closing bracket that
+   * moves down goes under the line that opened it; between "{" and "}" the
+   * block opens with an empty line inside.
+   */
   private void newlineWithIndent() {
     String text = area.getText();
     int caret = area.getSelection().getStart();
-    String indent = currentIndent();
+    int end = area.getSelection().getEnd();
+    String unit = BlockDrop.indentUnit(text);
+    String indent = AutoIndent.forNewLine(text, caret, unit);
+    // what moves down: the rest of the line, without the blanks in front of it
+    int lineEnd = text.indexOf('\n', end);
+    if (lineEnd < 0) lineEnd = text.length();
+    int restStart = end;
+    while (restStart < lineEnd && (text.charAt(restStart) == ' '
+        || text.charAt(restStart) == '\t')) {
+      restStart++;
+    }
     char before = previousNonSpace(text, caret);
-    char after = caret < text.length() ? text.charAt(caret) : 0;
-    if (before == '{' && after == '}') {
-      area.replaceSelection("\n" + indent + INDENT + "\n" + indent);
-      area.moveTo(caret + 1 + indent.length() + INDENT.length());
-    } else if (before == '{') {
-      area.replaceSelection("\n" + indent + INDENT);
+    boolean closerFollows = restStart < lineEnd && AutoIndent.isCloser(text.charAt(restStart));
+    if (closerFollows && (before == '{' || before == '(' || before == '[')) {
+      String closer = AutoIndent.forCloser(text, caret);
+      area.replaceText(caret, restStart, "\n" + indent + "\n" + closer);
+      area.moveTo(caret + 1 + indent.length());
+    } else if (closerFollows) {
+      area.replaceText(caret, restStart, "\n" + AutoIndent.forCloser(text, caret));
     } else {
-      area.replaceSelection("\n" + indent);
+      area.replaceText(caret, restStart, "\n" + indent);
     }
     area.requestFollowCaret();
   }
@@ -1335,16 +1392,22 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return 0;
   }
 
-  /** Typing {@code }} on a whitespace-only line removes one indent level. */
-  private void dedentBeforeCaret() {
+  /**
+   * Typing a closing bracket first on a line puts the line under the one
+   * that opened the bracket, whatever its indentation was.
+   */
+  private void alignCloser() {
     int paragraph = area.getCurrentParagraph();
     int column = area.getCaretColumn();
     String beforeCaret = area.getParagraph(paragraph).getText().substring(0, column);
-    if (!beforeCaret.isBlank() || beforeCaret.length() < INDENT.length()) {
+    if (!beforeCaret.isBlank()) {
       return;
     }
     int start = area.getAbsolutePosition(paragraph, 0);
-    area.deleteText(start, start + INDENT.length());
+    String indent = AutoIndent.forCloser(area.getText(), start);
+    if (!indent.equals(beforeCaret)) {
+      area.replaceText(start, start + column, indent);
+    }
   }
 
   private void shiftSelection(boolean right) {
@@ -2241,6 +2304,11 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return java.util.Set.copyOf(errorLines);
   }
 
+  /** The lines (0-based) marked as warnings (tests). */
+  java.util.Set<Integer> warningLineNumbers() {
+    return java.util.Set.copyOf(warningLines);
+  }
+
   /** Whether the suggestions are open (tests). */
   boolean completionShowing() {
     return completionPopup.isShowing();
@@ -2568,16 +2636,36 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   private List<Completion> mapCompletions(String prefix) {
     Path root = projectRoot.get();
     if (root == null) return List.of();
-    String lower = prefix.toLowerCase(Locale.ROOT);
     List<Completion> result = new ArrayList<>();
-    for (var map : new org.openpatch.scratch4j.core.tiled.MapLinter(
-        org.openpatch.scratch4j.core.lint.DiagnosticsExplanations.Language.EN).allMaps(root)) {
-      String path = root.relativize(map.map()).toString().replace('\\', '/');
-      if (path.toLowerCase(Locale.ROOT).contains(lower)) {
-        result.add(new Completion(path, I18n.t("completion.map"), Completion.Kind.FILE));
-      }
+    for (String path : matching(ProjectFileIndex.files(root, ProjectFileIndex.MAPS), prefix)) {
+      result.add(new Completion(path, I18n.t("completion.map"), Completion.Kind.FILE));
     }
     return result;
+  }
+
+  /** At most this many project files are listed; typing more narrows the list. */
+  private static final int MAX_PROJECT_FILES = 200;
+
+  /**
+   * The paths that contain {@code prefix} (any case): those whose file name
+   * starts with it first, then those whose path does, then the rest.
+   */
+  static List<String> matching(List<String> paths, String prefix) {
+    String lower = prefix.toLowerCase(Locale.ROOT);
+    List<String> name = new ArrayList<>();
+    List<String> path = new ArrayList<>();
+    List<String> inside = new ArrayList<>();
+    for (String p : paths) {
+      String l = p.toLowerCase(Locale.ROOT);
+      if (!l.contains(lower)) continue;
+      if (l.substring(l.lastIndexOf('/') + 1).startsWith(lower)) name.add(p);
+      else if (l.startsWith(lower)) path.add(p);
+      else inside.add(p);
+    }
+    List<String> result = new ArrayList<>(name);
+    result.addAll(path);
+    result.addAll(inside);
+    return result.size() > MAX_PROJECT_FILES ? result.subList(0, MAX_PROJECT_FILES) : result;
   }
 
   /** Layer names of the project's maps: object layers or tile layers. */
@@ -2586,8 +2674,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     if (root == null) return List.of();
     String lower = prefix.toLowerCase(Locale.ROOT);
     java.util.Map<String, List<String>> where = new java.util.LinkedHashMap<>();
-    for (var map : new org.openpatch.scratch4j.core.tiled.MapLinter(
-        org.openpatch.scratch4j.core.lint.DiagnosticsExplanations.Language.EN).allMaps(root)) {
+    for (var map : ProjectFileIndex.mapLayers(root)) {
       for (String name : objectLayers ? map.objects() : map.tiles()) {
         if (name.toLowerCase(Locale.ROOT).contains(lower)) {
           where.computeIfAbsent(name, n -> new ArrayList<>())
@@ -2607,18 +2694,12 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     List<Completion> result = new ArrayList<>();
     Path root = projectRoot.get();
     if (root != null) {
-      Path dir = root.resolve(images ? "assets/images" : "assets/sounds");
-      if (Files.isDirectory(dir)) {
-        try (Stream<Path> files = Files.walk(dir)) {
-          files.filter(Files::isRegularFile)
-              .map(p -> root.relativize(p).toString().replace('\\', '/'))
-              .filter(p -> p.toLowerCase(Locale.ROOT).contains(lower))
-              .sorted()
-              .forEach(p -> result.add(new Completion(p, I18n.t("completion.projectfile"),
-                  Completion.Kind.FILE)));
-        } catch (java.io.IOException ignored) {
-          // unreadable assets folder: built-ins only
-        }
+      // every image or sound in the project, from the index (no disk walk per key)
+      var files = ProjectFileIndex.files(root,
+          images ? ProjectFileIndex.IMAGES : ProjectFileIndex.SOUNDS);
+      for (String path : matching(files, prefix)) {
+        result.add(new Completion(path, I18n.t("completion.projectfile"),
+            Completion.Kind.FILE));
       }
     }
     BuiltinAssetIndex assets = BuiltinAssetIndex.get();
@@ -2665,17 +2746,20 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     completionList.getSelectionModel().selectFirst();
     completionList.scrollTo(0);
     completionList.setPrefHeight(Math.min(9, candidates.size()) * 30 + 6);
+    if (completionPopup.isShowing()) {
+      return;
+    }
+    // styled when it opens, not on every key: new stylesheets restyle the whole popup
     var box = (VBox) completionPopup.getContent().get(0);
-    box.getStylesheets().setAll(getScene().getStylesheets());
+    if (!box.getStylesheets().equals(getScene().getStylesheets())) {
+      box.getStylesheets().setAll(getScene().getStylesheets());
+    }
     box.getStyleClass().remove("dark");
     if (Theme.isDark()) {
       box.getStyleClass().add("dark");
     }
-    area.getCaretBounds().ifPresent(bounds -> {
-      if (!completionPopup.isShowing()) {
-        completionPopup.show(area, bounds.getMinX(), bounds.getMaxY() + 2);
-      }
-    });
+    area.getCaretBounds().ifPresent(bounds ->
+        completionPopup.show(area, bounds.getMinX(), bounds.getMaxY() + 2));
   }
 
   private void acceptCompletion() {

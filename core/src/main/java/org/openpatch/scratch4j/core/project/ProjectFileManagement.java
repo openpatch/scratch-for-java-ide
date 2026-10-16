@@ -31,8 +31,14 @@ public final class ProjectFileManagement {
   }
 
   /** {@link #move(ScratchProject, Path, Path)}, choosing what happens to the file's usages. */
-  public static Path move(ScratchProject project, Path file, Path folder, FileUsages.Mode mode)
-      throws IOException {
+  public static Path move(ScratchProject project, Path file, Path folder,
+      FileUsages.Mode mode) throws IOException {
+    return move(project, file, folder, mode, java.util.Set.of());
+  }
+
+  /** Like the method above, leaving the {@code skipped} usages (turned off in the preview). */
+  public static Path move(ScratchProject project, Path file, Path folder,
+      FileUsages.Mode mode, java.util.Set<FileUsages.Usage> skipped) throws IOException {
     Path root = project.root().toRealPath();
     Path source = movable(project, file);
     Path directory = folder.toRealPath();
@@ -55,7 +61,7 @@ public final class ProjectFileManagement {
       // back to the project folder: the default package needs no other change
       return Files.move(source, target);
     }
-    return ProjectAssetManagement.relocate(project, source, target, mode);
+    return ProjectAssetManagement.relocate(project, source, target, mode, skipped);
   }
 
   /**
@@ -70,6 +76,12 @@ public final class ProjectFileManagement {
   /** {@link #rename(ScratchProject, Path, String)}, choosing what happens to the usages. */
   public static Path rename(ScratchProject project, Path file, String newName,
       FileUsages.Mode mode) throws IOException {
+    return rename(project, file, newName, mode, java.util.Set.of());
+  }
+
+  /** Like the method above, leaving the {@code skipped} usages (turned off in the preview). */
+  public static Path rename(ScratchProject project, Path file, String newName,
+      FileUsages.Mode mode, java.util.Set<FileUsages.Usage> skipped) throws IOException {
     Path source = movable(project, file);
     if (source.getFileName().toString().endsWith(".java")) {
       throw new IOException("Rename a Java file by renaming its class");
@@ -82,7 +94,7 @@ public final class ProjectFileManagement {
     if (source.equals(target) || Files.exists(target)) {
       throw new IOException("Choose an unused file name");
     }
-    return ProjectAssetManagement.relocate(project, source, target, mode);
+    return ProjectAssetManagement.relocate(project, source, target, mode, skipped);
   }
 
   /**

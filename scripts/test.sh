@@ -46,7 +46,7 @@ smoke() {
     -Dtest=ScratchStageRunIT -Dsurefire.failIfNoSpecifiedTests=false -Dscratch4j.gltest=true
   step "UI smoke"
   with_display "${mvn[@]}" -pl ui -am test \
-    -Dtest=UiSmokeIT -Dsurefire.failIfNoSpecifiedTests=false -Dscratch4j.uismoke=true
+    -Dtest=UiSmokeIT,FileTreeDropIT,FileActionsIT -Dsurefire.failIfNoSpecifiedTests=false -Dscratch4j.uismoke=true
   step "Export smoke"
   # the exported app runs the student program in its own JVM
   with_display "${mvn[@]}" -pl export -am test \

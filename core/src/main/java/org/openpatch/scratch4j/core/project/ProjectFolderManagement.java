@@ -48,6 +48,12 @@ public final class ProjectFolderManagement {
   /** {@link #rename(ScratchProject, Path, String)}, choosing what happens to the usages. */
   public static Path rename(ScratchProject project, Path folder, String newName,
       FileUsages.Mode mode) throws IOException {
+    return rename(project, folder, newName, mode, java.util.Set.of());
+  }
+
+  /** Like the method above, leaving the {@code skipped} usages (turned off in the preview). */
+  public static Path rename(ScratchProject project, Path folder, String newName,
+      FileUsages.Mode mode, java.util.Set<FileUsages.Usage> skipped) throws IOException {
     Path source = validate(project, folder);
     checkName(newName);
     Path target = source.resolveSibling(newName);
@@ -55,7 +61,7 @@ public final class ProjectFolderManagement {
       throw new IOException("Choose an unused folder name");
     }
     checkMovable(source);
-    return ProjectAssetManagement.relocate(project, source, target, mode);
+    return ProjectAssetManagement.relocate(project, source, target, mode, skipped);
   }
 
   /** Moves a folder (with everything in it) into another project folder. */
@@ -67,6 +73,12 @@ public final class ProjectFolderManagement {
   /** {@link #move(ScratchProject, Path, Path)}, choosing what happens to the usages. */
   public static Path move(ScratchProject project, Path folder, Path newParent,
       FileUsages.Mode mode) throws IOException {
+    return move(project, folder, newParent, mode, java.util.Set.of());
+  }
+
+  /** Like the method above, leaving the {@code skipped} usages (turned off in the preview). */
+  public static Path move(ScratchProject project, Path folder, Path newParent,
+      FileUsages.Mode mode, java.util.Set<FileUsages.Usage> skipped) throws IOException {
     Path source = validate(project, folder);
     Path root = project.root().toRealPath();
     Path parent = newParent.toRealPath();
@@ -85,7 +97,7 @@ public final class ProjectFolderManagement {
       throw new IOException("The folder already contains " + source.getFileName());
     }
     checkMovable(source);
-    return ProjectAssetManagement.relocate(project, source, target, mode);
+    return ProjectAssetManagement.relocate(project, source, target, mode, skipped);
   }
 
   /** Java classes stay in the project folder (no packages), so their folders stay too. */

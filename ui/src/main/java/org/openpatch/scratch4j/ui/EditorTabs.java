@@ -38,6 +38,8 @@ final class EditorTabs extends TabPane {
   private final Supplier<Path> projectRoot;
   private Map<Path, List<CodeEditor.Diagnostic>> diagnostics = Map.of();
   private Consumer<Path> onSaved = file -> { };
+  private Runnable onEdited = () -> { };
+  private final CompletionContext completion = new CompletionContext();
   private static final java.util.concurrent.ExecutorService SAVE_WORKER =
       java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "editor-autosave");
@@ -93,6 +95,11 @@ final class EditorTabs extends TabPane {
   }
 
   /** Called after a code tab was written to disk (autosave or save). */
+  /** A code tab's text changed by the user (debounced like autosave's trigger). */
+  void setOnEdited(Runnable onEdited) {
+    this.onEdited = onEdited;
+  }
+
   void setOnSaved(Consumer<Path> onSaved) {
     this.onSaved = onSaved;
   }
@@ -179,9 +186,7 @@ final class EditorTabs extends TabPane {
         return new org.openpatch.scratch4j.core.compile.Completions.Result(offset, "", false,
             List.of());
       }
-      var project = org.openpatch.scratch4j.core.project.ScratchProject.open(root);
-      return org.openpatch.scratch4j.core.compile.Completions.complete(source, content, offset,
-          project.javaSources(), project.libs());
+      return completion.complete(root, source, content, offset);
     });
     editor.breakpoints().addAll(breakpoints.getOrDefault(file, java.util.Set.of()));
     editor.breakpoints().addListener((javafx.collections.SetChangeListener<Integer>) c -> {
@@ -212,6 +217,7 @@ final class EditorTabs extends TabPane {
     editor.setOnEdited(() -> {
       if (editor.hasUnsavedChanges() || pendingSaves.containsKey(file)) {
         autosave.playFromStart();
+        onEdited.run();
       } else {
         autosave.stop();
       }
@@ -629,5 +635,38 @@ final class EditorTabs extends TabPane {
 
   ObservableList<Tab> tabs() {
     return getTabs();
+  }
+
+  /**
+   * What completion keeps for the open project between requests: javac's
+   * state, and the list of sources and libraries (looked up again every few
+   * seconds, so a new class shows up without a folder walk on every key).
+   */
+  private static final class CompletionContext {
+    private static final long RELIST_MILLIS = 3000;
+    private Path root;
+    private org.openpatch.scratch4j.core.compile.Completions.Cache cache;
+    private List<Path> sources = List.of();
+    private List<Path> libs = List.of();
+    private long listed;
+
+    synchronized org.openpatch.scratch4j.core.compile.Completions.Result complete(Path root,
+        Path source, String content, int offset) throws IOException {
+      if (!root.equals(this.root)) {
+        if (cache != null) cache.close();
+        cache = new org.openpatch.scratch4j.core.compile.Completions.Cache();
+        this.root = root;
+        listed = 0;
+      }
+      long now = System.currentTimeMillis();
+      if (now - listed > RELIST_MILLIS) {
+        var project = org.openpatch.scratch4j.core.project.ScratchProject.open(root);
+        sources = project.javaSources();
+        libs = project.libs();
+        listed = now;
+      }
+      return org.openpatch.scratch4j.core.compile.Completions.complete(source, content, offset,
+          sources, libs, cache);
+    }
   }
 }
