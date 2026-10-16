@@ -839,6 +839,9 @@ final class StageDesignerView extends BorderPane {
             fieldLabel(I18n.t("designer.backdrops")), backdropTiles,
             fieldLabel(I18n.t("designer.sounds")), soundTiles)));
     panel.setPadding(new Insets(10));
+    // Fit the viewport even when an inspector control has a wider minimum size;
+    // hiding the horizontal bar alone still allows sideways scrolling.
+    panel.setMinWidth(0);
     panel.getStyleClass().add("designer-sidebar");
     ScrollPane scroll = new ScrollPane(panel);
     scroll.setFitToWidth(true);
@@ -853,6 +856,7 @@ final class StageDesignerView extends BorderPane {
     Label label = new Label(title, Icons.of(icon));
     label.getStyleClass().add("card-header");
     VBox card = new VBox(8, label, content);
+    card.setMinWidth(0);
     card.getStyleClass().add("side-card");
     return card;
   }
