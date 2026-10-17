@@ -222,6 +222,44 @@ projects as well.
   first, and `ObjectNode` carries the name. An object that no attribute
   points at gets the local variable's name: `k : Konto`.
 
+### 9. Interfaces, enums and records in the class diagram (`core`, `ui`)
+
+The class diagram shows an interface as a box, but no arrow leads to it from
+the classes that implement it: a student's `Person implements
+ComparableContent<Person>` (NRW Abiturklassen) stands unconnected next to
+the interface. Interfaces from outside the project (`Comparable`, `Runnable`,
+`ActionListener`) do not appear at all. `ClassModel.of` leaves out enums and
+records entirely: the stress-test demo's `Figure` has an attribute
+`state: FigureState`, but the enum `FigureState` has no box and no arrow.
+Like section 8, this helps Scratch for Java projects as well.
+
+- **`implements` arrows.** `DiagramView.showClasses` draws an edge from a
+  class to each interface in `UmlClass.interfaces()`, with a new
+  `UmlCanvas.EdgeKind.REALIZATION`: a dashed line with a hollow triangle, as
+  in UML. `UmlCanvas` draws it and `DiagramRouter` routes it like
+  inheritance. For an interface, javac lists the interfaces it `extends` in
+  the same place (`getImplementsClause()`); those get the solid inheritance
+  arrow.
+- **Interfaces from outside the project.** `ClassModel.of` adds small boxes
+  for them, as it already does for superclasses such as `JFrame`. They follow
+  the **Library** checkbox.
+- **Layout.** `DiagramLayers.of` and the arrangement in `UmlCanvas` place an
+  interface above the classes that implement it, as they place a superclass.
+  A class can implement several interfaces, so these come in as extra pairs,
+  not through the one-parent `parentOf` map.
+- **Enums.** A box titled «enumeration» `FigureState` with the constants
+  (`IDLE`, `RUN`, `WALK`) as its first section, then the enum's fields and
+  methods if it has any. In javac's parse tree the constants are
+  `public static final` fields of the enum's own type with a `new`
+  initializer, which tells them apart from ordinary fields. An attribute of
+  the enum's type (`state: FigureState`) then gets an association arrow by
+  the existing rule.
+- **Records.** A box titled «record» `Punkt` with the components as
+  attributes (the parse tree lists them as `private final` fields) and the
+  record's own methods.
+- `UmlClass` records whether it is an enum or a record, and an enum's
+  constants.
+
 ## Already works
 
 - The code editor, completions, go to definition, rename, diagnostics and
@@ -232,8 +270,8 @@ projects as well.
 - The Scratch-to-Java lints only look at stage and sprite classes
   (`TransitionLinter`); the asset lints only at the library's asset calls
   (`AssetLinter`).
-- The debugger, hot reload, the class diagram, local history, search and the
-  formatter.
+- The debugger, hot reload, local history, search and the formatter.
+- The class diagram. Section 9 adds `implements` arrows, enums and records.
 - The object diagram of a running program. Section 8 makes it follow the
   debugger.
 
@@ -255,6 +293,12 @@ projects as well.
   with the variable's name.
 - A UI test: after a step, an open object diagram sits beside the code,
   shows the new values and marks the changed ones.
+- `ClassModelTest`: a class's interfaces (also from outside the project), an
+  interface that extends another, an enum with its constants apart from its
+  fields, a record with its components, and the association from an
+  attribute of an enum type.
+- `DiagramLayersTest`: an interface sits above the classes that implement it,
+  also for a class with two interfaces.
 - `mvn verify` passes before each pull request.
 
 ## Pull requests
@@ -266,7 +310,9 @@ projects as well.
 3. **Polish** (sections 6 and 7).
 4. **Object diagram while debugging** (section 8). It does not depend on the
    others and helps Scratch for Java projects too, so it can also come first.
-5. **Projects from VS Code**, if still wanted (next section).
+5. **Interfaces, enums and records in the class diagram** (section 9). Also
+   independent of the others and useful for Scratch for Java projects.
+6. **Projects from VS Code**, if still wanted (next section).
 
 ## Later: projects from VS Code
 
