@@ -301,7 +301,29 @@ Like section 8, this helps Scratch for Java projects as well.
   also for a class with two interfaces.
 - `mvn verify` passes before each pull request.
 
+## Non-affiliation note
+
+The Scratch Terms of Use treat the name "Scratch" as a trademark. Their main
+concern is a product that suggests it belongs to Scratch or is endorsed by
+it. Today neither the IDE nor its README says that it is independent. Until
+the Scratch Team has said whether "Scratch for Java" and "Scratch for Java
+Studio" are fine as names, a short note says so:
+
+- `about.text` in `messages_en.properties` gets: "Scratch for Java and
+  Scratch for Java Studio are independent projects, not affiliated with or
+  endorsed by the Scratch Foundation."
+- `about.text` in `messages_de.properties` gets: "Scratch for Java und
+  Scratch for Java Studio sind unabhängige Projekte. Sie gehören nicht zur
+  Scratch Foundation und werden nicht von ihr unterstützt." Written with
+  `ä` and `ü` escapes like the rest of the file.
+- `README.md` gets the English sentence in its License section.
+- Outside this repository: the library's README and the website
+  scratch4j.openpatch.org.
+
 ## Pull requests
+
+The non-affiliation note is small and independent of everything else; it can
+go in at any time, best first.
 
 1. **Open and run** (sections 1–4 and the default class). After it, a flat
    Java folder opens without the library prompt and runs, with console input
