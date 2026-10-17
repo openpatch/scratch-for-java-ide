@@ -11,7 +11,14 @@ import java.util.List;
  */
 record Problem(Path file, long line, long column, String message, String explanation,
     List<String> suggestions, boolean error, String fix, String original, boolean followUp,
-    String fixData, String trace) {
+    String fixData, String trace, String caseKey, String diagnosticCode) {
+
+  Problem(Path file, long line, long column, String message, String explanation,
+      List<String> suggestions, boolean error, String fix, String original, boolean followUp,
+      String fixData, String trace) {
+    this(file, line, column, message, explanation, suggestions, error, fix, original, followUp,
+        fixData, trace, null, null);
+  }
 
   Problem(Path file, long line, long column, String message, String explanation,
       List<String> suggestions, boolean error, String fix, String original, boolean followUp,
@@ -40,6 +47,30 @@ record Problem(Path file, long line, long column, String message, String explana
   Problem(Path file, long line, long column, String message, String explanation,
       List<String> suggestions, boolean error) {
     this(file, line, column, message, explanation, suggestions, error, null);
+  }
+
+  String hintIdentity() { return file + "|" + line + "|" + caseKey + "|" + diagnosticCode; }
+
+  String hint(int level) {
+    if (level == 1) return explanation == null || explanation.isBlank() ? message : explanation;
+    if (level == 2) {
+      if (caseKey != null && caseKey.startsWith("keyword."))
+        return I18n.t(caseKey.equals("keyword.extends") || caseKey.equals("keyword.implements")
+            ? "hints.locate.keyword" : "hints.locate.declaration", line);
+      return I18n.t("hints.locate", line, message);
+    }
+    if (fix != null && file != null) {
+      try {
+        String source = java.nio.file.Files.readString(file);
+        String preview = org.openpatch.scratch4j.core.lint.QuickFixes.preview(source, fix, line, column, fixData);
+        if (preview != null) return I18n.t("hints.preview") + "\n" + preview;
+      } catch (java.io.IOException | RuntimeException ignored) { }
+    }
+    String example = org.openpatch.scratch4j.core.lint.SnippetCorpus.example(caseKey);
+    if (example != null) return example;
+    String key = "hints.example." + (caseKey == null ? "unknown" : caseKey);
+    try { return I18n.t(key); }
+    catch (java.util.MissingResourceException e) { return I18n.t("hints.review", explanation == null ? message : explanation); }
   }
 
   /** A hint (not a problem): something that can be made better, with its fix. */

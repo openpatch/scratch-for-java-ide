@@ -1711,3 +1711,27 @@
   -fx-pref-width: 120;
   -fx-pref-height: 10;
 }
+
+/* Explicit progressive hints and the fixed three-run nudge. */
+.problem-hint-button, .gutter-hint { -fx-text-fill: -color-accent-fg; }
+.hint-nudge { -fx-background-color: -color-warning-subtle; -fx-border-color: -color-warning-fg; -fx-border-radius: 4; -fx-background-radius: 4; }
+.logging-indicator { -fx-text-fill: -color-accent-fg; -fx-font-size: 11px; }
+.lesson-missing { -fx-text-fill: -color-warning-fg; }
+.problem-ok { -fx-icon-color: -color-success-fg; }
+
+/* A compact action row and a single, bounded hint page. */
+.compact-action { -fx-padding: 3 6; -fx-font-size: 11px; -fx-min-height: 24; }
+.problem-more > .arrow-button { -fx-padding: 0; }
+.problem-more > .arrow-button > .arrow { -fx-padding: 0; -fx-background-color: transparent; }
+.hint-panel {
+  -fx-padding: 4 8 8 8;
+  -fx-background-color: -color-bg-subtle;
+  -fx-border-color: -color-accent-muted;
+  -fx-border-width: 0 0 0 2;
+}
+.hint-progress { -fx-font-size: 11px; -fx-text-fill: -color-fg-muted; }
+.hint-navigation { -fx-padding: 2 4; -fx-min-width: 22; -fx-min-height: 20; }
+.hint-text { -fx-font-size: 12px; -fx-text-fill: -color-fg-default; }
+.hint-code { -fx-font-family: "monospace"; }
+.hint-scroll, .hint-scroll > .viewport { -fx-background-color: transparent; -fx-padding: 0; }
+.problem-hint-button:selected { -fx-background-color: -color-accent-subtle; }

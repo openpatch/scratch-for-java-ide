@@ -1,0 +1,189 @@
+{
+  "v": 1,
+  "snippets": [
+    {
+      "id": "semicolon",
+      "className": "Example",
+      "broken": "class Example { void go() { int n = 1\n} }",
+      "fixed": "class Example { void go() { int n = 1;\n} }",
+      "caseKey": "expected.semicolon",
+      "brokenLine": 1
+    },
+    {
+      "id": "unknown-variable",
+      "className": "Example",
+      "broken": "class Example { int score = 1; int go() { return scor; } }",
+      "fixed": "class Example { int score = 1; int go() { return score; } }",
+      "caseKey": "unknown.variable",
+      "brokenLine": 1
+    },
+    {
+      "id": "unknown-method",
+      "className": "Example",
+      "broken": "class Example { void go() { og(); } }",
+      "fixed": "class Example { void go() { go(); } }",
+      "caseKey": "unknown.method",
+      "brokenLine": 1
+    },
+    {
+      "id": "unknown-class",
+      "className": "Example",
+      "broken": "class Example { Strng text; }",
+      "fixed": "class Example { String text; }",
+      "caseKey": "unknown.class",
+      "brokenLine": 1
+    },
+    {
+      "id": "condition-assignment",
+      "className": "Example",
+      "broken": "class Example { void go() { int n = 0; if (n = 2) {} } }",
+      "fixed": "class Example { void go() { int n = 0; if (n == 2) {} } }",
+      "caseKey": "assign.condition",
+      "brokenLine": 1
+    },
+    {
+      "id": "missing-return",
+      "className": "Example",
+      "broken": "class Example { int score() { int n = 4; } }",
+      "fixed": "class Example { int score() { int n = 4; return n; } }",
+      "caseKey": "return.end",
+      "brokenLine": 1
+    },
+    {
+      "id": "early-end",
+      "className": "Example",
+      "broken": "class Example { void go() {}",
+      "fixed": "class Example { void go() {} }",
+      "caseKey": "eof",
+      "brokenLine": 1
+    },
+    {
+      "id": "missing-parenthesis",
+      "className": "Example",
+      "broken": "class Example { void go() { if (true { } } }",
+      "fixed": "class Example { void go() { if (true) { } } }",
+      "caseKey": "bracket.mismatch",
+      "brokenLine": 1
+    },
+    {
+      "id": "mismatched-bracket",
+      "className": "Example",
+      "broken": "class Example {\n  void go() {\n    int[] a = new int[3);\n  }\n}",
+      "fixed": "class Example {\n  void go() {\n    int[] a = new int[3];\n  }\n}",
+      "caseKey": "bracket.mismatch",
+      "brokenLine": 3
+    },
+    {
+      "id": "unclosed-character",
+      "className": "Example",
+      "broken": "class Example { char c = 'x; }",
+      "fixed": "class Example { char c = 'x'; }",
+      "caseKey": "unclosed.character",
+      "brokenLine": 1
+    },
+    {
+      "id": "lossy-number",
+      "className": "Example",
+      "broken": "class Example { int n = 1.5; }",
+      "fixed": "class Example { double n = 1.5; }",
+      "caseKey": "lossy",
+      "brokenLine": 1
+    },
+    {
+      "id": "text-number",
+      "className": "Example",
+      "broken": "class Example { int n = \"42\"; }",
+      "fixed": "class Example { int n = 42; }",
+      "caseKey": "convert.text",
+      "brokenLine": 1
+    },
+    {
+      "id": "uninitialized",
+      "className": "Example",
+      "broken": "class Example { int go() { int n; return n; } }",
+      "fixed": "class Example { int go() { int n = 0; return n; } }",
+      "caseKey": "uninitialized",
+      "brokenLine": 1
+    },
+    {
+      "id": "duplicate",
+      "className": "Example",
+      "broken": "class Example { void go() { int n = 1; int n = 2; } }",
+      "fixed": "class Example { void go() { int n = 1; n = 2; } }",
+      "caseKey": "defined",
+      "brokenLine": 1
+    },
+    {
+      "id": "arguments",
+      "className": "Example",
+      "broken": "class Example { void go(int n) { go(); } }",
+      "fixed": "class Example { void go(int n) { go(1); } }",
+      "caseKey": "arguments",
+      "brokenLine": 1
+    },
+    {
+      "id": "unclosed-string",
+      "className": "Example",
+      "broken": "class Example { String s = \"hello; }",
+      "fixed": "class Example { String s = \"hello\"; }",
+      "caseKey": "unclosed.string",
+      "brokenLine": 1
+    },
+    {
+      "id": "break",
+      "className": "Example",
+      "broken": "class Example { void go() { break; } }",
+      "fixed": "class Example { void go() { for (int i=0;i<3;i++) { break; } } }",
+      "caseKey": "break",
+      "brokenLine": 1
+    },
+    {
+      "id": "void-return",
+      "className": "Example",
+      "broken": "class Example { void go() { return 1; } }",
+      "fixed": "class Example { int go() { return 1; } }",
+      "caseKey": "return.void",
+      "brokenLine": 1
+    },
+    {
+      "id": "method-in-method",
+      "className": "Example",
+      "broken": "class Example { void go() { void inner() {} } }",
+      "fixed": "class Example { void go() {} void inner() {} }",
+      "caseKey": "method.in.method",
+      "brokenLine": 1
+    },
+    {
+      "id": "final",
+      "className": "Example",
+      "broken": "class Example { void go() { final int n=1; n=2; } }",
+      "fixed": "class Example { void go() { int n=1; n=2; } }",
+      "caseKey": "final",
+      "brokenLine": 1
+    },
+    {
+      "id": "misspelled-extends",
+      "className": "Welt",
+      "broken": "public class Welt exends Spielwelt {\n}\nclass Spielwelt {}",
+      "fixed": "public class Welt extends Spielwelt {\n}\nclass Spielwelt {}",
+      "caseKey": "keyword.extends",
+      "brokenLine": 1
+    },
+    {
+      "id": "misspelled-class",
+      "className": "Welt",
+      "broken": "public cass Welt extends Spielwelt {\n}\nclass Spielwelt {}",
+      "fixed": "public class Welt extends Spielwelt {\n}\nclass Spielwelt {}",
+      "caseKey": "keyword.class",
+      "brokenLine": 1
+    },
+    {
+      "id": "misspelled-public",
+      "className": "Welt",
+      "broken": "pulic class Welt extends Spielwelt {\n}\nclass Spielwelt {}",
+      "fixed": "public class Welt extends Spielwelt {\n}\nclass Spielwelt {}",
+      "caseKey": "keyword.public",
+      "brokenLine": 1
+    }
+  ]
+}

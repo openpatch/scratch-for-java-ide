@@ -8,6 +8,27 @@ import org.junit.jupiter.api.Test;
 class QuickFixesTest {
 
   @Test
+  void keywordFixStaysInsideTheDeclarationAndRejectsStaleCode() {
+    assertThat(QuickFixes.apply("public class Welt exends Spielwelt {", QuickFixes.KEYWORD, 1, 18, "extends"))
+        .isEqualTo("public class Welt extends Spielwelt {");
+    assertThat(QuickFixes.apply("public class Welt\n  exends Spielwelt {", QuickFixes.KEYWORD, 1, 18, "extends"))
+        .isEqualTo("public class Welt\n  extends Spielwelt {");
+    for (String source : List.of("public class Welt extends Spielwelt {", "public class Welt { int exends; }",
+        "// public class Welt exends Spielwelt {", "String s = \"public class Welt exends Spielwelt {\";"))
+      assertThat(QuickFixes.apply(source, QuickFixes.KEYWORD, 1, 18, "extends")).as(source).isNull();
+    assertThat(QuickFixes.apply("public class Welt exends Spielwelt {", QuickFixes.KEYWORD, 1, 18, "implements")).isNull();
+    assertThat(QuickFixes.apply("\t\tpublic cass Welt {}", QuickFixes.KEYWORD, 1, 24, "class"))
+        .isEqualTo("\t\tpublic class Welt {}");
+  }
+
+  @Test
+  void previewShowsTheChangedAreaInsteadOfTheWholeFile() {
+    String source = "class A {\n  int first;\n  int second;\n  int n = 1\n  int fourth;\n  int fifth;\n}";
+    assertThat(QuickFixes.preview(source, QuickFixes.SEMICOLON, 4, 12, null))
+        .isEqualTo("  int second;\n  int n = 1;\n  int fourth;");
+  }
+
+  @Test
   void semicolonGoesWhereJavacPointed() {
     String source = "class A {\n  void go() {\n    int x = 1\n    int y = 2;\n  }\n}\n";
     // javac's caret for "';' expected" is right after the 1: line 3, column 14

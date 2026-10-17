@@ -9,6 +9,12 @@ public interface RunListener {
   /** A line (without newline) from the program's stderr. */
   default void onStderr(String line) {}
 
+  /** One structured behavior-check result. */
+  default void onCheck(CheckResult result) {}
+
+  /** Compilation succeeded, before the child JVM starts. */
+  default void onCompileSucceeded(org.openpatch.scratch4j.core.compile.CompileResult result) {}
+
   /** Compilation finished with errors before anything was started. */
   default void onCompileFailed(org.openpatch.scratch4j.core.compile.CompileResult result) {}
 

@@ -156,6 +156,7 @@ public class StudioApp extends javafx.application.Application {
   /** The project's lesson in the sidebar (only when the project has one). */
   private Tab lessonTab;
   private LessonPanel lessonPanel;
+  private final LearningSupport learning = new LearningSupport();
   /** Lesson checks read files and write progress: off the FX thread, one at a time. */
   private final java.util.concurrent.ExecutorService lessonWorker =
       java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
@@ -260,6 +261,7 @@ public class StudioApp extends javafx.application.Application {
       }
       saveAll();
       stopProgram();
+      learning.close();
     });
     stage.show();
     if (width < 1360 || height < 840) windowChrome.maximize();
@@ -311,7 +313,13 @@ public class StudioApp extends javafx.application.Application {
     editor.setOnRename(this::renameSymbol);
     editor.setOnFindUsages(this::findUsages);
     editor.setOnFindInProject(this::findInProject);
-    editor.setOnBlockDropped(this::addImports);
+    editor.setOnTypedEdit(learning::typed);
+    editor.setOnBlockDropped((target, snippet) -> {
+      addImports(target, snippet);
+      apiIndex.methods().stream().filter(method -> BlockPalette.snippet(method).equals(snippet)).findFirst()
+          .ifPresent(method -> learning.event("block.insert", Map.of("block",
+              org.openpatch.scratch4j.core.io.EventLog.id(method.className() + "." + method.signature()))));
+    });
     editor.setOnBrowse(this::browse);
     editor.setOnSaved(this::onCodeSaved);
     editor.setOnSaveFailed(error -> {
@@ -341,6 +349,16 @@ public class StudioApp extends javafx.application.Application {
     console = new ConsoleView(this::openSourceAt);
     problems = new ProblemsPane(p -> editor.openAt(p.file(), p.line()));
     problems.setOnFix(this::fixProblem);
+    problems.setOnConsole(p -> {
+      bottomTabs.getSelectionModel().select(consoleTab);
+      console.showTrace(p.trace());
+    });
+    editor.setOnHint((file, line) -> supportProblems().stream()
+        .filter(p -> file.equals(p.file()) && p.line() == line && p.error())
+        .findFirst().ifPresent(p -> {
+          bottomTabs.getSelectionModel().select(problemsTab);
+          problems.hint(p);
+        }));
     editor.setOnFix((file, line) -> checkedProblems.stream()
         .filter(p -> file.equals(p.file()) && p.line() == line && p.fix() != null)
         .findFirst().ifPresent(this::fixProblem));
@@ -370,6 +388,7 @@ public class StudioApp extends javafx.application.Application {
     filesTab.setGraphic(Icons.of("fth-folder"));
     sidebar.getTabs().addAll(stagesTab, filesTab);
     lessonPanel = new LessonPanel();
+    learning.connect(problems, lessonPanel, this::updateSupportGutters);
     lessonPanel.setOnRestart(this::restartLesson);
     lessonTab = new Tab(I18n.t("lesson.tab"), lessonPanel);
     lessonTab.setGraphic(Icons.of("fth-compass"));
@@ -442,7 +461,7 @@ public class StudioApp extends javafx.application.Application {
         javafx.scene.control.ProgressBar.INDETERMINATE_PROGRESS);
     runProgress.getStyleClass().add("run-progress");
     showRunProgress(false);
-    HBox statusBar = new HBox(12, runProgress, status, spacer, hint);
+    HBox statusBar = new HBox(12, runProgress, status, spacer, learning.indicator(), hint);
     statusBar.setAlignment(Pos.CENTER_LEFT);
     statusBar.getStyleClass().add("status-bar");
     root.setBottom(statusBar);
@@ -644,6 +663,9 @@ public class StudioApp extends javafx.application.Application {
    * makes the object selected in the designer.
    */
   void showView(Path file, ViewSwitch.View view) {
+    CodeEditor before = editor.editorFor(file);
+    if (before == null || before.view() != view)
+      learning.event("view", Map.of("view", view.name(), "kind", LearningSupport.kind(file)));
     CodeEditor code = editor.editorFor(file);
     if (view == ViewSwitch.View.CODE) {
       if (code != null && code.sidePanel() != null) {
@@ -681,6 +703,7 @@ public class StudioApp extends javafx.application.Application {
     hotSwapDelay.stop();
     stuckDelay.stop();
     editor.clear();
+    learning.closeProject();
     project.set(null);
     hasProject.set(false);
     stage.setTitle("Scratch for Java Studio");
@@ -732,6 +755,7 @@ public class StudioApp extends javafx.application.Application {
         item("menu.file.close", "fth-x", shortcut(KeyCode.W), () -> editor.closeSelected()),
         new SeparatorMenuItem(),
         export,
+        learning.menu(stage),
         new SeparatorMenuItem(),
         item("menu.file.exit", "fth-log-out", null, this::exitApp));
 
@@ -1182,6 +1206,10 @@ public class StudioApp extends javafx.application.Application {
     saveAll();
     stopProgram();
     project.set(p);
+    learning.open(p);
+    checkedProblems = List.of();
+    crashProblems.clear();
+    checkProblems.clear();
     ProjectCheck.Cache oldCache = checkCache;
     checkCache = new ProjectCheck.Cache(p.root());
     if (oldCache != null && !checkRunning.get()) {
@@ -1425,6 +1453,8 @@ public class StudioApp extends javafx.application.Application {
       return;
     }
     openVisual(file);
+    CodeEditor opened = editor.editorFor(file);
+    if (opened != null) learning.event("view", Map.of("view", opened.view().name(), "kind", LearningSupport.kind(file)));
   }
 
   /** The visual editor of a class, in the view last chosen for it (beside the code or alone). */
@@ -1491,6 +1521,7 @@ public class StudioApp extends javafx.application.Application {
     if (Files.isRegularFile(file)) {
       editor.open(file);
     } else {
+      learning.help("api", null);
       ApiHelpDialog.showForWord(apiIndex, type, this::browse);
     }
   }
@@ -1524,7 +1555,7 @@ public class StudioApp extends javafx.application.Application {
    * stage designer taking over a sprite, or one of the {@link QuickFixes} for common errors.
    */
   private void fixProblem(Problem problem) {
-    if (problem.file() == null) return;
+    if (problem.file() == null || (project.get() != null && project.get().settings().hintsOnly)) return;
     if (ProjectCheck.FIX_PROMOTE.equals(problem.fix())) {
       promoteSprite(problem.file(), (int) problem.line());
     } else if (problem.fix() != null) {
@@ -1534,6 +1565,7 @@ public class StudioApp extends javafx.application.Application {
 
   /** One-click edit of the saved file; the local history keeps the version before. */
   void applyQuickFix(Problem problem) {
+    if (project.get() == null || project.get().settings().hintsOnly) return;
     try {
       saveAll();
       String source = Files.readString(problem.file());
@@ -1548,6 +1580,8 @@ public class StudioApp extends javafx.application.Application {
       org.openpatch.scratch4j.core.io.LocalHistory.writeString(project.get().root(),
           problem.file(), fixed);
       editor.reloadIfOpen(problem.file());
+      learning.help("fix.applied", problem);
+      if (QuickFixes.RENAME.equals(problem.fix())) learning.help("rename", problem);
       scheduleCheck();
       setStatus(I18n.t("problems.fixed.quick"));
     } catch (IOException | RuntimeException e) {
@@ -1566,6 +1600,7 @@ public class StudioApp extends javafx.application.Application {
       editor.reloadIfOpen(file);
       reloadDesigners();
       scheduleCheck();
+      learning.help("fix.applied", null);
       setStatus(I18n.t("problems.fixed.promote"));
     } catch (IOException | RuntimeException e) {
       alert(e.getMessage(), e);
@@ -2205,6 +2240,7 @@ public class StudioApp extends javafx.application.Application {
                 ? target.get().libraryMember()
                 : target.get().libraryType().substring(
                     target.get().libraryType().lastIndexOf('.') + 1);
+            learning.help("api", null);
             ApiHelpDialog.showForWord(apiIndex, name, this::browse);
           } else {
             setStatus(I18n.t("definition.library", target.get().libraryType()));
@@ -3000,7 +3036,7 @@ public class StudioApp extends javafx.application.Application {
         found = ProjectCheck.check(p, language, cache).stream()
             .map(pr -> new Problem(pr.file(), pr.line(), pr.column(), pr.message(),
                 pr.explanation(), pr.suggestions(), pr.error(), pr.fix(), pr.original(),
-                pr.followUp(), pr.fixData(), pr.trace()))
+                pr.followUp(), pr.fixData(), pr.trace(), pr.caseKey(), pr.diagnosticCode()))
             .toList();
       } catch (RuntimeException e) {
         found = List.of(Problem.crash(e.toString(), e));
@@ -3034,21 +3070,19 @@ public class StudioApp extends javafx.application.Application {
   /** When code was last swapped into the running program (it must run a while too). */
   private long lastSwap;
   private final List<Problem> crashProblems = new ArrayList<>();
+  private final List<Problem> checkProblems = new ArrayList<>();
 
   private void showProblems(List<Problem> checked) {
     checkedProblems = checked;
     problems.setOutdated(false);
     List<Problem> found = new ArrayList<>(crashProblems);
     found.addAll(checked);
+    found.addAll(checkProblems);
     problems.setProblems(found);
+    learning.checked(found);
     Map<Path, List<CodeEditor.Diagnostic>> byFile = new HashMap<>();
-    Map<Path, Map<Integer, String>> fixes = new HashMap<>();
     for (Problem problem : found) {
       if (problem.file() == null) continue;
-      if (problem.fix() != null) {
-        fixes.computeIfAbsent(problem.file(), f -> new HashMap<>())
-            .put((int) problem.line(), problem.fixLabel());
-      }
       // hints are no squiggles: their light bulb is enough
       if (!problem.isHint()) {
         byFile.computeIfAbsent(problem.file(), f -> new ArrayList<>())
@@ -3056,14 +3090,14 @@ public class StudioApp extends javafx.application.Application {
       }
     }
     editor.setDiagnostics(byFile);
-    editor.setFixes(fixes);
+    updateSupportGutters();
     long errors = problems.errorCount();
     long count = found.stream().filter(p -> !p.isHint()).count();
     found = found.stream().filter(p -> !p.isHint()).toList();
     problemBadge.setText(String.valueOf(count));
     problemBadge.getStyleClass().removeAll("badge-error", "badge-warning", "badge-ok");
     problemBadge.getStyleClass().add(errors > 0 ? "badge-error"
-        : found.isEmpty() ? "badge-ok" : "badge-warning");
+        : found.stream().allMatch(p -> "check.passed".equals(p.caseKey())) ? "badge-ok" : "badge-warning");
     if (!running.get()) {
       setStatus(found.isEmpty() ? I18n.t("problems.none")
           : I18n.t("status.problems", found.size()));
@@ -3079,6 +3113,27 @@ public class StudioApp extends javafx.application.Application {
       stuckDelay.stop();
       problems.hideStuck();
     }
+  }
+
+  private List<Problem> supportProblems() {
+    List<Problem> all = new ArrayList<>(checkedProblems);
+    all.addAll(crashProblems);
+    all.addAll(checkProblems);
+    return all;
+  }
+
+  private void updateSupportGutters() {
+    Map<Path, Map<Integer, Boolean>> hints = new HashMap<>();
+    for (Problem p : supportProblems()) {
+      if (p.error() && p.file() != null && p.line() > 0) hints.computeIfAbsent(p.file(), f -> new HashMap<>())
+          .merge((int) p.line(), learning.isNudged(p), (a, b) -> a || b);
+    }
+    editor.setHints(hints);
+    Map<Path, Map<Integer, String>> fixes = new HashMap<>();
+    if (project.get() != null && !project.get().settings().hintsOnly)
+      for (Problem p : checkedProblems) if (p.fix() != null && p.file() != null)
+        fixes.computeIfAbsent(p.file(), f -> new HashMap<>()).put((int) p.line(), p.fixLabel());
+    editor.setFixes(fixes);
   }
 
   private static void closeQuietly(ProjectCheck.Cache cache) {
@@ -3103,6 +3158,7 @@ public class StudioApp extends javafx.application.Application {
       console.err(e.getMessage());
     }
     lessonPanel.show(progress);
+    learning.attach(progress);
     if (progress == null) {
       sidebar.getTabs().remove(lessonTab);
     } else {
@@ -3147,10 +3203,10 @@ public class StudioApp extends javafx.application.Application {
     } catch (IOException e) {
       return;
     }
-    if (completed.isEmpty()) return;
     Platform.runLater(() -> {
       if (lessonPanel.progress() != progress) return; // another project by now
       lessonPanel.refresh();
+      if (completed.isEmpty()) return;
       java.util.Locale locale = I18n.current() == I18n.Language.DE
           ? java.util.Locale.GERMAN : java.util.Locale.ENGLISH;
       var last = completed.get(completed.size() - 1);
@@ -3276,11 +3332,28 @@ public class StudioApp extends javafx.application.Application {
     stopProgram();
     long generation = runGeneration.incrementAndGet();
     running.set(true);
+    checkProblems.clear();
+    showProblems(checkedProblems);
+    var eventLog = learning.log();
+    int attempt = learning.attempt();
     bottomTabs.getSelectionModel().select(consoleTab);
     Thread.ofVirtual().start(() -> {
       RunHandle handle = null;
       try {
         handle = new org.openpatch.scratch4j.runner.TeachingTestRunner().run(p, new RunListener() {
+          public void onCheck(org.openpatch.scratch4j.runner.CheckResult result) {
+            if (eventLog != null && !result.status().equals("SKIPPED"))
+              eventLog.record("check", Map.of("name", result.name().replaceAll("[\\r\\n\\t]", " ").substring(0, Math.min(300, result.name().length())), "passed", result.passed()));
+            Problem feedback = CheckFeedback.describe(p, result, I18n.current() == I18n.Language.DE);
+            Platform.runLater(() -> {
+              if (project.get() != p || runGeneration.get() != generation) return;
+              checkProblems.add(feedback);
+              showProblems(checkedProblems);
+              bottomTabs.getSelectionModel().select(problemsTab);
+            });
+          }
+          public void onCompileFailed(CompileResult result) { learning.ran(p, eventLog, attempt, result); }
+          public void onCompileSucceeded(CompileResult result) { learning.ran(p, eventLog, attempt, result); }
           public void onStdout(String line) { Platform.runLater(() -> console.info(line)); }
           public void onStderr(String line) { Platform.runLater(() -> console.err(line)); }
         });
@@ -3295,7 +3368,8 @@ public class StudioApp extends javafx.application.Application {
         }
         int code = handle.exitFuture().get(30, java.util.concurrent.TimeUnit.SECONDS);
         Platform.runLater(() -> {
-          if (runGeneration.get() == generation) setStatus(I18n.t("tests.result", code));
+          if (runGeneration.get() == generation) setStatus(I18n.t("tests.summary",
+              checkProblems.stream().filter(pr -> "check.passed".equals(pr.caseKey())).count(), checkProblems.size()));
         });
       } catch (Exception error) {
         if (handle != null) handle.stop();
@@ -3388,6 +3462,10 @@ public class StudioApp extends javafx.application.Application {
 
   /** Compiles and starts {@code startStage} in a fresh JVM (optionally under the debugger). */
   private void runStage(String startStage, boolean debug) {
+    runStage(startStage, debug, true);
+  }
+
+  private void runStage(String startStage, boolean debug, boolean explicit) {
     ScratchProject p = project.get();
     if (p == null) {
       return;
@@ -3402,8 +3480,11 @@ public class StudioApp extends javafx.application.Application {
     long start = runStart.incrementAndGet();
     // this start is still the newest (not replaced by another one)
     java.util.function.BooleanSupplier current = () -> runStart.get() == start;
+    var eventLog = learning.log();
+    int attempt = explicit ? learning.attempt() : 0;
     console.clear();
     crashProblems.clear();
+    checkProblems.clear();
     showProblems(checkedProblems);
     runCrashed = false;
     runKept = false;
@@ -3457,7 +3538,9 @@ public class StudioApp extends javafx.application.Application {
             showTab(debuggerTab, true);
           });
         }
-        CrashWatcher crashes = new CrashWatcher(p, explanationLanguage(), this::showCrash);
+        CrashWatcher crashes = new CrashWatcher(p, explanationLanguage(), e -> {
+          Platform.runLater(() -> { if (project.get() == p && current.getAsBoolean()) showCrash(e); });
+        });
         // the code the program starts with: hot reload compares setup code against it
         liveSwap = new org.openpatch.scratch4j.runner.HotSwap(p, session);
         RunHandle handle = runner.run(p, config,
@@ -3523,7 +3606,12 @@ public class StudioApp extends javafx.application.Application {
             }
           }
 
+          @Override public void onCompileSucceeded(CompileResult r) {
+            if (explicit) learning.ran(p, eventLog, attempt, r);
+          }
+
           @Override public void onCompileFailed(CompileResult r) {
+            if (explicit) learning.ran(p, eventLog, attempt, r);
             Platform.runLater(() -> {
               if (!current.getAsBoolean()) return;
               // the full check gives these errors explanations and did-you-mean
@@ -3720,11 +3808,15 @@ public class StudioApp extends javafx.application.Application {
 
   /** A crash of the running program: in the problems, at its line, in the console. */
   void showCrash(org.openpatch.scratch4j.core.lint.RuntimeErrors.Explanation e) {
+    ScratchProject crashedProject = project.get();
     Platform.runLater(() -> {
+      if (project.get() != crashedProject) return;
       String where = e.file() == null ? "" : " (" + e.file().getFileName() + ":" + e.line() + ")";
       Problem problem = new Problem(e.file(), Math.max(0, e.line()), 0,
           "\u2716 " + I18n.t("crash.title", e.title()),
-          e.explanation() + "\n" + e.hint(), List.of(), true);
+          e.explanation() + "\n" + e.hint(), List.of(), true, null, null, false, null,
+          e.trace(), "runtime." + e.caseKey(), null);
+      learning.crash(e, problem);
       crashProblems.add(problem);
       runCrashed = true;
       showProblems(checkedProblems);
@@ -3976,6 +4068,7 @@ public class StudioApp extends javafx.application.Application {
     library.setOnShowing(e -> syncFlavourItems());
     menu.getItems().addAll(
         library,
+        learning.flag(true), learning.flag(false), learning.reportItem(stage),
         item("menu.project.course", "fth-book-open", null, this::importCoursePack),
         item("lessoneditor.menu", "fth-compass", null, this::editLesson),
         new SeparatorMenuItem(),
@@ -4438,7 +4531,7 @@ public class StudioApp extends javafx.application.Application {
   private void rerunWithCompatibilityGraphics(String startStage, boolean debug) {
     Prefs.compatibilityGraphics(true);
     org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(true);
-    runStage(startStage, debug);
+    runStage(startStage, debug, false);
     String message = I18n.t("graphics.fallback");
     if (org.openpatch.scratch4j.runner.GraphicsCompatibility.onWindows()) {
       message += " " + I18n.t("graphics.windows");
@@ -4504,6 +4597,7 @@ public class StudioApp extends javafx.application.Application {
 
   /** F1: help for the word at the caret of the active editor. */
   private void showApiHelp() {
+    learning.help("api", null);
     CodeEditor active = editor.activeEditor();
     String word = active == null ? "" : active.wordAtCaret();
     if (word.isEmpty()) {
@@ -4583,7 +4677,8 @@ public class StudioApp extends javafx.application.Application {
   private void insertFromPalette(ApiMethod method) {
     CodeEditor active = editor.activeEditor();
     if (active != null) {
-      insertWithImports(active, BlockPalette.snippet(method));
+      if (insertWithImports(active, BlockPalette.snippet(method)))
+        learning.event("block.insert", Map.of("block", org.openpatch.scratch4j.core.io.EventLog.id(method.className() + "." + method.signature())));
     } else {
       setStatus(I18n.t("palette.open.editor.first"));
     }
@@ -4597,8 +4692,10 @@ public class StudioApp extends javafx.application.Application {
    * Inserts code and the imports its library classes need ({@code Window},
    * {@code KeyCode}, ...), so it compiles without fully qualified names.
    */
-  private void insertWithImports(CodeEditor target, String snippet) {
-    if (target.insertBlock(snippet)) addImports(target, snippet);
+  private boolean insertWithImports(CodeEditor target, String snippet) {
+    if (!target.insertBlock(snippet)) return false;
+    addImports(target, snippet);
+    return true;
   }
 
   /** The imports the library classes in inserted code need (a dropped block's as well). */

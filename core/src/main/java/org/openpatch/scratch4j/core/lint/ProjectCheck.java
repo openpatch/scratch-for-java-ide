@@ -37,7 +37,15 @@ public final class ProjectCheck {
    */
   public record Problem(Path file, long line, long column, String message,
       String explanation, List<String> suggestions, boolean error, String fix,
-      String original, boolean followUp, String fixData, String trace) {
+      String original, boolean followUp, String fixData, String trace,
+      String caseKey, String diagnosticCode) {
+
+    public Problem(Path file, long line, long column, String message, String explanation,
+        List<String> suggestions, boolean error, String fix, String original, boolean followUp,
+        String fixData, String trace) {
+      this(file, line, column, message, explanation, suggestions, error, fix, original, followUp,
+          fixData, trace, null, null);
+    }
 
     public Problem(Path file, long line, long column, String message, String explanation,
         List<String> suggestions, boolean error, String fix, String original,
@@ -205,7 +213,8 @@ public final class ProjectCheck {
         }
         problems.add(new Problem(file, d.line(), d.column(), title, described.explanation(),
             List.copyOf(suggestions), true, fix,
-            title.equals(d.message()) ? null : d.message(), followUp, fixData));
+            title.equals(d.message()) ? null : d.message(), followUp, fixData, null,
+            described.caseKey(), d.code()));
       }
 
       AssetLinter linter = new AssetLinter();
@@ -268,7 +277,8 @@ public final class ProjectCheck {
           boolean unwrap = "forever".equals(f.kind())
               && QuickFixes.canRemoveForever(texts.get(source), f.line());
           problems.add(new Problem(f.file(), f.line(), 0, f.message(), f.explanation(),
-              List.of(), false, unwrap ? QuickFixes.FOREVER : null));
+              List.of(), false, unwrap ? QuickFixes.FOREVER : null, null, false, null, null,
+              "transition." + f.kind(), null));
         }
       }
     } catch (IOException e) {

@@ -69,6 +69,7 @@ public final class ProjectFormats {
   /** Build output, earlier exports and IDE caches never go into a shared project. */
   static boolean generated(Path relative) {
     String first = relative.getNameCount() == 0 ? "" : relative.getName(0).toString();
+    if (relative.toString().replace('\\', '/').matches("(?:.*/)?\\.scratch4j/log(?:/.*)?")) return true;
     return first.equals("export") || first.equals("target") || first.equals("build")
         || first.equals("out") || relative.toString().replace('\\', '/').startsWith(".scratch4j/build")
         || relative.toString().replace('\\', '/').startsWith(".scratch4j/history")

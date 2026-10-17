@@ -111,3 +111,48 @@ The course check imports and compiles all 18 projects and runs the score tests.
 Use `--libraries /path/to/bundled/library` for a fully offline check. The native
 packaging workflow runs `scripts/smoke-packaged.py` on each supported OS. Local
 Linux validation uses Xvfb when no display is available.
+
+## Hints and behavior checks
+
+Problems show one hint at a time: an explanation, the place to look, and an
+analogous example or a focused fix preview. Arrows move between levels; closing
+the hint frees the space again. Fixes still require their own click.
+After three runs with the same error, the Hint button is highlighted. Lesson
+steps support up to three hints per language and explain unmet class/method
+checks. Teachers edit these in the lesson editor and can set `hintsOnly: true`
+in project settings or a course manifest to hide automatic fix actions.
+
+Run → Behavior checks shows a checklist in Problems with the teacher's
+`@DisplayName` labels and plain assertion feedback. Failures link to student
+stack frames when present; an assertion after a method has returned has no
+student frame, so its raw trace remains available in the console.
+
+## Learning log and privacy
+
+Learning logs are **off by default**. A teacher can set `researchLog: true` in
+`.scratch4j/project.json` or the course pack's `.scratch4j/course.json`.
+The status bar shows when logging is on. File → Learning log lets students
+read or delete their retained local log and explicitly **Hand in learning log**
+as a separate file outside the project folder. Deleting stops logging until the project is opened again.
+No events are uploaded automatically. School consent is collected outside the IDE.
+
+Events record runs, compiler case keys/codes and line numbers, crashes, behavior
+check outcomes, hint levels, help actions, lesson progress, view switches and
+counts of inserted blocks and keyboard editing actions. Teacher-authored lesson and step IDs identify progress; palette IDs are hashed. Teacher-provided behavior check names
+are recorded so the class report can name failing checks. No
+source code, typed edits, file names, friendly titles, compiler messages,
+assertion values or stack traces enter the log. Only file kinds are stored.
+
+The local stream is `.scratch4j/log/events.jsonl`, capped at 2 MiB per segment
+with three rotated segments. A random pseudonymous ID lives once in the OS
+user's settings directory, never in `project.json`. On shared classroom accounts,
+hand-in accepts a teacher-assigned pseudonym code for the submitted copy.
+Share, browser, BlueJ and VS Code ZIPs exclude logs; app exports also exclude
+`.scratch4j`. Teachers select a folder of deliberately handed-in files to copy
+a class report through Help → For teachers → Copy class report. Reports derive metrics from the observed events; old rotated
+history and periods outside an IDE session cannot be recovered.
+See [the data-path decision](docs/learner-support-data-path.md) for details.
+
+Printable common-error handouts: [English](docs/common-errors-en.html) and
+[Deutsch](docs/common-errors-de.html). Regenerate both from the snippet corpus
+with `mvn -pl core test -Dtest=CommonErrorsHandoutTest -Dscratch4j.handoutDir=../docs`.

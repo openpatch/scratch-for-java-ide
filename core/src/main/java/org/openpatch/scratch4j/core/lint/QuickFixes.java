@@ -22,6 +22,8 @@ public final class QuickFixes {
   public static final String IMPORT = "import";
   /** Replace the unknown name at the error with the one suggestion (the fix data). */
   public static final String RENAME = "rename";
+  /** Correct a misspelled keyword in a type declaration. */
+  public static final String KEYWORD = "keyword";
   /** Remove a {@code while (true) {} } wrapper: the library already repeats run(). */
   public static final String FOREVER = "forever";
 
@@ -80,9 +82,32 @@ public final class QuickFixes {
       case SEMICOLON -> semicolon(source, line, column);
       case IMPORT -> addImport(source, data);
       case RENAME -> rename(source, line, column, data);
+      case KEYWORD -> keyword(source, line, column, data);
       case FOREVER -> removeForever(source, line);
       default -> null;
     };
+  }
+
+  private static String keyword(String source, long line, long column, String replacement) {
+    var typo = KeywordTypos.find(source, line, column);
+    if (typo == null || !typo.keyword().equals(replacement)) return null;
+    return source.substring(0, typo.start()) + replacement + source.substring(typo.end());
+  }
+
+  /** Just the changed lines and one line of context, for a compact, read-only preview. */
+  public static String preview(String source, String fix, long line, long column, String data) {
+    String fixed = apply(source, fix, line, column, data);
+    if (fixed == null || fixed.equals(source)) return null;
+    List<String> before = source.lines().toList(), after = fixed.lines().toList();
+    int first = 0;
+    while (first < before.size() && first < after.size() && before.get(first).equals(after.get(first))) first++;
+    int endBefore = before.size(), endAfter = after.size();
+    while (endBefore > first && endAfter > first && before.get(endBefore - 1).equals(after.get(endAfter - 1))) {
+      endBefore--; endAfter--;
+    }
+    int from = Math.max(0, first - 1), to = Math.min(after.size(), Math.max(first + 1, endAfter) + 1);
+    int shown = Math.min(to, from + 6);
+    return String.join("\n", after.subList(from, shown)) + (shown < to ? "\n…" : "");
   }
 
   private static String semicolon(String source, long line, long column) {

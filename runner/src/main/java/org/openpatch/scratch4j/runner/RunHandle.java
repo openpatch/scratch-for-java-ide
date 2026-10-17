@@ -116,13 +116,28 @@ public final class RunHandle {
   }
 
   static void pump(Process process, RunListener listener, CompletableFuture<Integer> exit) {
+    pump(process, listener, exit, false);
+  }
+
+  /** Checks must deliver every structured result before the exit future completes. */
+  static void pumpAndDrain(Process process, RunListener listener, CompletableFuture<Integer> exit) {
+    pump(process, listener, exit, true);
+  }
+
+  private static void pump(Process process, RunListener listener, CompletableFuture<Integer> exit, boolean drain) {
     Thread stdout = new Thread(() -> pumpStream(process, true, listener), "scratch4j-run-stdout");
     Thread stderr = new Thread(() -> pumpStream(process, false, listener), "scratch4j-run-stderr");
     stdout.setDaemon(true);
     stderr.setDaemon(true);
     stdout.start();
     stderr.start();
-    process.onExit().thenAccept(p -> exit.complete(p.exitValue()));
+    process.onExit().thenAccept(p -> {
+      if (!drain) { exit.complete(p.exitValue()); return; }
+      Thread.ofVirtual().name("check-output-drain").start(() -> {
+        try { stdout.join(); stderr.join(); exit.complete(p.exitValue()); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); exit.completeExceptionally(e); }
+      });
+    });
   }
 
   private static void pumpStream(Process process, boolean isStdout, RunListener listener) {

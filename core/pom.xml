@@ -13,6 +13,13 @@
   <artifactId>core</artifactId>
   <name>Scratch for Java Studio :: core</name>
 
+  <build>
+    <resources>
+      <resource><directory>src/main/resources</directory></resource>
+      <resource><directory>src/test/resources</directory><includes><include>lint/snippets/corpus.json</include></includes></resource>
+    </resources>
+  </build>
+
   <dependencies>
     <!-- Offline adapter for portable browser @Test classes and the Studio test runner. -->
     <dependency>

@@ -73,7 +73,22 @@ public record Lesson(String id, String template, List<String> languages,
 
   /** One step: what to do, why, optional code to copy, and when it is done. */
   public record Step(String id, Map<String, String> title, Map<String, String> text,
-      String code, Check check) {
+      String code, Check check, Map<String, List<String>> hints) {
+
+    public Step(String id, Map<String, String> title, Map<String, String> text, String code, Check check) {
+      this(id, title, text, code, check, Map.of());
+    }
+    public Step {
+      var copy = new LinkedHashMap<String, List<String>>();
+      hints.forEach((language, values) -> copy.put(language, List.copyOf(values)));
+      hints = Map.copyOf(copy);
+    }
+    public List<String> hints(Locale locale) {
+      List<String> own = hints.get(locale.getLanguage());
+      if (own != null && !own.isEmpty()) return own;
+      List<String> en = hints.get("en");
+      return en != null && !en.isEmpty() ? en : hints.values().stream().filter(v -> !v.isEmpty()).findFirst().orElse(List.of());
+    }
 
     public String title(Locale locale) {
       return Lesson.text(title, locale);
@@ -278,7 +293,7 @@ public record Lesson(String id, String template, List<String> languages,
       JsonNode code = step.get("code");
       steps.add(new Step(step.path("id").asString(), texts(step.path("title")),
           texts(step.path("text")), code == null || code.isNull() ? null : code.asString(),
-          check(step.path("check"))));
+          check(step.path("check")), hintTexts(step.path("hints"))));
     }
     if (steps.isEmpty()) {
       throw new IOException("A lesson needs steps");
@@ -333,6 +348,39 @@ public record Lesson(String id, String template, List<String> languages,
     throw new IOException("Unknown lesson check: " + node);
   }
 
+  private static Map<String, List<String>> hintTexts(JsonNode node) throws IOException {
+    Map<String, List<String>> out = new LinkedHashMap<>();
+    for (String language : LANGUAGES) {
+      JsonNode values = node.path(language);
+      if (values.isMissingNode()) continue;
+      if (!values.isArray() || values.size() > 3) throw new IOException("Use at most three hints per language");
+      List<String> hints = new ArrayList<>();
+      for (JsonNode hint : values) {
+        if (!hint.isString()) throw new IOException("A hint must be text");
+        if (!hint.asString().isBlank()) hints.add(hint.asString());
+      }
+      out.put(language, List.copyOf(hints));
+    }
+    return Map.copyOf(out);
+  }
+
+  /** Check-derived feedback; regex checks deliberately rely on the teacher's hints. */
+  public static List<String> missing(Check check, Facts facts, Locale locale) {
+    if (check.met(facts)) return List.of();
+    boolean de = locale.getLanguage().equals("de");
+    if (check instanceof All all) return all.checks().stream().flatMap(c -> missing(c, facts, locale).stream()).toList();
+    if (check instanceof ClassExists c) {
+      if (!c.name().isBlank()) return List.of((de ? "Es fehlt noch die Klasse " : "No class ") + c.name() + (de ? "." : " yet."));
+      if (!c.base().isBlank()) return List.of((de ? "Es müssen mindestens " + Math.max(1, c.min()) + " Klassen " + c.base() + " erweitern." :
+          c.min() <= 1 ? "No class extends " + c.base() + " yet." : "Need at least " + c.min() + " classes extending " + c.base() + "."));
+      return List.of(de ? "Es fehlt noch eine Klasse." : "No class yet.");
+    }
+    if (check instanceof MethodExists m) return List.of((de ? "Es fehlt noch die Methode " : "No method ") + m.name() + (de ? "." : " yet."));
+    if (check instanceof Ran) return List.of(de ? "Starte das Programm für diesen Schritt." : "Run the program for this step.");
+    if (check instanceof Contains c && c.literal()) return List.of((de ? "Es fehlt noch: " : "Still missing: ") + c.pattern());
+    return List.of();
+  }
+
   private static void validate(String regex) throws IOException {
     try {
       Pattern.compile(regex);
@@ -385,6 +433,10 @@ public record Lesson(String id, String template, List<String> languages,
       putTexts(node.putObject("text"), step.text());
       if (step.code() != null && !step.code().isBlank()) {
         node.put("code", step.code());
+      }
+      if (!step.hints().isEmpty()) {
+        var hints = node.putObject("hints");
+        step.hints().forEach((language, values) -> values.forEach(hints.putArray(language)::add));
       }
       putCheck(node.putObject("check"), step.check());
     }

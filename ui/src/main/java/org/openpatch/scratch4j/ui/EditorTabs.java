@@ -124,6 +124,9 @@ final class EditorTabs extends TabPane {
     this.onFindInProject = action;
   }
 
+  private Consumer<Path> onTypedEdit = file -> {};
+  void setOnTypedEdit(Consumer<Path> action) { onTypedEdit = action; }
+
   private java.util.function.BiConsumer<CodeEditor, String> onBlockDropped = (e, snippet) -> { };
 
   /** Told about every block dragged from the palette into a code editor. */
@@ -200,9 +203,12 @@ final class EditorTabs extends TabPane {
     editor.setOnFindUsages(offset -> onFindUsages.accept(codeEditor, offset));
     editor.setOnFindInProject(query -> onFindInProject.accept(query));
     editor.setOnBlockDropped(snippet -> onBlockDropped.accept(codeEditor, snippet));
+    editor.setOnTypedEdit(() -> onTypedEdit.accept(file));
     editor.setDiagnostics(diagnostics.getOrDefault(file, List.of()));
     editor.setFixes(fixes.getOrDefault(file, Map.of()));
     editor.setOnFix(line -> onFix.accept(file, line));
+    editor.setHints(hints.getOrDefault(file, Map.of()));
+    editor.setOnHint(line -> onHint.accept(file, line));
     editor.setOnOpenFile(f -> onOpenFile.accept(f));
     tab = new Tab();
     tab.setContent(editor);
@@ -393,6 +399,16 @@ final class EditorTabs extends TabPane {
   }
 
   /** Pushes diagnostics into every open editor (and remembers them for new tabs). */
+  private Map<Path, Map<Integer, Boolean>> hints = Map.of();
+  private java.util.function.BiConsumer<Path, Integer> onHint = (file, line) -> {};
+  void setOnHint(java.util.function.BiConsumer<Path, Integer> action) { onHint = action; }
+  void setHints(Map<Path, Map<Integer, Boolean>> values) {
+    hints = Map.copyOf(values);
+    for (var entry : openTabs.entrySet()) {
+      if (entry.getValue().getContent() instanceof CodeEditor code)
+        code.setHints(values.getOrDefault(entry.getKey(), Map.of()));
+    }
+  }
   private Map<Path, Map<Integer, String>> fixes = Map.of();
   private java.util.function.BiConsumer<Path, Integer> onFix = (file, line) -> { };
 

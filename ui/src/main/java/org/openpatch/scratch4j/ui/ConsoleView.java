@@ -93,6 +93,16 @@ final class ConsoleView extends BorderPane {
     setTop(bar);
   }
 
+  void showTrace(String trace) {
+    String first = trace == null ? "" : trace.lines().findFirst().orElse("");
+    int start = text.getText().lastIndexOf(first);
+    if (start >= 0 && !first.isBlank()) {
+      text.selectRange(start, Math.min(text.getLength(), start + first.length()));
+      text.requestFollowCaret();
+    }
+    text.requestFocus();
+  }
+
   void clear() {
     nextBatch.stop();
     synchronized (pending) {

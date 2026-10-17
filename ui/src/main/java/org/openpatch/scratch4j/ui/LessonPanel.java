@@ -28,6 +28,11 @@ final class LessonPanel extends ScrollPane {
 
   private final VBox content = new VBox(10);
   private LessonProgress progress;
+  private final java.util.Map<String, HintView.State> hintStates = new java.util.HashMap<>();
+  private String nudgedStep = "";
+  private java.util.function.BiConsumer<String, Integer> onHint = (step, level) -> {};
+  void setOnHint(java.util.function.BiConsumer<String, Integer> action) { onHint = action; }
+  void nudge(String step) { nudgedStep = step; refresh(); }
   private Runnable onRestart = () -> { };
 
   LessonPanel() {
@@ -47,6 +52,7 @@ final class LessonPanel extends ScrollPane {
   }
 
   void show(LessonProgress progress) {
+    if (this.progress != progress) { hintStates.clear(); nudgedStep = ""; }
     this.progress = progress;
     refresh();
   }
@@ -89,6 +95,15 @@ final class LessonPanel extends ScrollPane {
     content.getChildren().add(restart);
   }
 
+  private static String example(Lesson.Check check) {
+    if (check instanceof Lesson.MethodExists method) return "void " + method.name() + "() {\n  // ...\n}";
+    if (check instanceof Lesson.ClassExists type) return "class " + (type.name().isBlank() ? "Player" : type.name())
+        + (type.base().isBlank() ? "" : " extends " + type.base()) + " {\n  // ...\n}";
+    if (check instanceof Lesson.All all) return all.checks().stream().map(LessonPanel::example)
+        .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+    return null;
+  }
+
   private VBox card(Lesson.Step step, int index, int current, Locale locale) {
     boolean done = progress.isDone(step);
     boolean now = index == current;
@@ -110,6 +125,29 @@ final class LessonPanel extends ScrollPane {
       text.setMinHeight(Region.USE_PREF_SIZE);
       text.getStyleClass().add("lesson-text");
       card.getChildren().add(text);
+      for (String missing : progress.missing(locale)) {
+        Label feedback = new Label(missing);
+        feedback.setWrapText(true);
+        feedback.getStyleClass().add("lesson-missing");
+        card.getChildren().add(feedback);
+      }
+      List<String> teacherHints = step.hints(locale);
+      String missing = String.join("\n", progress.missing(locale));
+      String example = step.code();
+      if (example == null || example.isBlank()) example = example(step.check());
+      List<String> defaults = List.of(step.text(locale), missing.isBlank() ? I18n.t("lesson.hints.teacher") : missing,
+          example == null ? I18n.t("lesson.hints.teacher") : example);
+      List<String> ladder = java.util.stream.IntStream.range(0, 3)
+          .mapToObj(level -> level < teacherHints.size() ? teacherHints.get(level) : defaults.get(level)).toList();
+      if (!ladder.isEmpty()) {
+        boolean exampleIsCode = teacherHints.size() < 3 && example != null;
+        HintView hints = new HintView(hintStates.computeIfAbsent(step.id(), id -> new HintView.State()), ladder.size(),
+            level -> ladder.get(level - 1), level -> level == 3 && exampleIsCode,
+            level -> onHint.accept(step.id(), level));
+        hints.setNudged(nudgedStep.equals(step.id()));
+        head.getChildren().add(hints.trigger());
+        card.getChildren().add(hints);
+      }
       if (step.code() != null) {
         TextArea code = new TextArea(step.code());
         code.setEditable(false);

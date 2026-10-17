@@ -65,6 +65,7 @@ final class LessonEditorDialog {
     String id;
     final Map<String, String> title = new LinkedHashMap<>();
     final Map<String, String> text = new LinkedHashMap<>();
+    final Map<String, List<String>> hints = new LinkedHashMap<>();
     String code = "";
     Kind kind = Kind.RAN;
     String file = "";
@@ -84,6 +85,7 @@ final class LessonEditorDialog {
       d.id = step.id();
       d.title.putAll(step.title());
       d.text.putAll(step.text());
+      d.hints.putAll(step.hints());
       d.code = step.code() == null ? "" : step.code();
       Lesson.Check check = step.check();
       List<Lesson.Contains> contains = containsList(check);
@@ -147,6 +149,7 @@ final class LessonEditorDialog {
      * missing (a title in one of them, or a part of the condition).
      */
     Object toStep(List<String> languages) {
+      if (hints.values().stream().anyMatch(values -> values.size() > 3)) return "lessoneditor.error.hints";
       for (String language : languages) {
         if (title.getOrDefault(language, "").isBlank()) {
           return "lessoneditor.error.title." + language;
@@ -201,7 +204,9 @@ final class LessonEditorDialog {
         default -> check = advanced;
       }
       return new Lesson.Step(id, Map.copyOf(only(title, languages)),
-          Map.copyOf(only(text, languages)), code.isBlank() ? null : code, check);
+          Map.copyOf(only(text, languages)), code.isBlank() ? null : code, check,
+          hints.entrySet().stream().filter(e -> languages.contains(e.getKey()))
+              .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
     }
 
     /** The texts of these languages, trimmed; texts of languages left out go. */
@@ -339,6 +344,7 @@ final class LessonEditorDialog {
     stepForm.setVgap(6);
     Map<String, TextField> stepTitle = new LinkedHashMap<>();
     Map<String, TextArea> stepText = new LinkedHashMap<>();
+    Map<String, TextArea> stepHints = new LinkedHashMap<>();
     Map<String, Label> titleLabels = new LinkedHashMap<>();
     Map<String, Label> textLabels = new LinkedHashMap<>();
     int row = 0;
@@ -356,6 +362,13 @@ final class LessonEditorDialog {
       Label rowLabel = label("lessoneditor.text");
       textLabels.put(language, rowLabel);
       row = languageRow(stepForm, row, rowLabel, language, field,
+          languageBoxes.get(language));
+    }
+    for (String language : Lesson.LANGUAGES) {
+      TextArea field = area(3);
+      field.setPromptText(I18n.t("lessoneditor.hints.prompt"));
+      stepHints.put(language, field);
+      row = languageRow(stepForm, row, label("lessoneditor.hints"), language, field,
           languageBoxes.get(language));
     }
     // only the first shown language's row carries the label
@@ -507,6 +520,7 @@ final class LessonEditorDialog {
       for (String language : Lesson.LANGUAGES) {
         d.title.put(language, stepTitle.get(language).getText());
         d.text.put(language, stepText.get(language).getText());
+        d.hints.put(language, stepHints.get(language).getText().lines().filter(t -> !t.isBlank()).toList());
       }
       d.code = code.getText();
       if (d.kind != Kind.ADVANCED && kind.getValue() != null) d.kind = kind.getValue();
@@ -529,6 +543,7 @@ final class LessonEditorDialog {
       for (String language : Lesson.LANGUAGES) {
         stepTitle.get(language).setText(d.title.getOrDefault(language, ""));
         stepText.get(language).setText(d.text.getOrDefault(language, ""));
+        stepHints.get(language).setText(String.join("\n", d.hints.getOrDefault(language, List.of())));
       }
       code.setText(d.code);
       kind.setValue(d.kind == Kind.ADVANCED ? null : d.kind);

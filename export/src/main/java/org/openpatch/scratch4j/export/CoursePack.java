@@ -64,6 +64,9 @@ public final class CoursePack {
         if (!project.settings().libraryVersion.equals(org.openpatch.scratch4j.core.project.LibraryCheck.projectVersion(project))) {
           throw new IOException("Bundled library does not match course version " + project.settings().libraryVersion);
         }
+        if (manifest.has("researchLog")) project.settings().researchLog = manifest.path("researchLog").asBoolean(false);
+        if (manifest.has("hintsOnly")) project.settings().hintsOnly = manifest.path("hintsOnly").asBoolean(false);
+        project.settings().save(project.root());
         paths.add(path);
       }
       Files.move(unpacked, root);

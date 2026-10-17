@@ -41,18 +41,30 @@ public final class TeachingTestRunner {
     classpath.add(project.root());
     CompileResult compiled = new CompilerService().compile(sources, classpath, out);
     if (!compiled.success()) { listener.onCompileFailed(compiled); throw new ProjectRunner.CompilationFailedException(compiled); }
+    listener.onCompileSucceeded(compiled);
     classpath.add(0, out);
     List<String> command = new ArrayList<>(List.of(
         Path.of(System.getProperty("java.home"), "bin", System.getProperty("os.name").toLowerCase().contains("win") ? "java.exe" : "java").toString()));
     if (!graphics) command.add("-Djava.awt.headless=true");
-    command.addAll(List.of("-jar", TeachingTests.junitJar().toString(), "execute", "--disable-banner", "--fail-if-no-tests",
-        "--class-path", String.join(java.io.File.pathSeparator, classpath.stream().map(Path::toString).toList())));
-    classes.forEach(name -> command.addAll(List.of("--select-class", name)));
+    classpath.add(TeachingTests.junitJar());
+    try {
+      classpath.add(Path.of(TeachingChecksMain.class.getProtectionDomain().getCodeSource().getLocation().toURI()));
+    } catch (java.net.URISyntaxException e) { throw new IOException(e); }
+    command.addAll(List.of("-cp", String.join(java.io.File.pathSeparator,
+        classpath.stream().map(Path::toString).toList()), TeachingChecksMain.class.getName()));
+    command.addAll(classes);
     Process process = GraphicsCompatibility.apply(new ProcessBuilder(command))
         .directory(project.root().toFile()).start();
     CompletableFuture<Integer> exit = new CompletableFuture<>();
     RunHandle handle = new RunHandle(process, exit);
-    RunHandle.pump(process, listener, exit);
+    RunHandle.pumpAndDrain(process, new RunListener() {
+      public void onStdout(String line) {
+        var result = CheckResult.parse(line);
+        if (result.isPresent()) listener.onCheck(result.get());
+        else listener.onStdout(line);
+      }
+      public void onStderr(String line) { listener.onStderr(line); }
+    }, exit);
     exit.whenComplete((code, error) -> listener.onExit(code == null ? -1 : code));
     return handle;
   }

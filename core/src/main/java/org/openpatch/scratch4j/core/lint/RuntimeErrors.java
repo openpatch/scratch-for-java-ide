@@ -36,7 +36,11 @@ public final class RuntimeErrors {
    * where in their code (null when no frame is theirs).
    */
   public record Explanation(String title, String explanation, String hint, Path file,
-      int line, String method) {}
+      int line, String method, String exception, String caseKey, String trace) {
+    public Explanation(String title, String explanation, String hint, Path file, int line, String method) {
+      this(title, explanation, hint, file, line, method, "", "unknown", null);
+    }
+  }
 
   private static final Pattern HEAD = Pattern.compile(
       "^(?:Exception in thread \"[^\"]*\" )?(?:Caused by: )?"
@@ -115,163 +119,77 @@ public final class RuntimeErrors {
    */
   public static Explanation explain(Crash crash,
       java.util.function.Function<String, Path> projectFile, Language language) {
-    boolean de = language == Language.DE;
-    Frame own = null;
-    Path file = null;
-    for (Frame f : crash.frames()) {
-      Path p = f.file() == null || f.file().isEmpty() ? null : projectFile.apply(f.file());
-      if (p != null) {
-        own = f;
-        file = p;
-        break;
-      }
-    }
+    var bundle = java.util.ResourceBundle.getBundle(
+        "org.openpatch.scratch4j.core.lint.explanations",
+        language == Language.DE ? java.util.Locale.GERMAN : java.util.Locale.ENGLISH);
+    java.util.function.BiFunction<String, String[], String> text = (key, args) -> {
+      String value = bundle.getString("runtime." + key);
+      for (int i = 0; i < args.length; i++) value = value.replace("{" + i + "}", args[i]);
+      return value;
+    };
+    Frame own = studentFrame(crash.frames(), projectFile).orElse(null);
+    Path file = own == null ? null : projectFile.apply(own.file());
     String name = crash.simpleName();
     String msg = crash.message() == null ? "" : crash.message();
-    String title;
-    String text;
-    String hint;
+    String key = name;
+    String[] args = {};
     switch (name) {
       case "NullPointerException" -> {
-        String what = nullCulprit(msg, de);
-        title = what == null
-            ? (de ? "Etwas ist null" : "Something is null")
-            : (de ? what + " ist null" : what + " is null");
-        text = de
-            ? (what == null ? "Ein Wert hat noch kein Objekt" : what + " hat noch kein Objekt")
-                + ", aber der Code benutzt es (ruft eine Methode auf oder liest ein Attribut)."
-            : (what == null ? "A value has no object yet" : what + " has no object yet")
-                + ", but the code uses it (calls a method or reads a field).";
-        hint = de
-            ? "Wurde es mit new erzeugt, z. B. " + example(what) + "? Oder wird es benutzt, "
-                + "bevor die Zeile läuft, die es erzeugt?"
-            : "Was it created with new, e.g. " + example(what) + "? Or is it used before "
-                + "the line that creates it runs?";
+        String what = nullCulprit(msg, language == Language.DE);
+        key += what == null ? ".unknown" : ".named";
+        args = new String[]{what == null ? "" : what, example(what)};
       }
       case "ArrayIndexOutOfBoundsException", "IndexOutOfBoundsException",
           "StringIndexOutOfBoundsException" -> {
-        Matcher m = Pattern.compile("[Ii]ndex:? (-?\\d+).*?(?:length|[Ss]ize):? (\\d+)")
-            .matcher(msg);
+        Matcher m = Pattern.compile("[Ii]ndex:? (-?\\d+).*?(?:length|[Ss]ize):? (\\d+)").matcher(msg);
+        key = "index";
         if (m.find()) {
-          int index = Integer.parseInt(m.group(1));
-          int length = Integer.parseInt(m.group(2));
-          title = de ? "Index " + index + " gibt es nicht" : "There is no index " + index;
-          text = length == 0
-              ? (de ? "Die Liste (oder das Array) ist leer, es gibt also kein Element " + index
-                  + "." : "The list (or array) is empty, so there is no element " + index + ".")
-              : (de ? "Es gibt " + length + " Elemente mit den Nummern 0 bis " + (length - 1)
-                  + "." : "There are " + length + " elements, numbered 0 to " + (length - 1)
-                  + ".");
-        } else {
-          title = de ? "Index außerhalb des Bereichs" : "Index out of range";
-          text = msg;
-        }
-        hint = de
-            ? "Zählt die Schleife bis i < länge (nicht <=)? Wird ein leeres Element gelesen?"
-            : "Does the loop run while i < length (not <=)? Is an empty list read?";
+          long index = Long.parseLong(m.group(1)), length = Long.parseLong(m.group(2));
+          key += length == 0 ? ".empty" : ".bounds";
+          args = new String[]{"" + index, "" + length, "" + (length - 1)};
+        } else key += ".unknown";
       }
-      case "ArithmeticException" -> {
-        title = de ? "Division durch 0" : "Division by zero";
-        text = de ? "Eine ganze Zahl wurde durch 0 geteilt." : "A whole number was divided by 0.";
-        hint = de ? "Prüfe vorher, ob der Teiler 0 ist." : "Check whether the divisor is 0 first.";
-      }
-      case "ConcurrentModificationException" -> {
-        title = de ? "Liste beim Durchlaufen verändert" : "List changed while looping over it";
-        text = de
-            ? "Während eine for-each-Schleife eine Liste durchläuft, wurde etwas hinzugefügt "
-                + "oder entfernt."
-            : "Something was added to or removed from a list while a for-each loop went "
-                + "through it.";
-        hint = de
-            ? "Entferne mit list.removeIf(...) oder merke dir die Elemente und entferne sie "
-                + "nach der Schleife."
-            : "Remove with list.removeIf(...), or remember the items and remove them after "
-                + "the loop.";
-      }
+      case "ArithmeticException" -> { if (!msg.contains("/ by zero")) key = "unknown"; }
       case "StackOverflowError" -> {
-        String loop = repeated(crash.frames());
-        title = de ? "Endlose Selbstaufrufe" : "Endless self-calls";
-        text = de
-            ? (loop == null ? "Methoden rufen sich" : loop + " ruft sich")
-                + " immer wieder selbst auf, bis der Speicher dafür voll ist."
-            : (loop == null ? "Methods call themselves" : loop + " calls itself")
-                + " again and again until there is no room left.";
-        hint = de
-            ? "Braucht die Methode eine Abbruchbedingung? Oder ruft ein Getter/Setter sich "
-                + "selbst statt das Attribut auf?"
-            : "Does the method need a condition to stop? Or does a getter/setter call itself "
-                + "instead of using the field?";
+        String method = repeated(crash.frames());
+        key += method == null ? ".unknown" : ".named";
+        args = new String[]{method == null ? "" : method};
       }
       case "ClassCastException" -> {
-        Matcher m = Pattern.compile("class ([\\w.$]+) cannot be cast to class ([\\w.$]+)")
-            .matcher(msg);
-        String from = m.find() ? simple(m.group(1)) : null;
-        String to = from == null ? null : simple(m.group(2));
-        title = de ? "Falscher Typ" : "Wrong type";
-        text = from == null ? msg : de
-            ? "Ein " + from + "-Objekt wurde als " + to + " behandelt."
-            : "A " + from + " object was treated as a " + to + ".";
-        hint = de ? "Prüfe vorher mit instanceof." : "Check with instanceof first.";
+        Matcher m = Pattern.compile("class ([\\w.$]+) cannot be cast to class ([\\w.$]+)").matcher(msg);
+        key += m.find() ? ".named" : ".unknown";
+        if (key.endsWith(".named")) args = new String[]{simple(m.group(1)), simple(m.group(2))};
       }
       case "NumberFormatException" -> {
         Matcher m = Pattern.compile("For input string: \"(.*)\"").matcher(msg);
-        String input = m.find() ? m.group(1) : msg;
-        title = de ? "\"" + input + "\" ist keine Zahl" : "\"" + input + "\" is not a number";
-        text = de
-            ? "Text sollte in eine Zahl umgewandelt werden, enthält aber keine Zahl."
-            : "Text was turned into a number, but it does not contain one.";
-        hint = de
-            ? "Leerzeichen und Kommas stören (3,5 statt 3.5). Prüfe die Eingabe vorher."
-            : "Spaces and commas get in the way (3,5 instead of 3.5). Check the input first.";
+        args = new String[]{m.find() ? m.group(1) : msg};
       }
-      case "OutOfMemoryError" -> {
-        title = de ? "Speicher voll" : "Out of memory";
-        text = de
-            ? "Das Programm hat zu viele Objekte erzeugt."
-            : "The program created too many objects.";
-        hint = de
-            ? "Werden in run() in jedem Bild neue Figuren hinzugefügt und nie entfernt?"
-            : "Are new sprites added in run() every frame and never removed?";
-      }
-      case "IllegalMonitorStateException" -> {
-        // wait(1) compiles (Object.wait) but is not Scratch's wait block
-        title = de ? "wait() ist nicht der Warte-Block" : "wait() is not the wait block";
-        text = de
-            ? "In Java gehört wait() zu Threads und hält nicht einfach eine Figur an."
-            : "In Java, wait() belongs to threads and does not simply pause a sprite.";
-        hint = de
-            ? "Um etwas alle paar Millisekunden zu tun, benutze getTimer().everyMillis(500) "
-                + "in run()."
-            : "To do something every few milliseconds, use getTimer().everyMillis(500) "
-                + "inside run().";
-      }
-      case "NegativeArraySizeException" -> {
-        title = de ? "Negative Array-Größe" : "Negative array size";
-        text = de
-            ? "Ein Array sollte mit weniger als 0 Plätzen erzeugt werden (" + msg + ")."
-            : "An array was created with fewer than 0 places (" + msg + ").";
-        hint = de ? "Prüfe die Zahl in new ...[anzahl]." : "Check the number in new ...[size].";
-      }
-      case "NoSuchElementException" -> {
-        title = de ? "Da ist kein Element" : "There is no element";
-        text = de
-            ? "Es wurde ein Element gelesen, aber die Liste, der Iterator oder die Eingabe "
-                + "ist schon leer."
-            : "An element was read, but the list, iterator or input is already empty.";
-        hint = de
-            ? "Prüfe vorher mit isEmpty() oder hasNext(), ob noch etwas da ist."
-            : "Check with isEmpty() or hasNext() first whether there is anything left.";
-      }
-      default -> {
-        title = name;
-        text = msg.isEmpty() ? (de ? "Das Programm ist abgestürzt." : "The program crashed.")
-            : msg;
-        hint = de ? "Die Zeile unten ist die letzte deines Codes vor dem Fehler."
-            : "The line below is the last of your code before the error.";
-      }
+      case "NegativeArraySizeException" -> args = new String[]{msg};
+      case "ConcurrentModificationException", "OutOfMemoryError",
+          "IllegalMonitorStateException", "NoSuchElementException" -> { }
+      default -> key = "unknown";
     }
-    return new Explanation(title, text, hint, file, own == null ? -1 : own.line(),
-        own == null ? null : simple(own.className()) + "." + own.method());
+    String title = key.equals("unknown") ? name : text.apply(key + ".title", args);
+    String explanation = key.equals("unknown") && !msg.isBlank() ? msg : text.apply(key + ".text", args);
+    String hint = text.apply(key + ".hint", args);
+    String trace = crash.exception() + (msg.isBlank() ? "" : ": " + msg) + "\n"
+        + String.join("\n", crash.frames().stream().map(f -> "\tat " + f.className() + "."
+            + f.method() + "(" + f.file() + ":" + f.line() + ")").toList());
+    return new Explanation(title, explanation, hint, file, own == null ? -1 : own.line(),
+        own == null ? null : simple(own.className()) + "." + own.method(), crash.exception(), key, trace);
+  }
+
+  /** Shared with structured behavior-check feedback. */
+  public static Optional<Frame> studentFrame(List<Frame> frames,
+      java.util.function.Function<String, Path> projectFile) {
+    return frames.stream().filter(f -> f.line() > 0 && f.file() != null
+        && projectFile.apply(f.file()) != null).findFirst();
+  }
+
+  public static Optional<Frame> parseFrame(String line) {
+    Matcher m = FRAME.matcher(line);
+    return m.find() ? Optional.of(new Frame(m.group(1), m.group(2), m.group(3),
+        m.group(4) == null ? -1 : Integer.parseInt(m.group(4)))) : Optional.empty();
   }
 
   /** From Java's helpful message: "this.enemy" -> "enemy", "<local2>" -> null. */
@@ -289,7 +207,9 @@ public final class RuntimeErrors {
         .matcher(message);
     if (call.find()) {
       String method = simple(call.group(1)) + "()";
-      return de ? "Das Ergebnis von " + method : "The result of " + method;
+      var bundle = java.util.ResourceBundle.getBundle("org.openpatch.scratch4j.core.lint.explanations",
+          de ? java.util.Locale.GERMAN : java.util.Locale.ENGLISH);
+      return bundle.getString("runtime.null.result").replace("{0}", method);
     }
     return null;
   }

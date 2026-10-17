@@ -16,7 +16,7 @@ class CoursePackTest {
     Path archive = temporary.resolve("course.zip");
     try (var zip = new ZipOutputStream(Files.newOutputStream(archive))) {
       Map<String, String> files = Map.of(
-          ".scratch4j/course.json", "{\"schemaVersion\":1,\"libraryVersion\":\"5.7.0\",\"projects\":[{\"path\":\"" + projectPath + "\",\"flavour\":\"nrw\"}]}",
+          ".scratch4j/course.json", "{\"schemaVersion\":1,\"researchLog\":true,\"hintsOnly\":true,\"libraryVersion\":\"5.7.0\",\"projects\":[{\"path\":\"" + projectPath + "\",\"flavour\":\"nrw\"}]}",
           "projects/game/.scratch4j/project.json", "{\"version\":1,\"libraryVersion\":\"5.7.0\",\"flavour\":\"nrw\",\"lesson\":\"course\",\"checkpoint\":\"start\"}",
           "projects/game/Main.java", "void main() {}",
           "projects/game/assets/custom.frag", "uniform sampler2D texture;");
@@ -37,7 +37,10 @@ class CoursePackTest {
     Path project = imported.projects().get(0);
     assertThat(Files.readAllBytes(project.resolve("+libs/" + library.getFileName()))).containsExactly(1, 2, 3);
     assertThat(Files.readString(project.resolve("assets/custom.frag"))).contains("sampler2D");
-    assertThat(org.openpatch.scratch4j.core.project.ScratchProject.open(project).settings().checkpoint).isEqualTo("start");
+    var settings = org.openpatch.scratch4j.core.project.ScratchProject.open(project).settings();
+    assertThat(settings.checkpoint).isEqualTo("start");
+    assertThat(settings.researchLog).isTrue();
+    assertThat(settings.hintsOnly).isTrue();
   }
 
   @Test void invalidManifestOrMissingOfflineLibraryPublishesNoPartialPack() throws Exception {

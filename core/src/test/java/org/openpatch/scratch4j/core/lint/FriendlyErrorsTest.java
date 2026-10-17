@@ -47,7 +47,7 @@ class FriendlyErrorsTest {
     Map<String, String> expected = new java.util.LinkedHashMap<>();
     expected.put("class Semi { void go() { int x = 1\n } }", "A semicolon ; is missing here");
     expected.put("class Paren { void go() { if (true { } } }",
-        "A closing bracket ) is missing here");
+        "The ( opened on line 1 needs ), but this is }");
     expected.put("class Brace { void go() { int x = 1; }",
         "The file ends too early: a closing brace } is missing");
     expected.put("class Extra { void go() { } } }", "This code is outside of the class");
@@ -103,6 +103,68 @@ class FriendlyErrorsTest {
   }
 
   @Test
+  void misspelledExtendsExplainsTheKeywordEvenWhenJavacAsksForABrace() throws IOException {
+    String source = "public class Welt exends Spielwelt {";
+    var friendly = first("Welt", source);
+    assertThat(friendly.caseKey()).isEqualTo("keyword.extends");
+    assertThat(friendly.title()).isEqualTo("Write extends instead of exends");
+    assertThat(friendly.explanation()).contains("Welt", "Spielwelt", "inherits");
+    assertThat(friendly.fix()).isEqualTo(QuickFixes.KEYWORD);
+    assertThat(QuickFixes.apply(source, friendly.fix(), 1, 18, friendly.fixData()))
+        .isEqualTo("public class Welt extends Spielwelt {");
+    assertThat(first("Welt", source, Language.DE).title()).isEqualTo("Schreibe extends statt exends");
+    assertThat(first("Welt", "public class Welt\n  extneds Spielwelt {" ).caseKey()).isEqualTo("keyword.extends");
+    assertThat(first("Example", "class Example implments Runnable { public void run() {} }").caseKey())
+        .isEqualTo("keyword.implements");
+    assertThat(first("Example", "class Example\n  void go() {}\n}").caseKey()).isEqualTo("expected.brace.open");
+  }
+
+  @Test
+  void misspelledDeclarationKeywordsExplainTheTypoInBothLanguages() throws IOException {
+    Map<String, String> examples = new java.util.LinkedHashMap<>();
+    examples.put("public cass Welt extends Object {}", "class");
+    examples.put("\t\tpublic cass Welt {}", "class");
+    examples.put("pulic class Welt extends Object {}", "public");
+    examples.put("public clas Welt {}", "class");
+    examples.put("Public class Welt {}", "public");
+    examples.put("public interace Welt {}", "interface");
+    examples.put("public enmu Welt { ONE }", "enum");
+    examples.put("public abstact class Welt {}", "abstract");
+    examples.put("public fianl class Welt {}", "final");
+    examples.put("public cass Welt extends ..", "class");
+    examples.put("pulic class Welt extends", "public");
+    examples.put("@Deprecated\npulic class Welt {}", "public");
+    examples.put("class Outer { public statc class Welt {} }", "static");
+    for (var example : examples.entrySet()) {
+      var friendly = first("Welt", example.getKey());
+      assertThat(friendly.caseKey()).as(example.getKey()).isEqualTo("keyword." + example.getValue());
+      assertThat(friendly.title()).startsWith("Write " + example.getValue() + " instead of ");
+      assertThat(friendly.fix()).isEqualTo(QuickFixes.KEYWORD);
+      assertThat(friendly.fixData()).isEqualTo(example.getValue());
+      var german = first("Welt", example.getKey(), Language.DE);
+      assertThat(german.title()).as(example.getKey()).startsWith("Schreibe " + example.getValue() + " statt ");
+    }
+  }
+
+  @Test
+  void severalKeywordTyposCanBeCorrectedOneAtATime() throws IOException {
+    Path file = tmp.resolve("Welt.java");
+    String source = "publc cass Welt exends Object {}";
+    for (String keyword : List.of("public", "class", "extends")) {
+      Files.writeString(file, source);
+      var diagnostic = compiler.compile(List.of(file), List.of(), tmp.resolve("out"), Locale.ROOT).errors().getFirst();
+      var friendly = new FriendlyErrors(Language.EN).describe(diagnostic,
+          new FriendlyErrors.Context(source.lines().toList(), "Welt", n -> null, List.of()));
+      assertThat(friendly.caseKey()).isEqualTo("keyword." + keyword);
+      source = QuickFixes.apply(source, friendly.fix(), diagnostic.line(), diagnostic.column(), friendly.fixData());
+      assertThat(source).isNotNull();
+    }
+    assertThat(source).isEqualTo("public class Welt extends Object {}");
+    Files.writeString(file, source);
+    assertThat(compiler.compile(List.of(file), List.of(), tmp.resolve("out"), Locale.ROOT).errors()).isEmpty();
+  }
+
+  @Test
   void aMissingImportNamesTheLine() throws IOException {
     var friendly = first("Player", "public class Player extends Sprite { }");
     assertThat(friendly.title()).isEqualTo("Sprite needs an import");
@@ -149,8 +211,8 @@ class FriendlyErrorsTest {
         Locale.ENGLISH);
     var de = ResourceBundle.getBundle("org.openpatch.scratch4j.core.lint.explanations",
         Locale.GERMAN);
-    var enKeys = en.keySet().stream().filter(k -> k.startsWith("friendly.")).sorted().toList();
-    var deKeys = de.keySet().stream().filter(k -> k.startsWith("friendly.")).sorted().toList();
+    var enKeys = en.keySet().stream().filter(k -> (k.startsWith("friendly.") || k.startsWith("runtime."))).sorted().toList();
+    var deKeys = de.keySet().stream().filter(k -> (k.startsWith("friendly.") || k.startsWith("runtime."))).sorted().toList();
     assertThat(enKeys).isNotEmpty().isEqualTo(deKeys);
   }
 }

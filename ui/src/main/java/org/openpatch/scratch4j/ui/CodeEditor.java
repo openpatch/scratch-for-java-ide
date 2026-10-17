@@ -195,6 +195,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
     area.plainTextChanges().subscribe(change -> {
       if (closed) return;
+      editRevision++;
       regionRequest++; // invalidate an analysis even before the edit debounce fires
       forgetEditedProblems(change);
     });
@@ -765,6 +766,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       }
     }
     fixes.keySet().removeIf(line -> line >= first);
+    hints.keySet().removeIf(line -> line >= first);
   }
 
   // --- highlighting ----------------------------------------------------------
@@ -1130,10 +1132,29 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return Map.copyOf(fixes);
   }
 
+  private final javafx.collections.ObservableMap<Integer, Boolean> hints = javafx.collections.FXCollections.observableHashMap();
+  private java.util.function.IntConsumer onHint = line -> {};
+  void setHints(Map<Integer, Boolean> values) { hints.clear(); hints.putAll(values); }
+  void setOnHint(java.util.function.IntConsumer action) { onHint = action; }
+
   private IntFunction<Node> gutter() {
     IntFunction<Node> numbers = LineNumberFactory.get(area);
     return line -> {
       Node number = numbers.apply(line);
+      Label hint = new Label(null, Icons.of("fth-help-circle", 12));
+      hint.getStyleClass().add("gutter-hint");
+      hint.setMinWidth(14);
+      hint.setTooltip(new Tooltip(I18n.t("hints.button")));
+      Runnable updateHint = () -> {
+        hint.setVisible(hints.containsKey(line + 1));
+        hint.getStyleClass().remove("hint-nudge");
+        if (Boolean.TRUE.equals(hints.get(line + 1))) hint.getStyleClass().add("hint-nudge");
+      };
+      updateHint.run();
+      hints.addListener((javafx.collections.MapChangeListener<Integer, Boolean>) c -> updateHint.run());
+      hint.setOnMouseClicked(e -> {
+        if (hints.containsKey(line + 1)) { onHint.accept(line + 1); e.consume(); }
+      });
       Label bulb = new Label(null, Icons.of("fth-zap", 12));
       bulb.getStyleClass().add("gutter-fix");
       bulb.setMinWidth(14);
@@ -1195,7 +1216,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       previewSlot.setMinWidth(18);
       previewSlot.setPrefWidth(18);
       if (preview != null) previewSlot.getChildren().add(preview);
-      HBox box = new HBox(marker, bulb, number, block, previewSlot);
+      HBox box = new HBox(marker, hint, bulb, number, block, previewSlot);
       box.setAlignment(Pos.CENTER_LEFT);
       box.getStyleClass().add("gutter");
       box.setCursor(javafx.scene.Cursor.HAND);
@@ -1221,7 +1242,22 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   // --- keys --------------------------------------------------------------------
 
+  private long editRevision;
+  private Runnable onTypedEdit = () -> {};
+  void setOnTypedEdit(Runnable action) { onTypedEdit = action; }
+
   private void installKeys() {
+    // Count editing actions after dispatch, including consumed Enter/Tab and keyboard
+    // paste/delete. Only a revision counter crosses this callback, never the key/text.
+    javafx.event.EventDispatcher original = area.getEventDispatcher();
+    area.setEventDispatcher((event, tail) -> {
+      long before = editRevision;
+      try { return original.dispatchEvent(event, tail); }
+      finally {
+        if (event instanceof KeyEvent key && (key.getEventType() == KeyEvent.KEY_PRESSED
+            || key.getEventType() == KeyEvent.KEY_TYPED) && editRevision != before) onTypedEdit.run();
+      }
+    });
     area.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
       if (!completionPopup.isShowing() && (semanticPending >= 0 || semanticItems != null)) {
         switch (e.getCode()) {

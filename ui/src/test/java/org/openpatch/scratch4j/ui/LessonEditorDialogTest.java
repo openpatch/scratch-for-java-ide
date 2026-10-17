@@ -12,6 +12,16 @@ class LessonEditorDialogTest {
 
   private static final List<String> EN = List.of("en");
 
+  @Test void teacherHintsSurviveEditingAndLanguageSelection() {
+    var step = new Lesson.Step("s", Map.of("en", "Title", "de", "Titel"), Map.of(), null,
+        new Lesson.Ran(), Map.of("en", List.of("One", "Two", "Three"), "de", List.of("Eins")));
+    var draft = LessonEditorDialog.Draft.of(step);
+    assertThat(draft.toStep(List.of("en", "de"))).isEqualTo(step);
+    assertThat(((Lesson.Step) draft.toStep(List.of("de"))).hints()).containsOnlyKeys("de");
+    draft.hints.put("de", List.of("1", "2", "3", "4"));
+    assertThat(draft.toStep(List.of("de"))).isEqualTo("lessoneditor.error.hints");
+  }
+
   @Test
   void everyBundledStepRoundTripsThroughTheForm() throws Exception {
     Lesson lesson = Lesson.bundled("first-steps");

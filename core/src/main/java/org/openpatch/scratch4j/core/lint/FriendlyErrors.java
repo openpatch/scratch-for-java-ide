@@ -33,14 +33,22 @@ public final class FriendlyErrors {
    * and the {@link QuickFixes one-click fix} with its data (null if none).
    */
   public record Friendly(String title, String explanation, List<String> suggestions,
-      String fix, String fixData) {
+      String fix, String fixData, String caseKey) {
+
+    public Friendly(String title, String explanation, List<String> suggestions, String fix, String fixData) {
+      this(title, explanation, suggestions, fix, fixData, null);
+    }
 
     public Friendly(String title, String explanation, List<String> suggestions) {
       this(title, explanation, suggestions, null, null);
     }
 
+    Friendly withCaseKey(String key) {
+      return new Friendly(title, explanation, suggestions, fix, fixData, key);
+    }
+
     Friendly withFix(String fix, String fixData) {
-      return new Friendly(title, explanation, suggestions, fix, fixData);
+      return new Friendly(title, explanation, suggestions, fix, fixData, caseKey);
     }
   }
 
@@ -127,11 +135,23 @@ public final class FriendlyErrors {
     String english = d.englishMessage() == null ? "" : d.englishMessage();
     String line = context.line(d.line());
     Matcher m;
+    if (SYNTAX_ERRORS.contains(code)) {
+      var typo = KeywordTypos.find(String.join("\n", context.lines()), d.line(), d.column());
+      if (typo != null) return of("keyword." + typo.keyword(), typo.word(), typo.className(), typo.parent())
+          .withFix(QuickFixes.KEYWORD, typo.keyword());
+    }
+    Brackets.Mismatch mismatch = SYNTAX_ERRORS.contains(code)
+        ? Brackets.mismatch(String.join("\n", context.lines())) : null;
+    if (mismatch != null && mismatch.line() == d.line()) {
+      return of("bracket.mismatch", mismatch.open(), "" + mismatch.openLine(),
+          mismatch.expected(), mismatch.actual());
+    }
     Friendly friendly = switch (code) {
       case "compiler.err.expected" -> {
         m = EXPECTED.matcher(english);
         if (m.matches() && TOKENS.containsKey(m.group(1))) {
-          Friendly expected = of("expected", text("token." + TOKENS.get(m.group(1))));
+          Friendly expected = of("expected", text("token." + TOKENS.get(m.group(1))))
+              .withCaseKey("expected." + TOKENS.get(m.group(1)));
           yield m.group(1).equals(";") ? expected.withFix(QuickFixes.SEMICOLON, null)
               : expected;
         }
@@ -170,7 +190,7 @@ public final class FriendlyErrors {
         if (name == null) yield null;
         Friendly f = of("override", name);
         yield new Friendly(f.title(), f.explanation(),
-            DidYouMean.suggest(name, context.apiNames(), 3));
+            DidYouMean.suggest(name, context.apiNames(), 3), null, null, f.caseKey());
       }
       case "compiler.err.operator.cant.be.applied.1" -> {
         m = OPERANDS.matcher(english);
@@ -222,6 +242,7 @@ public final class FriendlyErrors {
         yield of("arguments", m.group(1), arguments(m.group(2)), arguments(m.group(3)));
       }
       case "compiler.err.cant.apply.symbols" -> of("arguments.any");
+      case "compiler.err.unclosed.char.lit" -> of("unclosed.character");
       case "compiler.err.unclosed.str.lit" -> of("unclosed.string");
       case "compiler.err.unclosed.comment" -> of("unclosed.comment");
       case "compiler.err.illegal.char" -> {
@@ -266,7 +287,7 @@ public final class FriendlyErrors {
     if (friendly.explanation() == null) {
       friendly = new Friendly(friendly.title(),
           DiagnosticsExplanations.explain(code, languageOf()).orElse(null),
-          friendly.suggestions(), friendly.fix(), friendly.fixData());
+          friendly.suggestions(), friendly.fix(), friendly.fixData(), friendly.caseKey());
     }
     return friendly;
   }
@@ -279,7 +300,7 @@ public final class FriendlyErrors {
     String explanation = bundle.containsKey("friendly." + key)
         ? fill(bundle.getString("friendly." + key), args) : null;
     return new Friendly(fill(bundle.getString("friendly." + key + ".title"), args),
-        explanation, List.of());
+        explanation, List.of(), null, null, key);
   }
 
   private String text(String key) {

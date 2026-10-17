@@ -34,6 +34,23 @@ public final class LessonProgress {
   private final Set<String> done = new LinkedHashSet<>();
   private int runs;
   private int runsAtStepStart;
+  private Lesson.Facts latest = new Lesson.Facts(Map.of(), false, false);
+  private java.util.function.BiConsumer<String, String> onStep = (id, state) -> {};
+
+  public synchronized void setOnStep(java.util.function.BiConsumer<String, String> action) {
+    onStep = action;
+    started();
+  }
+  private void started() {
+    if (!finished()) onStep.accept(lesson.steps().get(current()).id(), "started");
+  }
+  public synchronized List<String> missing(java.util.Locale locale) {
+    if (finished()) return List.of();
+    List<String> missing = Lesson.missing(lesson.steps().get(current()).check(), latest, locale);
+    if (missing.isEmpty() && !latest.compiles() && lesson.steps().get(current()).check().readsCode())
+      return List.of(locale.getLanguage().equals("de") ? "Behebe zuerst die Compilerfehler." : "Fix the compiler errors first.");
+    return missing;
+  }
 
   private LessonProgress(Lesson lesson, Path file) {
     this.lesson = lesson;
@@ -96,6 +113,7 @@ public final class LessonProgress {
    */
   public synchronized List<Lesson.Step> update(Map<String, String> files, boolean compiles)
       throws IOException {
+    latest = new Lesson.Facts(Map.copyOf(files), compiles, runs > runsAtStepStart);
     List<Lesson.Step> completed = new ArrayList<>();
     while (!finished()) {
       Lesson.Step step = lesson.steps().get(current());
@@ -106,6 +124,8 @@ public final class LessonProgress {
       done.add(step.id());
       runsAtStepStart = runs;
       completed.add(step);
+      onStep.accept(step.id(), "completed");
+      started();
     }
     save();
     return completed;
@@ -114,6 +134,7 @@ public final class LessonProgress {
   /** Starts the lesson again from its first step (the code stays as it is). */
   public synchronized void restart() throws IOException {
     done.clear();
+    started();
     runsAtStepStart = runs;
     save();
   }

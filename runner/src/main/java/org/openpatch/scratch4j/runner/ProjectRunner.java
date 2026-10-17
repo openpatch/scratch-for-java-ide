@@ -43,6 +43,7 @@ public final class ProjectRunner {
       listener.onCompileFailed(result);
       throw new CompilationFailedException(result);
     }
+    listener.onCompileSucceeded(result);
 
     List<String> command = new ArrayList<>();
     command.add(config.javaExecutable().toString());

@@ -45,6 +45,9 @@ public final class ProjectSettings {
   public boolean fullScreen;
   public boolean pixelArt;
   public boolean debugOnStart;
+  /** Teacher flags, carried by the project rather than per-machine preferences. */
+  public boolean hintsOnly;
+  public boolean researchLog;
   /** Project-relative image path used as the launch splash; empty = library default. */
   public String splashLogo = "";
   /**
