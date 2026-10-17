@@ -10,6 +10,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class TeachingTestRunnerTest {
   @TempDir Path root;
+
+  @Test void commandLineKeepsTheSummaryUsedByBrowserTransferChecks() throws Exception {
+    Files.writeString(root.resolve("ScoreTest.java"), """
+        import org.junit.jupiter.api.Test;
+        import static org.junit.jupiter.api.Assertions.assertEquals;
+        class ScoreTest {
+          @Test void startsAtZero() { assertEquals(0, 0); }
+        }
+        """);
+    Process process = new ProcessBuilder(
+        Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+        "-cp", System.getProperty("java.class.path"), TeachingTestRunner.class.getName(), root.toString())
+        .redirectErrorStream(true).start();
+    try {
+      assertThat(process.waitFor(30, TimeUnit.SECONDS)).isTrue();
+      String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+      assertThat(process.exitValue()).as(output).isZero();
+      assertThat(output).contains("PASSED: startsAtZero()", "1 tests successful");
+    } finally {
+      process.destroyForcibly();
+    }
+  }
+
   @Test void browserTestClassesRunUnchangedAndFailOnWrongBehavior() throws Exception {
     Path source = root.resolve("ScoreTest.java");
     String original = "@Test\nclass ScoreTest {\n @Test void startsAtZero() { assertEquals(0, new Score().points); }\n}\n";

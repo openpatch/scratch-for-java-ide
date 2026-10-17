@@ -71,11 +71,17 @@ public final class TeachingTestRunner {
 
   public static void main(String[] args) throws Exception {
     if (args.length != 1) throw new IllegalArgumentException("Usage: TeachingTestRunner <project-folder>");
+    var successful = new java.util.concurrent.atomic.AtomicInteger();
     RunHandle handle = new TeachingTestRunner().run(ScratchProject.open(Path.of(args[0]).toAbsolutePath()), new RunListener() {
+      public void onCheck(CheckResult result) { if (result.passed()) successful.incrementAndGet(); }
       public void onStdout(String line) { System.out.println(line); }
       public void onStderr(String line) { System.err.println(line); }
     });
-    try { System.exit(handle.exitFuture().get(30, TimeUnit.SECONDS)); }
+    try {
+      int code = handle.exitFuture().get(30, TimeUnit.SECONDS);
+      System.out.println(successful.get() + " tests successful");
+      System.exit(code);
+    }
     catch (java.util.concurrent.TimeoutException e) { handle.stop(); throw new IOException("Behavior checks exceeded 30 seconds", e); }
   }
 }
