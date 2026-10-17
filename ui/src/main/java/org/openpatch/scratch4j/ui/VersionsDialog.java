@@ -4,11 +4,15 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.TextInputDialog;
+import javafx.collections.FXCollections;
+import javafx.collections.transformation.FilteredList;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -26,20 +30,48 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The project's versions: one after every run that worked, one before every
- * restore. A version shows what changed since then (line by line) and can be
- * restored as a whole or file by file.
+ * Named project milestones and automatic checkpoints. Versions can be filtered,
+ * compared with the current files, and restored as a whole or file by file.
  */
 final class VersionsDialog {
 
   private VersionsDialog() {}
 
+  @FunctionalInterface
+  interface SaveFiles { void save() throws IOException; }
+
+  /** Saves everything in one step, without choosing or staging individual files. */
+  static boolean save(Path root, SaveFiles saveFiles) {
+    TextInputDialog ask = new TextInputDialog();
+    ask.setTitle(I18n.t("versions.save"));
+    ask.setHeaderText(I18n.t("versions.save.hint"));
+    ask.setContentText(I18n.t("versions.save.name"));
+    ask.getDialogPane().lookupButton(ButtonType.OK).disableProperty()
+        .bind(javafx.beans.binding.Bindings.createBooleanBinding(
+            () -> ask.getEditor().getText().isBlank(), ask.getEditor().textProperty()));
+    Theme.style(ask);
+    var name = ask.showAndWait().map(String::strip).filter(s -> !s.isEmpty());
+    if (name.isEmpty()) return false;
+    try {
+      saveFiles.save();
+      ProjectSnapshots.keep(root, name.get());
+      return true;
+    } catch (IOException e) {
+      error(e.getMessage(), e);
+      return false;
+    }
+  }
+
   /** Shows the dialog; {@code onRestored} runs after files changed on disk. */
-  static void show(Path root, Runnable onRestored) {
-    build(root, onRestored).showAndWait();
+  static void show(Path root, Runnable onRestored, SaveFiles saveFiles) {
+    build(root, onRestored, saveFiles).showAndWait();
   }
 
   static Dialog<ButtonType> build(Path root, Runnable onRestored) {
+    return build(root, onRestored, () -> { });
+  }
+
+  static Dialog<ButtonType> build(Path root, Runnable onRestored, SaveFiles saveFiles) {
     List<ProjectSnapshots.Version> versions;
     try {
       versions = ProjectSnapshots.list(root);
@@ -54,7 +86,16 @@ final class VersionsDialog {
     Theme.style(dialog);
 
     ListView<ProjectSnapshots.Version> list = new ListView<>();
-    list.getItems().setAll(versions);
+    list.setId("version-list");
+    var allVersions = FXCollections.observableArrayList(versions);
+    var visibleVersions = new FilteredList<>(allVersions);
+    list.setItems(visibleVersions);
+    CheckBox hideAuto = new CheckBox(I18n.t("versions.hide.auto"));
+    hideAuto.setId("versions-hide-auto");
+    hideAuto.selectedProperty().addListener((o, a, hide) -> {
+      visibleVersions.setPredicate(v -> !hide || !v.automatic());
+      if (list.getSelectionModel().getSelectedItem() == null) list.getSelectionModel().selectFirst();
+    });
     list.setPrefWidth(260);
     DateTimeFormatter time = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM)
         .withLocale(I18n.current() == I18n.Language.DE ? java.util.Locale.GERMAN
@@ -69,32 +110,43 @@ final class VersionsDialog {
           return;
         }
         Label when = new Label(time.format(version.time()));
-        Label why = new Label(I18n.t("versions.kind." + version.kind().name().toLowerCase()));
-        why.getStyleClass().add("text-muted");
-        setGraphic(new VBox(2, when, why));
+        Label title = new Label(version.automatic() ? "[AUTO] "
+            + I18n.t("versions.kind." + version.kind().name().toLowerCase(java.util.Locale.ROOT))
+            : version.title());
+        title.setWrapText(true);
+        title.setMaxWidth(240);
+        when.getStyleClass().add("text-muted");
+        setGraphic(new VBox(2, title, when));
         setText(null);
       }
     });
 
     ListView<String> files = new ListView<>();
+    files.setId("versions-files");
     files.setPrefHeight(140);
     StyleClassedTextArea diff = new StyleClassedTextArea();
+    diff.setId("versions-diff");
     diff.setEditable(false);
     diff.getStyleClass().add("version-diff");
     Label summary = new Label();
     summary.setWrapText(true);
     Button restoreFile = new Button(I18n.t("versions.restore.file"), Icons.of("fth-file"));
+    restoreFile.setId("versions-restore-file");
     Button restoreAll = new Button(I18n.t("versions.restore"), Icons.of("fth-rotate-ccw"));
     restoreAll.getStyleClass().add("accent");
-    Map<String, String[]>[] changes = new Map[] {Map.of()};
+    Map<String, ProjectSnapshots.Change>[] changes = new Map[] {Map.of()};
 
     Runnable showFile = () -> {
       String path = files.getSelectionModel().getSelectedItem();
       diff.clear();
       restoreFile.setDisable(path == null);
       if (path == null) return;
-      String[] texts = changes[0].get(path);
-      List<LineDiff.Line> lines = LineDiff.diff(texts[0], texts[1]);
+      var change = changes[0].get(path);
+      if (change.binary()) {
+        diff.replaceText(I18n.t("versions.binary"));
+        return;
+      }
+      List<LineDiff.Line> lines = LineDiff.diff(change.thenText(), change.nowText());
       // only the changes, with three lines around each
       boolean[] shown = new boolean[lines.size()];
       for (int i = 0; i < lines.size(); i++) {
@@ -133,7 +185,14 @@ final class VersionsDialog {
     files.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> showFile.run());
     list.getSelectionModel().selectedItemProperty().addListener((o, a, version) -> {
       restoreAll.setDisable(version == null);
-      if (version == null) return;
+      if (version == null) {
+        changes[0] = Map.of();
+        files.getItems().clear();
+        diff.clear();
+        summary.setText("");
+        restoreFile.setDisable(true);
+        return;
+      }
       try {
         changes[0] = ProjectSnapshots.changes(root, version);
       } catch (IOException e) {
@@ -164,15 +223,9 @@ final class VersionsDialog {
     restoreFile.setOnAction(e -> {
       String path = files.getSelectionModel().getSelectedItem();
       if (path == null) return;
-      String then = changes[0].get(path)[0];
+      byte[] then = changes[0].get(path).then();
       try {
-        if (then == null) {
-          // the file did not exist then: it goes into the per-file history and away
-          org.openpatch.scratch4j.core.io.LocalHistory.snapshot(root, root.resolve(path));
-          java.nio.file.Files.deleteIfExists(root.resolve(path));
-        } else {
-          ProjectSnapshots.restoreFile(root, path, then);
-        }
+        ProjectSnapshots.restoreFile(root, path, then);
         onRestored.run();
         int index = list.getSelectionModel().getSelectedIndex();
         list.getSelectionModel().clearSelection();
@@ -183,6 +236,8 @@ final class VersionsDialog {
     });
 
     Label empty = new Label(I18n.t("versions.none"));
+    empty.textProperty().bind(javafx.beans.binding.Bindings.when(hideAuto.selectedProperty())
+        .then(I18n.t("versions.none.manual")).otherwise(I18n.t("versions.none")));
     empty.setWrapText(true);
     list.setPlaceholder(empty);
     restoreFile.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
@@ -191,7 +246,20 @@ final class VersionsDialog {
     VBox right = new VBox(8, summary, files, diff, actions);
     VBox.setVgrow(diff, Priority.ALWAYS);
     right.setPadding(new Insets(0, 0, 0, 8));
-    SplitPane split = new SplitPane(list, right);
+    Button save = new Button(I18n.t("versions.save"), Icons.of("fth-save"));
+    save.setId("versions-save");
+    save.setOnAction(e -> {
+      if (!save(root, saveFiles)) return;
+      try {
+        allVersions.setAll(ProjectSnapshots.list(root));
+        list.getSelectionModel().selectFirst();
+      } catch (IOException ex) {
+        error(ex.getMessage(), ex);
+      }
+    });
+    VBox left = new VBox(8, save, hideAuto, list);
+    VBox.setVgrow(list, Priority.ALWAYS);
+    SplitPane split = new SplitPane(left, right);
     split.setDividerPositions(0.3);
     BorderPane content = new BorderPane(split);
     javafx.geometry.Rectangle2D screen = javafx.stage.Screen.getPrimary().getVisualBounds();

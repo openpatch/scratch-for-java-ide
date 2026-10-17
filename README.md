@@ -26,9 +26,30 @@ project format may change while we test it with students and teachers.
   files keep their contents; matching names get a number.
 - Run programs in a separate JVM, use the console and debugger, and export a
   runnable JAR, a portable app folder, or a BlueJ/VS Code project ZIP.
+- Save milestones and return to earlier work through Project → Versions. Versions use
+  embedded Git, so no Git installation or setup is needed.
 
 Student programs use the Scratch for Java library. The IDE does not replace or
 modify that library.
+
+Use Project → Save version to name a milestone and save all changes at once,
+including code, images, sounds, libraries, and project settings. Build output,
+caches, local history, and learning logs are excluded. Named versions are kept
+when automatic history rotates.
+
+Automatic run versions keep Java files, maps, tilesets, and shaders after the
+program runs without crashing for a few seconds. Before restoring a version,
+the current project is saved so you can undo the restore. These versions have
+an `[AUTO]` prefix, and the newest 40 automatic versions are retained. Select
+Hide automatic versions in the Versions dialog to see only your milestones.
+The dialog can restore one file or the saved version's files, including binary
+assets. Edit → Local history also keeps individual file revisions.
+
+New repositories default to `main`. Versions live in the project's `.git` under `refs/scratch4j/versions/`, separate
+from normal Git branches and the staging area. Old folder-based versions in
+`.scratch4j/versions/` are imported automatically. Each version is an independent
+commit; expired version refs are removed so Git garbage collection can reclaim
+objects that are no longer used.
 
 ## Build and run from source
 

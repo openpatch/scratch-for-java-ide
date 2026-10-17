@@ -3733,16 +3733,27 @@ public class StudioApp extends javafx.application.Application {
   private void showVersions() {
     ScratchProject p = project.get();
     if (p == null) return;
-    saveAll();
-    VersionsDialog.show(p.root(), this::afterRestore);
+    try {
+      editor.saveForVersion();
+      VersionsDialog.show(p.root(), this::afterRestore, editor::saveForVersion);
+    } catch (IOException e) {
+      alert(e.getMessage(), e);
+    }
+  }
+
+  private void saveVersion() {
+    ScratchProject p = project.get();
+    if (p != null && VersionsDialog.save(p.root(), editor::saveForVersion)) {
+      setStatus(I18n.t("versions.saved"));
+    }
   }
 
   /** Project > Back to the last version that worked (one click, undoable). */
   void restoreLastWorking() {
     ScratchProject p = project.get();
     if (p == null) return;
-    saveAll();
     try {
+      editor.saveForVersion();
       var version = org.openpatch.scratch4j.core.io.ProjectSnapshots.lastWorking(p.root());
       if (version == null) {
         alert(I18n.t("versions.lastworking.none"));
@@ -3774,9 +3785,19 @@ public class StudioApp extends javafx.application.Application {
    * restored code like a save.
    */
   private void afterRestore() {
-    for (Path open : editor.openFiles()) {
+    ScratchProject p = project.get();
+    if (p != null) p.reloadMetadata();
+    for (Tab tab : List.copyOf(editor.getTabs())) {
+      Path open = EditorTabs.fileOf(tab);
+      if (open == null) continue;
       if (java.nio.file.Files.exists(open)) {
-        editor.reloadIfOpen(open);
+        if (tab.getContent() instanceof ImageEditorView || tab.getContent() instanceof SoundEditorView
+            || tab.getContent() instanceof MapEditorView || tab.getContent() instanceof FontPreviewView) {
+          editor.closeForFile(open);
+          openByType(open);
+        } else {
+          editor.reloadIfOpen(open);
+        }
       } else {
         editor.closeForFile(open);
       }
@@ -4040,6 +4061,7 @@ public class StudioApp extends javafx.application.Application {
   private Menu projectMenu() {
     Menu menu = new Menu(I18n.t("menu.project"));
     menu.getItems().addAll(
+        item("versions.save", "fth-save", null, this::saveVersion),
         item("versions.menu", "fth-clock", null, this::showVersions),
         item("versions.lastworking", "fth-rotate-ccw", null, this::restoreLastWorking),
         new SeparatorMenuItem(),

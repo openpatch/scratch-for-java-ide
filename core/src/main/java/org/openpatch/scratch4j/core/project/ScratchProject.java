@@ -39,8 +39,8 @@ public final class ScratchProject {
 
   private final Path root;
   private final String name;
-  private final ProjectLayout layout;
-  private final ProjectSettings settings;
+  private ProjectLayout layout;
+  private ProjectSettings settings;
 
   private ScratchProject(Path root, ProjectLayout layout, ProjectSettings settings) {
     this.root = root;
@@ -83,6 +83,12 @@ public final class ScratchProject {
 
   public ProjectSettings settings() {
     return settings;
+  }
+
+  /** A project version can restore its settings and editor configuration too. */
+  public void reloadMetadata() {
+    layout = detectLayout(root);
+    settings = ProjectSettings.load(root);
   }
 
   /** Folder that holds the library jar ({@code +libs}). */

@@ -526,6 +526,17 @@ final class EditorTabs extends TabPane {
     }
   }
 
+  /** A project milestone includes pending edits in image, sound and map tabs too. */
+  void saveForVersion() throws IOException {
+    for (Node node : tools()) {
+      if (node instanceof SavableTool tool && tool.dirtyProperty().get()) {
+        tool.save();
+        if (tool.dirtyProperty().get()) throw new IOException(I18n.t("versions.save.failed"));
+      }
+    }
+    saveAll();
+  }
+
   /** Files open in code tabs, in tab order (restored after a language switch). */
   List<Path> openFiles() {
     List<Path> files = new ArrayList<>();

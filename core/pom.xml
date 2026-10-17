@@ -21,6 +21,12 @@
   </build>
 
   <dependencies>
+    <!-- Local project versions use Git without requiring a Git installation. -->
+    <dependency>
+      <groupId>org.eclipse.jgit</groupId>
+      <artifactId>org.eclipse.jgit</artifactId>
+      <version>7.8.0.202609011348-r</version>
+    </dependency>
     <!-- Offline adapter for portable browser @Test classes and the Studio test runner. -->
     <dependency>
       <groupId>org.junit.platform</groupId>
