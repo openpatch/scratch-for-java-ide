@@ -3,29 +3,38 @@
 **Status: plan.** Nothing here is implemented yet.
 
 Studio should also open, edit, run and debug Java projects that do not use
-Scratch for Java: a folder of classes, or a VS Code "No build tools" project
-with `src/` and `lib/`. Scratch for Java projects keep working exactly as
-they do today.
+Scratch for Java. Scratch for Java projects keep working exactly as they do
+today.
+
+## Principles
+
+- **Beginners first.** Plain projects are for students who move on from
+  Scratch for Java or start Java without it. There is nothing to set up: no
+  build files, no classpath settings, no run configurations.
+- **The same layout as Scratch for Java projects.** The classes sit in the
+  project folder (no packages), jars go into `+libs/`. BlueJ and VS Code open
+  these projects the same way they open Scratch for Java projects.
+- **One default class.** Run always starts the same class. When several
+  classes have a `main`, the student picks the default class once.
+- **Friendly messages** in English and German, as for Scratch for Java
+  projects.
 
 ## Scope of the first version
 
 In:
 
-- Classes in the project folder or in a source folder: `src/`, or the
-  `java.project.sourcePaths` of `.vscode/settings.json`.
-- Packages.
-- Jars in `lib/`, `+libs/`, or the `java.project.referencedLibraries` of
-  `.vscode/settings.json`.
+- A flat project folder, classes in the default package, jars in `+libs/`.
 - Console programs that read from `System.in`.
 - Swing and AWT programs (they run in their own JVM like every program).
 
-Not yet:
+Later, in its own pull request: opening projects that VS Code created, with
+`src/`, packages and `lib/` (see [Later](#later-projects-from-vs-code)).
+Studio itself never creates such projects.
+
+Not planned:
 
 - Maven and Gradle projects (`pom.xml`, `build.gradle`).
-- Moving classes between packages. `ProjectFileManagement.move` keeps
-  refusing to move `.java` files out of the project folder.
 - `module-info.java` and JavaFX programs.
-- Clickable stack-trace lines when two classes share a file name.
 - The app folder, BlueJ, VS Code and browser exports of plain projects.
 - Console input for Scratch for Java programs.
 
@@ -54,57 +63,70 @@ new Java template writes `"kind": "java"`. Older Studio versions keep unknown
 fields (`ProjectSettings.extra`), so the field survives opening a project in
 an older version.
 
+## The default class
+
+Run, Debug and the JAR export start the project's default class. It is kept
+in the existing `startStage` field of `project.json`, which Scratch for Java
+projects already use for their start class, so the file format does not
+change.
+
+- **One class with `main`:** that class. Nothing to choose.
+- **Several classes with `main`, none chosen yet** (or the chosen one lost
+  its `main`): the first Run asks once, "Which class should Run start?", with
+  the classes as a list and `Main` preselected if there is one. The answer is
+  saved.
+- **Changing it:** in the Files tab a star marks the default class. Right-click
+  a class with `main` → **Set as default class**.
+- **Always visible:** the Run button's tooltip and the status bar name the
+  class ("Run Main").
+- **No class with `main`:** a message explains what `main` is, with a quick
+  fix that adds `public static void main(String[] args) { }` to the open class.
+
+`ScratchProject.startStage()` already prefers the saved class and otherwise
+takes the first class with `main` (`Main` first). For plain projects it
+returns nothing instead of guessing when there are several, and the UI asks.
+
 ## Work
 
 ### 1. Project model (`core`)
 
 - `ProjectKind` and its detection, as above.
-- `ScratchProject.sourceRoots()`: the `java.project.sourcePaths` of
-  `.vscode/settings.json`, otherwise `src/` if it exists, otherwise the
-  project folder. Scratch for Java projects always get the project folder.
-  `javaSources()` already scans subfolders, so packaged classes are found
-  today; the roots are needed for resources and for the package of new
-  classes.
-- `ScratchProject.libs()`: also the jars in `lib/` (with subfolders) and in
-  `java.project.referencedLibraries`, which is either a list of globs or
-  `{ "include": [...], "exclude": [...] }`. Sorted, without duplicates
-  (Scratch for Java's VS Code projects already list `+libs/*.jar` there).
-  Every compile, check, hot reload and run takes its jars from `libs()`.
-- `ScratchProject.qualifiedName(Path)`: the file's `package` line plus its
-  name. `mainClasses()` and `startStage()` return qualified names, and
-  `sourceOf()` accepts them. Classes in the default package keep their simple
-  name, so Scratch for Java projects see no difference.
+- `ScratchProject.mainClasses()` becomes public: the default-class question
+  and the Files tab star need the list.
+- `ScratchProject.startStage()` for plain projects, as described under
+  [The default class](#the-default-class).
+- `libs()`, `javaSources()` and `sourceOf()` need no change: plain projects
+  use the same layout as Scratch for Java projects.
 
 ### 2. Running (`runner`)
 
-- `ProjectRunner.run` for plain projects: no generated `Scratch4JLauncher`.
-  It compiles `javaSources()` into `.scratch4j/build/classes` and starts
+- `LauncherSource` gets a second launcher for plain projects, without any
+  Scratch for Java import. It keeps the class name `Scratch4JLauncher`, so the
+  run command and the JAR's `Main-Class` stay as they are. It:
+  - calls the default class's `main` like today's launcher does (static or
+    not, with or without `String[] args`);
+  - rethrows the program's own exception instead of the
+    `InvocationTargetException` from the reflective call, without the
+    launcher's own lines, so the console shows what `java Main` would show;
+  - when started by the IDE (`-Dscratch4j.ide.input=true`), wraps
+    `System.in` and reports on the control line (stderr, as today) when the
+    program waits for input. An exported JAR does not report anything.
+- `ProjectRunner.run` picks the launcher by project kind and leaves out
+  `-Dscratch4j.capture*` and the control channel for plain projects: their
+  stdin belongs to the program. The debug agent and hot reload stay.
+- `RunHandle` gets `input(String line)` and `closeInput()`; `send()` already
+  writes to the program's stdin. A new `RunListener.onInputWanted(boolean)`
+  carries the "waiting for input" report.
 
-  ```
-  java <debug agent> <hot reload flags> -cp <classes>:<source roots>:<project folder>:<jars> com.example.Main
-  ```
+### 3. Console input (`ui`)
 
-  in the project folder, as VS Code does. No `-Dscratch4j.capture*` and no
-  `-Dscratch4j.ide.*` flags. The source roots on the classpath find resources
-  that sit next to the classes.
-- The bundled runtime is Java 25, which runs `void main()` programs
-  (JEP 512) without the launcher's help.
-- `RunConfig.stageClass` holds the qualified start class (rename it to
-  `startClass`).
-- `Debugger.byClass` names a file's class by its qualified name, so
-  breakpoints in packaged classes stop the program. The debugger looks
-  classes up with `classesByName`, which needs that name.
-- `HotSwap` already reads class names from the compiled `.class` files and
-  needs no change.
-
-### 3. Console input (`runner`, `ui`)
-
-- `ConsoleView` gets an input line under the output, enabled while a plain
-  program runs. Enter sends the line to the program's `System.in` and shows
-  it in the console in its own style. An "end of input" button (Ctrl+D)
-  closes `System.in`, for loops like `while (scanner.hasNextLine())`.
-- `RunHandle` gets `input(String line)` and `closeInput()`. `send()` already
-  writes to the program's stdin.
+- `ConsoleView` gets an input line under the output while a plain program
+  runs, with the placeholder "Type here and press Enter". Enter sends the
+  line and shows it in the console in its own style.
+- When the program waits for input, the input line is highlighted and
+  focused, and the status bar says "Your program is waiting for input". This
+  answers the most common "my program hangs" question.
+- Ctrl+D closes `System.in`, for loops like `while (scanner.hasNextLine())`.
 - Scratch for Java runs keep the input line hidden: their stdin is the IDE's
   control channel (`IdeControl` in `LauncherSource`).
 
@@ -113,49 +135,39 @@ an older version.
 - `open()`: no `checkLibrary()` for plain projects. Today it asks to add the
   Scratch for Java jar on every open, because declining only remembers a jar
   that has a version.
-- `openStart()`: opens the main class through `sourceOf()` instead of
-  `root/<Name>.java`, which misses `src/` and packages.
-- `runProgram()` and `debugProgram()`: the start class is the open editor's
-  class if it has a `main`, otherwise the saved start class, otherwise the
-  first class with `main` (`Main` first). Without one, a new message
-  `run.nomain` replaces `run.nostage` ("no Stage class yet").
-- `runStage()` for plain runs: no control channel and no `watchdog()`, which
-  would report every console program that runs longer than 10 seconds as
-  frozen ("no window"). The progress bar ends when the process has started.
-  An exit code of 0 counts as a working run for `keepWorkingVersion()`.
-- `ProjectCheck.check` matches compiler diagnostics to files by their full
-  path instead of their file name, so an error in `a/Main.java` does not land
-  in `b/Main.java`.
+- `openStart()`: opens the default class, otherwise the first class.
+- `runProgram()` and `debugProgram()`: start the default class and ask for it
+  when needed. `run.nostage` ("no Stage class yet") becomes the `main`
+  explanation for plain projects.
+- `runStage()` for plain runs: no `watchdog()`, which would report every
+  console program that runs longer than 10 seconds as frozen ("no window").
+  The progress bar ends when the process has started. An exit code of 0
+  counts as a working run for `keepWorkingVersion()`. The Variables tab
+  (sprite monitors over the control channel) stays hidden; the debugger's
+  variables work as before.
 
 ### 5. Creating projects and classes (`core`, `ui`)
 
-- `ProjectTemplate.JAVA` and `NewProject` write VS Code's own "No build
-  tools" layout, which opens unchanged in VS Code:
+- `ProjectTemplate.JAVA` and `NewProject` write the same files as a Scratch
+  for Java project, without the library, `assets/` and `MyWindow`:
 
   ```
-  src/Main.java
-  lib/
-  .vscode/settings.json
-  .scratch4j/project.json     { "kind": "java", ... }
+  Main.java
+  README.md
+  +libs/
+  .scratch4j/project.json     { "kind": "java", "startStage": "Main", ... }
   ```
 
-  with this `settings.json`:
-
-  ```json
-  {
-    "java.project.sourcePaths": ["src"],
-    "java.project.outputPath": "bin",
-    "java.project.referencedLibraries": ["lib/**/*.jar"]
-  }
-  ```
-
-  No `+libs`, `assets/` or `MyWindow`. `NewProjectDialog` gets a card for it.
-- `NewClass.Kind.CLASS`: a plain `public class Name { }`, written into the
-  folder selected in the Files tree (otherwise the first source root) with
-  the `package` line for that folder. For plain projects `NewClassDialog`
-  offers only this kind.
+  `Main.java` is a short program that asks for the student's name with
+  `Scanner` and greets them, so the console input shows on the first run.
+  `NewProjectDialog` gets a card for it.
+- `NewClass.Kind.CLASS`: a plain `public class Name { }` in the project
+  folder, with a checkbox **with main method**. For plain projects
+  `NewClassDialog` offers only this kind.
 - `AddToProjectDialog` offers Class, Folder, Image and Sound for plain
   projects; not the asset library, shaders or maps.
+- Dropping a `.jar` on the Files pane copies it into `+libs/`, as images and
+  sounds are copied today.
 
 ### 6. Hiding what only Scratch for Java needs (`ui`, `export`)
 
@@ -163,54 +175,88 @@ an older version.
 - The Sprite editor button in the sidebar.
 - The Standard/NRW choice, the library update check and the Abiturklassen
   import.
-- Export offers only the runnable JAR: `ProjectFormats.exportRunnableJar`
-  writes `Main-Class: <qualified start class>` instead of the launcher and
-  keeps merging the jars. Resources in a source root go into the JAR relative
-  to that root (`src/data.txt` becomes `data.txt`), as `getResource` expects.
-  The other exports are built around the launcher or `+libs` and stay hidden
-  for now.
-- New texts go into `messages_en.properties` and `messages_de.properties`.
+- Export offers only the runnable JAR (`ProjectFormats.exportRunnableJar`).
+  It already merges the jars from `+libs`; it has to generate the plain
+  launcher, and its "no Stage class to start" error becomes the `main`
+  explanation. The other exports stay hidden for now.
+
+### 7. Beginner messages (`core`)
+
+- `RuntimeErrors` explains `InputMismatchException`: "You typed text where
+  the program expected a number", with the hint to check with
+  `hasNextInt()` first.
+- `RuntimeErrors` has two hints written for Scratch for Java that need a
+  plain Java version: `OutOfMemoryError` ("new sprites added in run()") and
+  `IllegalMonitorStateException` (`getTimer().everyMillis`).
+- New texts go into `messages_en.properties` and `messages_de.properties`
+  (UI) and `RuntimeErrors` (crashes), in both languages.
 
 ## Already works
 
 - The code editor, completions, go to definition, rename, diagnostics and
-  the friendly error messages: they all use javac with the project's
+  the friendly compiler messages: they all use javac with the project's
   classpath.
 - The block palette and the designers hide for classes that are not a stage
   or sprite (`VisualMode`).
 - The Scratch-to-Java lints only look at stage and sprite classes
   (`TransitionLinter`); the asset lints only at the library's asset calls
   (`AssetLinter`).
-- Hot reload, the UML diagram, local history, search and the formatter.
+- The debugger, hot reload, the UML diagram, local history, search and the
+  formatter.
 
 ## Tests
 
 - `ScratchProjectTest`: kind detection (jar, import, empty folder, plain
-  sources), a saved kind wins, source roots from `settings.json` and `src/`,
-  qualified main classes, jars from `lib/` and `referencedLibraries`.
-- `NewProjectTest`: the Java template compiles without the library.
-- `NewClassTest`: a class in a package folder gets the package line.
-- `ProjectCheckTest`: two `Main.java` in different packages; the error is
-  reported in the right one.
-- A runner test: a packaged plain project that reads two lines with
-  `Scanner` gets them through `RunHandle.input` and prints them; exit code 0.
-- A `Debugger.byClass` test for a class in a package.
+  sources), a saved kind wins. Default class: one `main` is taken, several
+  without a saved choice give none, a saved choice wins, a saved class without
+  `main` gives none.
+- `NewProjectTest`: the Java template compiles and runs without the library.
+- `NewClassTest`: a plain class, with and without `main`.
+- `RuntimeErrorsTest`: `InputMismatchException`, and the plain hints for
+  `OutOfMemoryError` and `IllegalMonitorStateException`.
+- A runner test: a plain project reads two lines with `Scanner`, reports that
+  it waits for input, gets the lines through `RunHandle.input` and prints
+  them; exit code 0. A crash shows the program's exception, not
+  `InvocationTargetException`.
 - `mvn verify` passes before each pull request.
 
 ## Pull requests
 
-1. **Open and run** (sections 1–4). After it, an existing plain or VS Code
+1. **Open and run** (sections 1–4 and the default class). After it, a flat
    Java folder opens without the library prompt and runs, with console input
    and the debugger.
 2. **Create** (section 5).
-3. **Polish** (section 6).
+3. **Polish** (sections 6 and 7).
+4. **Projects from VS Code**, if still wanted (next section).
+
+## Later: projects from VS Code
+
+Teachers may hand out projects made with VS Code's "No build tools" layout:
+classes in `src/`, often in packages, jars in `lib/`. To open and run those:
+
+- `ScratchProject.sourceRoots()`: the `java.project.sourcePaths` of
+  `.vscode/settings.json`, otherwise `src/` if it exists, otherwise the
+  project folder. They go on the run classpath so resources next to the
+  classes are found.
+- `ScratchProject.libs()`: also the jars in `lib/` and in
+  `java.project.referencedLibraries`, which is either a list of globs or
+  `{ "include": [...], "exclude": [...] }`. Sorted, without duplicates.
+- Qualified class names from the `package` line: in `mainClasses()`,
+  `startStage()` and `sourceOf()`, and in `Debugger.byClass`, whose
+  `classesByName` lookup needs them for breakpoints to stop.
+- `StudioApp.openStart()` opens the class through `sourceOf()` instead of
+  `root/<Name>.java`.
+- `ProjectCheck.check` matches compiler diagnostics to files by their full
+  path instead of their file name, so an error in `a/Main.java` does not land
+  in `b/Main.java`.
+- The runnable JAR puts resources of a source root relative to that root
+  (`src/data.txt` becomes `data.txt`), as `getResource` expects.
+
+Studio still creates new classes in the project folder or the first source
+root; moving classes between packages stays out.
 
 ## Open questions
 
-- New Java projects use the VS Code layout above. A flat folder in BlueJ's
-  style would also work.
-- Run starts the open editor's class. Alternative: a fixed start class with
-  a "Set as start class" action in the Files tree.
 - Console input for Scratch for Java programs needs the control channel
   moved off stdin, for example to a local socket.
 - Whether the window title stays "Scratch for Java Studio" for plain
