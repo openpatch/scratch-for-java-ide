@@ -37,6 +37,9 @@ Not planned:
 - `module-info.java` and JavaFX programs.
 - The app folder, BlueJ, VS Code and browser exports of plain projects.
 - Console input for Scratch for Java programs.
+- A live variables view for plain projects. The Variables tab stays hidden;
+  at a breakpoint the Debugger tab shows the local variables, the object's
+  fields and the static variables, and the object diagram shows the objects.
 
 ## The project kind
 
@@ -191,6 +194,34 @@ returns nothing instead of guessing when there are several, and the UI asks.
 - New texts go into `messages_en.properties` and `messages_de.properties`
   (UI) and `RuntimeErrors` (crashes), in both languages.
 
+### 8. The object diagram while debugging (`ui`, `runner`)
+
+The object diagram can already read a stopped program: a debug run shares
+its connection with the diagram (`liveSession` in `StudioApp`), and
+`Debugger.objects` reads without letting the program continue. But the
+diagram does not follow the debugger. These changes help Scratch for Java
+projects as well.
+
+- **Refresh on every stop.** `debugListener.onPaused` in `StudioApp`
+  refreshes an open object diagram, so each breakpoint and each step shows the
+  objects at that line. Today it refreshes only with **Live** ticked, on
+  **Snapshot**, or when its tab is selected.
+- **Beside the code.** Every stop opens the code tab of the stopped line
+  (`EditorTabs.openAt`), which hides the Diagrams tab. While a debug run
+  stops with the object diagram open, the diagram moves beside the code, as
+  the stage designer does (`EditorTabs.openSide` with its own key), and
+  follows when a step enters another class. When the run ends it goes back to
+  its own tab.
+- **Changed values marked.** `DiagramView` remembers every object's values
+  from the last stop and marks the values that changed; a new object is
+  marked as a whole. `UmlCanvas.Box` needs a way to mark single lines.
+- **Names from local variables.** Names come only from attributes today, so
+  `Konto k = new Konto();` in `main` shows as `: Konto`. `Debugger.objects`
+  also reads the visible local variables of every thread's frames (the
+  program is held while reading and compiled with `-g`), innermost frame
+  first, and `ObjectNode` carries the name. An object that no attribute
+  points at gets the local variable's name: `k : Konto`.
+
 ## Already works
 
 - The code editor, completions, go to definition, rename, diagnostics and
@@ -201,8 +232,10 @@ returns nothing instead of guessing when there are several, and the UI asks.
 - The Scratch-to-Java lints only look at stage and sprite classes
   (`TransitionLinter`); the asset lints only at the library's asset calls
   (`AssetLinter`).
-- The debugger, hot reload, the UML diagram, local history, search and the
+- The debugger, hot reload, the class diagram, local history, search and the
   formatter.
+- The object diagram of a running program. Section 8 makes it follow the
+  debugger.
 
 ## Tests
 
@@ -218,6 +251,10 @@ returns nothing instead of guessing when there are several, and the UI asks.
   it waits for input, gets the lines through `RunHandle.input` and prints
   them; exit code 0. A crash shows the program's exception, not
   `InvocationTargetException`.
+- `DebuggerTest`: an object held only in a local variable of `main` comes
+  with the variable's name.
+- A UI test: after a step, an open object diagram sits beside the code,
+  shows the new values and marks the changed ones.
 - `mvn verify` passes before each pull request.
 
 ## Pull requests
@@ -227,7 +264,9 @@ returns nothing instead of guessing when there are several, and the UI asks.
    and the debugger.
 2. **Create** (section 5).
 3. **Polish** (sections 6 and 7).
-4. **Projects from VS Code**, if still wanted (next section).
+4. **Object diagram while debugging** (section 8). It does not depend on the
+   others and helps Scratch for Java projects too, so it can also come first.
+5. **Projects from VS Code**, if still wanted (next section).
 
 ## Later: projects from VS Code
 
