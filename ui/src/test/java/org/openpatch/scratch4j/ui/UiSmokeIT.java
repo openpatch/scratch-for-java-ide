@@ -447,7 +447,7 @@ class UiSmokeIT {
         mapView.save();
         assertThat(Files.readString(tiled.resolve("Level1.tmx"))).contains("<tile id=\"0\">");
         // completion of map paths and layer names
-        CodeEditor worldCode = new CodeEditor(tiled.resolve("World.java"),
+        CodeEditor worldCode = new CodeEditor(tiled.resolve("Level.java"),
             "map.stampLayerToBackground(\"Fl", apiIndex, () -> tiled);
         worldCode.area().moveTo(worldCode.area().getLength());
         assertThat(worldCode.completionCandidates()).contains("Floor", "FloorObjects")
@@ -483,10 +483,10 @@ class UiSmokeIT {
         snapshot(mapDesigner.canvas(), Path.of("target/designer-map.png"));
         // the library's demo computes its map path: the designer still shows Level1
         StageDesignerView worldDesigner = new StageDesignerView(
-            org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), "World", f -> { });
+            org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), "Level", f -> { });
         assertThat(worldDesigner.isReadOnly()).isFalse();
         assertThat(worldDesigner.colorButton().isDisabled())
-            .as("World sets its colour in its own code").isTrue();
+            .as("Level sets its colour in its own code").isTrue();
         assertThat(worldDesigner.shownMap()).isEqualTo(tiled.resolve("Level1.tmx"));
         // the inventory is a UI sprite (setUI(true)): fixed to the screen, at its centre
         var inventoryRef = worldDesigner.model().sprites().byName("inventory");
@@ -527,12 +527,12 @@ class UiSmokeIT {
         for (int frame = 0; frame < 2; frame++) {
           watcher.feed("java.lang.NullPointerException: Cannot invoke \"Player.getX()\" "
               + "because \"this.player\" is null");
-          watcher.feed("\tat World.run(World.java:74)");
+          watcher.feed("\tat Level.run(Level.java:74)");
           watcher.feed("\tat org.openpatch.scratch.Stage.pre(Stage.java:1804)");
         }
         watcher.flush();
         assertThat(crashesSeen).hasSize(1);
-        assertThat(crashesSeen.get(0).file()).isEqualTo(tiled.resolve("World.java"));
+        assertThat(crashesSeen.get(0).file()).isEqualTo(tiled.resolve("Level.java"));
         assertThat(crashesSeen.get(0).title()).isEqualTo("player is null");
         // a version kept after a run that worked shows in the versions dialog's data
         org.openpatch.scratch4j.core.io.ProjectSnapshots.keep(tiled,
@@ -702,7 +702,7 @@ class UiSmokeIT {
         // the block palette follows the class: sprite blocks, stage blocks, or hidden
         assertThat(VisualMode.paletteContext(tiled.resolve("Bamboo.java")))
             .isEqualTo(VisualMode.PaletteContext.SPRITE); // Bamboo -> Enemy -> AnimatedSprite
-        assertThat(VisualMode.paletteContext(tiled.resolve("World.java")))
+        assertThat(VisualMode.paletteContext(tiled.resolve("Level.java")))
             .isEqualTo(VisualMode.PaletteContext.STAGE);
         assertThat(VisualMode.paletteContext(tiled.resolve("GameState.java")))
             .isEqualTo(VisualMode.PaletteContext.NONE);

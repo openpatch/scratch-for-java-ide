@@ -17,7 +17,7 @@ class MapReferencesTest {
   @Test
   void computedPathsOfferEveryMapMentionedOnesFirst() throws Exception {
     Path root = BundledTemplates.create("demo-tiled", tmp, "tiled", null);
-    String world = Files.readString(root.resolve("World.java"));
+    String world = Files.readString(root.resolve("Level.java"));
     assertThat(MapReferences.forStage(root, world)).extracting(p -> p.getFileName().toString())
         .containsExactly("Level1.tmx", "Level2.tmx");
     assertThat(MapReferences.forStage(root, "new TiledMap(\"Level2.tmx\", this);"))

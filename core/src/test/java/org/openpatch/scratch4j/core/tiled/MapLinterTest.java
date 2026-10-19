@@ -18,7 +18,7 @@ class MapLinterTest {
   @Test
   void bundledDemoIsCleanAndWrongLayersAreFlagged() throws Exception {
     Path root = BundledTemplates.create("demo-tiled", tmp, "tiled", null);
-    Path world = root.resolve("World.java");
+    Path world = root.resolve("Level.java");
     String source = Files.readString(world);
     MapLinter linter = new MapLinter(Language.EN);
     assertThat(linter.lint(root, world, source)).isEmpty();

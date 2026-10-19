@@ -2322,7 +2322,7 @@
     "scratchblock": null,
     "category": "Sprite",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/getShaders",
-    "description": "Returns the shaders of this sprite. Shader handling lives behind this one method so that it does not crowd the everyday API.\n\nExample usage:\n\nthis.getShaders().add(\"blur\", \"blur.frag\", null);\nthis.getShaders().switchTo(\"blur\");",
+    "description": "Returns the shaders of this sprite. Shader handling lives behind this one method so that it does not crowd the everyday API.\n\nExample usage:\n\nthis.getShaders().add(\"blur\", \"blur.frag\", null);\nthis.getShaders().switchTo(\"blur\");\n\nA sprite draws with one shader: with several active, the first of them.",
     "paramDocs": [],
     "returns": "the shaders"
   },
@@ -2891,12 +2891,25 @@
     "returnType": "void",
     "params": ["String name"],
     "summary": "Plays a sound.",
-    "scratchblock": "start sound [name v]",
-    "category": "Sound",
+    "scratchblock": "start sound [name v] playSoundCopy() returns an independent SoundPlayback with its own volume and can overlap earlier plays of the same sound.",
+    "category": "Motion",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/playSound",
     "description": "Plays a sound.\n\nEvery sprite plays its own copy, so ten sprites playing the same sound are heard ten times at once. One sprite only plays a sound once at a time: playing it again while it is still going does nothing.",
     "paramDocs": ["name: the sound name"],
     "returns": null
+  },
+  {
+    "className": "Sprite",
+    "methodName": "playSoundCopy",
+    "returnType": "SoundPlayback",
+    "params": ["String name", "double volume"],
+    "summary": "Starts a separate copy of a sound at its own volume.",
+    "scratchblock": null,
+    "category": "Sound",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Sprite/playSoundCopy",
+    "description": "Starts a separate copy of a sound at its own volume. Calling this again can overlap the previous copy. The returned handle controls only this play; stopSound() and stopAllSounds() also stop copies owned by this sprite. The sprite's ordinary volume does not change a copy's explicit volume.",
+    "paramDocs": ["name: a sound already added with addSound()", "volume: volume from 0 to 100 percent"],
+    "returns": "this individual playback, also usable in try-with-resources"
   },
   {
     "className": "Sprite",
@@ -4025,7 +4038,7 @@
     "scratchblock": null,
     "category": "Stage",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/getShaders",
-    "description": "Returns the shaders of this stage. Shader handling lives behind this one method so that it does not crowd the everyday API.\n\nExample usage:\n\nthis.getShaders().add(\"blur\", \"blur.frag\", null);\nthis.getShaders().switchTo(\"blur\");",
+    "description": "Returns the shaders of this stage. Shader handling lives behind this one method so that it does not crowd the everyday API.\n\nExample usage:\n\nthis.getShaders().add(\"blur\", \"blur.frag\", null);\nthis.getShaders().switchTo(\"blur\");\n\nSeveral shaders can be active at once with activate: the stage draws with each in turn, in the order they were added.",
     "paramDocs": [],
     "returns": "the shaders"
   },
@@ -4207,9 +4220,22 @@
     "scratchblock": "start sound [name v]",
     "category": "Sound",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/playSound",
-    "description": "Plays a sound.",
+    "description": "Plays a sound.\n\nplaySoundCopy() returns an independent SoundPlayback with its own volume and can overlap earlier plays of the same sound.",
     "paramDocs": ["name: the sound name"],
     "returns": null
+  },
+  {
+    "className": "Stage",
+    "methodName": "playSoundCopy",
+    "returnType": "SoundPlayback",
+    "params": ["String name", "double volume"],
+    "summary": "Starts a separate copy of a sound at its own volume.",
+    "scratchblock": null,
+    "category": "Sound",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Stage/playSoundCopy",
+    "description": "Starts a separate copy of a sound at its own volume. Calling this again can overlap the previous copy. The returned handle controls only this play; stopSound() and stopAllSounds() also stop copies owned by this stage. The stage's ordinary volume does not change a copy's explicit volume.",
+    "paramDocs": ["name: a sound already added with addSound()", "volume: volume from 0 to 100 percent"],
+    "returns": "this individual playback, also usable in try-with-resources"
   },
   {
     "className": "Stage",
@@ -5975,7 +6001,7 @@
     "scratchblock": null,
     "category": "Operators",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/constructor",
-    "description": "Constructs a new Window with default dimensions. The default width is 480 pixels and the default height is 360 pixels.",
+    "description": "Constructs a new Window with default dimensions. The default width is 480 pixels and the default height is 360 pixels.\n\nA folder named assets is loaded while the loading screen shows, if the project has one.",
     "paramDocs": [],
     "returns": null
   },
@@ -5988,7 +6014,7 @@
     "scratchblock": null,
     "category": "Operators",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/constructor",
-    "description": "Constructs a new Window with the specified assets. The window will have a default width of 480 pixels and a height of 360 pixels.",
+    "description": "Constructs a new Window with the specified assets. The window will have a default width of 480 pixels and a height of 360 pixels.\n\nThe images, sounds and fonts in that folder are loaded while the loading screen shows, so they are ready when a sprite first uses them. Without it, a folder named assets is loaded, if there is one.",
     "paramDocs": ["assets: the path to the assets to be used in the window"],
     "returns": null
   },
@@ -6001,7 +6027,7 @@
     "scratchblock": null,
     "category": "Operators",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/constructor",
-    "description": "Constructs a new Window with the specified width and height.",
+    "description": "Constructs a new Window with the specified width and height.\n\nA folder named assets is loaded while the loading screen shows, if the project has one.",
     "paramDocs": ["width: the width of the window", "height: the height of the window"],
     "returns": null
   },
@@ -6015,7 +6041,7 @@
     "category": "Operators",
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/constructor",
     "description": "Constructs a new Window with the specified width, height, and assets path. Ensures that only one instance of Window can be created.\n\nThe single exception is the window Java builds by itself: a class that extends Window and has a main method which is not static is instantiated by the JVM before main is called, so the new MyWindow() in that main would be the second window. That one reuses the first instead of failing.",
-    "paramDocs": ["width: the width of the window", "height: the height of the window", "assets: the path to the assets"],
+    "paramDocs": ["width: the width of the window", "height: the height of the window\n\nThe images, sounds and fonts in the assets folder are loaded while the loading screen shows, so they are ready when a sprite first uses them. Without it, a folder named assets is loaded, if there is one.", "assets: the path to the assets"],
     "returns": null
   },
   {
@@ -6202,6 +6228,19 @@
   },
   {
     "className": "Window",
+    "methodName": "isTransitioning",
+    "returnType": "static boolean",
+    "params": [],
+    "summary": "Returns whether a stage transition is in progress, including creation of\nthe destination stage.",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/isTransitioning",
+    "description": "Returns whether a stage transition is in progress, including creation of the destination stage.\n\nWhile a transition is running, calls to transitionToStage(Stage, are ignored. A program that moves the player or builds a new stage in the same breath as a warp should use transitionToStage(Supplier, so those changes are deferred until the screen is black and skipped when a transition is already running.",
+    "paramDocs": [],
+    "returns": "true while a transition is in progress, false otherwise"
+  },
+  {
+    "className": "Window",
     "methodName": "pause",
     "returnType": "void",
     "params": [],
@@ -6289,6 +6328,19 @@
     "docsUrl": "https://scratch4j.openpatch.org/reference/Window/transitionToStage",
     "description": "Transitions to a new stage with a specified duration.",
     "paramDocs": ["stage: the new stage to transition to", "duration: the duration of the transition in milliseconds"],
+    "returns": null
+  },
+  {
+    "className": "Window",
+    "methodName": "transitionToStage",
+    "returnType": "void",
+    "params": ["Supplier<? extends Stage> stage", "int duration"],
+    "summary": "Fades to black, creates the destination stage, then fades it in.",
+    "scratchblock": null,
+    "category": "Window",
+    "docsUrl": "https://scratch4j.openpatch.org/reference/Window/transitionToStage",
+    "description": "Fades to black, creates the destination stage, then fades it in.\n\nThe supplier is called exactly once, when the screen is black. It is never called when another transition is already running. Move shared sprites and update game state inside the supplier so those changes happen only when the transition is accepted, while the old stage is hidden. The call returns immediately; the supplier runs later on the animation thread.",
+    "paramDocs": ["stage: creates the destination stage; must return a non-null stage", "duration: the duration, using the same timing as the Stage overload"],
     "returns": null
   },
   {

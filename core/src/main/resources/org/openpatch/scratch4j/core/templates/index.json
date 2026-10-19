@@ -496,6 +496,7 @@
       "GameState.java",
       "I18n.java",
       "Item.java",
+      "Level.java",
       "Level1.tmx",
       "Level2.tmx",
       "Player.java",
@@ -504,7 +505,6 @@
       "Wall.java",
       "Warp.java",
       "Water.java",
-      "World.java",
       "assets/Bamboo.png",
       "assets/Fireball.png",
       "assets/Retro Gaming.ttf",
@@ -513,8 +513,7 @@
       "assets/Skeleton.png",
       "assets/TilesetField.png",
       "assets/TilesetFloor.png",
-      "assets/TilesetWater.png",
-      "save.json"
+      "assets/TilesetWater.png"
     ],
     "requiredSheets": []
   },

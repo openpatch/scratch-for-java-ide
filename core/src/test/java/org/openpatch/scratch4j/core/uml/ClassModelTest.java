@@ -18,19 +18,19 @@ class ClassModelTest {
   void tiledDemoAsUml() throws Exception {
     Path root = BundledTemplates.create("demo-tiled", tmp, "tiled", null);
     var model = ClassModel.of(ScratchProject.open(root).javaSources());
-    var world = model.byName("World");
+    var world = model.byName("Level");
     assertThat(world.superclass()).isEqualTo("Stage");
-    assertThat(world.file()).isEqualTo(root.resolve("World.java"));
+    assertThat(world.file()).isEqualTo(root.resolve("Level.java"));
     assertThat(world.attributes()).extracting(ClassModel.Attribute::uml)
         .contains("- map: TiledMap", "- player: Player");
     assertThat(world.operations()).extracting(ClassModel.Operation::uml)
-        .contains("+ World(mapFile: String, player: Player)",
+        .contains("+ Level(mapFile: String, player: Player)",
             "+ whenKeyPressed(keyCode: KeyCode): void", "+ run(): void",
             "+ getPlayer(): Player");
     assertThat(model.byName("Stage").library()).isTrue();
     assertThat(model.byName("Bamboo").superclass()).isEqualTo("Enemy");
     assertThat(model.associations()).contains(
-        new ClassModel.Association("World", "Player", "player", false));
+        new ClassModel.Association("Level", "Player", "player", false));
   }
 
   @Test

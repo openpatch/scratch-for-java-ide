@@ -189,7 +189,7 @@ class DesignerRegionsTest {
   void spritesThroughProjectSuperclassesGetTheirRegions() throws Exception {
     Path root = BundledTemplates.create("demo-tiled", tmp, "tiled", null);
     assertThat(DesignerRegions.kindOf(root, "Bamboo")).isEqualTo("Sprite");
-    assertThat(DesignerRegions.kindOf(root, "World")).isEqualTo("Stage");
+    assertThat(DesignerRegions.kindOf(root, "Level")).isEqualTo("Stage");
     assertThat(DesignerRegions.kindOf(root, "GameState")).isNull();
     String bamboo = Files.readString(root.resolve("Bamboo.java"));
     assertThat(SpriteAssets.list(bamboo)).hasSize(4).allMatch(SpriteAssets.Entry::managed);
