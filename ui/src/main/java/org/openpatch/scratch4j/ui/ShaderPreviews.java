@@ -78,9 +78,8 @@ final class ShaderPreviews {
     }
   }
 
-  /** Uniforms the preview fills itself (Processing's and the animation's). */
-  private static final java.util.Set<String> BUILT_IN = java.util.Set.of("transformMatrix",
-      "texMatrix", "modelviewMatrix", "projectionMatrix", "texture", "texOffset", "time",
+  /** Uniforms Scratch for Java 7 fills itself (the preview animates time). */
+  private static final java.util.Set<String> BUILT_IN = java.util.Set.of("costume", "time",
       "resolution");
 
   private ShaderPreviews() {}

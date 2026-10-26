@@ -99,7 +99,7 @@ class DesignerRegionsTest {
           }
 
           public static void main(String[] args) {
-            Window.useTextureSampling(TextureSampling.POINT);
+            Window.usePixelArt();
             Text.useFont("assets/font.ttf", 11);
             Window.useFullScreen();
             new Game();
@@ -118,7 +118,7 @@ class DesignerRegionsTest {
         + "    // end project settings\n  }");
     assertThat(managed).contains("    Text.useFont(\"assets/font.ttf\", 11);\n"
         + "    // begin project settings\n"
-        + "    Window.useTextureSampling(TextureSampling.POINT);\n"
+        + "    Window.usePixelArt();\n"
         + "    Window.useFullScreen();\n"
         + "    // end project settings\n"
         + "    new Game();");

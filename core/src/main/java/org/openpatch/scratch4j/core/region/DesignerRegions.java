@@ -359,7 +359,7 @@ public final class DesignerRegions {
     for (String line : body.substring(0, create.start()).split("\n", -1)) {
       String trimmed = line.trim();
       if (trimmed.matches("(?:org\\.openpatch\\.scratch\\.)?Window\\.(useFullScreen\\(\\)"
-          + "|useTextureSampling\\((?:org\\.openpatch\\.scratch\\.)?TextureSampling\\.\\w+\\)"
+          + "|usePixelArt\\(\\)"
           + "|useSplashLogo\\(\"[^\"\\\\]*\"\\));")) {
         moved.add(trimmed);
       } else {

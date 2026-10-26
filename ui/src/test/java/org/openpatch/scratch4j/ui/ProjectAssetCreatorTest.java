@@ -23,17 +23,15 @@ class ProjectAssetCreatorTest {
         "intro", 1, 1);
     Path fragment = ProjectAssetCreator.create(root,
         ProjectAssetCreator.Kind.FRAGMENT_SHADER, "glow", 1, 1);
-    Path vertex = ProjectAssetCreator.create(root,
-        ProjectAssetCreator.Kind.VERTEX_SHADER, "move", 1, 1);
 
     var png = ImageIO.read(image.toFile());
     assertThat(png.getWidth()).isEqualTo(32);
     assertThat(png.getHeight()).isEqualTo(48);
     assertThat(png.getRGB(0, 0) >>> 24).isZero();
     assertThat(SoundIO.decode(sound).sampleCount()).isEqualTo(44_100);
-    assertThat(Files.readString(fragment)).contains("PROCESSING_TEXTURE_SHADER",
-        "gl_FragColor");
-    assertThat(Files.readString(vertex)).contains("transformMatrix", "gl_Position");
+    // the Scratch for Java 7 format: costume, uv and color, no Processing names
+    assertThat(Files.readString(fragment)).contains("color = texture(costume, uv);")
+        .doesNotContain("gl_FragColor").doesNotContain("vertTexCoord");
     assertThat(SyntaxHighlighter.languageOf(fragment))
         .isEqualTo(SyntaxHighlighter.Language.GLSL);
   }

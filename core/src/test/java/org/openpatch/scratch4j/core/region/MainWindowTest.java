@@ -38,15 +38,15 @@ class MainWindowTest {
     String written = MainWindow.write(CATCH, all);
     assertThat(written).contains("""
             Window.useFullScreen();
-            Window.useTextureSampling(TextureSampling.POINT);
+            Window.usePixelArt();
             Window.useSplashLogo("assets/images/logo.png");
             Window myWindow = new Window(800, 600);
             myWindow.setStage(new CatchStage());
             myWindow.setDebug(true);
           }
         """);
-    // the wildcard import covers TextureSampling; the constructor is untouched
-    assertThat(written).doesNotContain("import org.openpatch.scratch.TextureSampling;")
+    // the constructor is untouched
+    assertThat(written).doesNotContain("TextureSampling")
         .contains("this.addBackdrop(\"background\");");
     assertThat(MainWindow.read(written)).isEqualTo(all);
     assertThat(MainWindow.write(written, all)).as("nothing to change").isEqualTo(written);
@@ -72,8 +72,8 @@ class MainWindowTest {
         new WindowDocument.Settings(640, 480, "Level", false, true, "", false));
     assertThat(smaller).contains("var window = new Window(640, 480, \"assets\");")
         .doesNotContain("setDebug")
-        .startsWith("import org.openpatch.scratch.TextureSampling;\n")
-        .contains("  Window.useTextureSampling(TextureSampling.POINT);\n"
+        .doesNotContain("import")
+        .contains("  Window.usePixelArt();\n"
             + "  var window = new Window(640, 480, \"assets\");");
   }
 

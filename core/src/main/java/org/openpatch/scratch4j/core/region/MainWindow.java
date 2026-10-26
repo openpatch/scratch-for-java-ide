@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * <pre>
  * public static void main(String[] args) {
  *   Window.useFullScreen();                                  (full screen)
- *   Window.useTextureSampling(TextureSampling.POINT);        (pixel art)
+ *   Window.usePixelArt();                                    (pixel art)
  *   Window.useSplashLogo("assets/images/logo.png");
  *   Window myWindow = new Window(600, 400);
  *   myWindow.setStage(new CatchStage());
@@ -81,13 +81,12 @@ public final class MainWindow {
       width = Integer.parseInt(size.group(1));
       height = Integer.parseInt(size.group(2));
     }
-    Matcher sampling = WindowDocument.SAMPLING.matcher(body);
     Matcher splash = WindowDocument.SPLASH.matcher(body);
     Matcher stage = setStage(place.variable()).matcher(body);
     Matcher debug = debug(place.variable()).matcher(body);
     return new WindowDocument.Settings(width, height, stage.find() ? stage.group(1) : null,
         WindowDocument.FULL_SCREEN.matcher(body).find(),
-        sampling.find() && sampling.group(1).equals("POINT"),
+        WindowDocument.PIXEL_ART.matcher(body).find(),
         splash.find() ? splash.group(1) : "",
         debug.find() && debug.group(1).equals("true"));
   }
@@ -104,7 +103,7 @@ public final class MainWindow {
     }
     Place place = place(source);
     String body = source.substring(place.bodyStart(), place.bodyEnd());
-    for (Pattern option : new Pattern[] {WindowDocument.FULL_SCREEN, WindowDocument.SAMPLING,
+    for (Pattern option : new Pattern[] {WindowDocument.FULL_SCREEN, WindowDocument.PIXEL_ART,
         WindowDocument.SPLASH, debug(place.variable())}) {
       body = removeLines(body, option);
     }
@@ -118,7 +117,7 @@ public final class MainWindow {
       options.append(indent).append("Window.useFullScreen();\n");
     }
     if (settings.pixelArt()) {
-      options.append(indent).append("Window.useTextureSampling(TextureSampling.POINT);\n");
+      options.append(indent).append("Window.usePixelArt();\n");
     }
     if (settings.splashLogo() != null && !settings.splashLogo().isBlank()) {
       options.append(indent).append("Window.useSplashLogo(\"")
@@ -144,13 +143,7 @@ public final class MainWindow {
       body = lineEnd < 0 ? body + "\n" + line : body.substring(0, lineEnd + 1) + line
           + body.substring(lineEnd + 1);
     }
-    String result = source.substring(0, place.bodyStart()) + body
-        + source.substring(place.bodyEnd());
-    if (settings.pixelArt()) {
-      result = org.openpatch.scratch4j.core.project.JavaImports.ensure(result,
-          "org.openpatch.scratch.TextureSampling");
-    }
-    return result;
+    return source.substring(0, place.bodyStart()) + body + source.substring(place.bodyEnd());
   }
 
   private static Pattern setStage(String variable) {

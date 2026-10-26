@@ -15,7 +15,7 @@ import org.openpatch.scratch4j.core.project.NewClass;
 import java.util.Locale;
 import java.util.Optional;
 
-/** The new-class wizard: Sprite / AnimatedSprite / UISprite / Stage as cards. */
+/** The new-class wizard: stage, sprite, animated sprite and UI sprite starters as cards. */
 final class NewClassDialog {
 
   record Result(String name, NewClass.Kind kind) {}

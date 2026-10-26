@@ -13,7 +13,8 @@ import java.nio.file.Path;
 /** Creates editable project assets without depending on the JavaFX toolkit. */
 final class ProjectAssetCreator {
 
-  enum Kind { IMAGE, SOUND, FRAGMENT_SHADER, VERTEX_SHADER }
+  /** Scratch for Java 7 shaders are fragment shaders only. */
+  enum Kind { IMAGE, SOUND, FRAGMENT_SHADER }
 
   private ProjectAssetCreator() {}
 
@@ -28,13 +29,12 @@ final class ProjectAssetCreator {
     String folder = switch (kind) {
       case IMAGE -> "assets/images";
       case SOUND -> "assets/sounds";
-      case FRAGMENT_SHADER, VERTEX_SHADER -> "assets/shaders";
+      case FRAGMENT_SHADER -> "assets/shaders";
     };
     String extension = switch (kind) {
       case IMAGE -> ".png";
       case SOUND -> ".wav";
       case FRAGMENT_SHADER -> ".frag";
-      case VERTEX_SHADER -> ".vert";
     };
     Path dir = root.resolve(folder);
     Path target = dir.resolve(name + extension);
@@ -42,9 +42,8 @@ final class ProjectAssetCreator {
       throw new IOException("Asset already exists: " + target.getFileName());
     }
     Files.createDirectories(dir);
-    if (kind == Kind.FRAGMENT_SHADER || kind == Kind.VERTEX_SHADER) {
-      AtomicFiles.writeString(target, kind == Kind.FRAGMENT_SHADER
-          ? FRAGMENT_TEMPLATE : VERTEX_TEMPLATE);
+    if (kind == Kind.FRAGMENT_SHADER) {
+      AtomicFiles.writeString(target, FRAGMENT_TEMPLATE);
       return target;
     }
     Path temp = Files.createTempFile(dir, ".new-asset", extension);
@@ -68,35 +67,12 @@ final class ProjectAssetCreator {
   }
 
   private static final String FRAGMENT_TEMPLATE = """
-      #ifdef GL_ES
-      precision mediump float;
-      #endif
-
-      #define PROCESSING_TEXTURE_SHADER
-
-      uniform sampler2D texture;
-      varying vec4 vertTexCoord;
+      // costume is the picture being drawn, uv where on it this pixel is
+      // ((0, 0) one corner, (1, 1) the opposite one), time the game time in
+      // seconds. The pixel's colour goes into color.
 
       void main(void) {
-        gl_FragColor = texture2D(texture, vertTexCoord.st);
-      }
-      """;
-
-  private static final String VERTEX_TEMPLATE = """
-      uniform mat4 transformMatrix;
-      uniform mat4 texMatrix;
-
-      attribute vec4 position;
-      attribute vec4 color;
-      attribute vec2 texCoord;
-
-      varying vec4 vertColor;
-      varying vec4 vertTexCoord;
-
-      void main(void) {
-        gl_Position = transformMatrix * position;
-        vertColor = color;
-        vertTexCoord = texMatrix * vec4(texCoord, 1.0, 1.0);
+        color = texture(costume, uv);
       }
       """;
 }

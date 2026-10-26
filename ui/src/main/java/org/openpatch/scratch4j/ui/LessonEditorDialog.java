@@ -57,8 +57,7 @@ final class LessonEditorDialog {
   enum Kind { RAN, CONTAINS, CHANGED, LINE, CLASS, METHOD, ADVANCED }
 
   /** The superclasses offered for "a class exists" (any other name can be typed). */
-  private static final List<String> BASES = List.of("Sprite", "AnimatedSprite", "UISprite",
-      "Stage", "Window");
+  private static final List<String> BASES = List.of("Sprite", "Stage", "Window");
 
   /** One step while it is edited. */
   static final class Draft {

@@ -88,4 +88,28 @@ class DesignerOutputCompilesTest {
         tmp.resolve("out2"));
     assertThat(result.errors()).isEmpty();
   }
+
+  @Test
+  void windowSettingsCompile() throws Exception {
+    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "w", jar);
+    Path root = tmp.resolve("w");
+    var all = new WindowDocument.Settings(640, 480, "MyStage", true, true,
+        "assets/images/logo.png", true);
+    Files.writeString(root.resolve("MyWindow.java"), WindowDocument.create("MyWindow", all));
+    Files.writeString(root.resolve("Main.java"), MainWindow.write("""
+        import org.openpatch.scratch.*;
+
+        public class Main {
+          public static void main(String[] args) {
+            Window window = new Window(480, 360);
+            window.setStage(new MyStage());
+          }
+        }
+        """, all));
+    var project = ScratchProject.open(root);
+    var result = new CompilerService().compile(project.javaSources(), List.of(jar),
+        tmp.resolve("out3"));
+    assertThat(result.errors()).isEmpty();
+  }
 }

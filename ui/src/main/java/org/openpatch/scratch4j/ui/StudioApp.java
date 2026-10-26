@@ -2047,17 +2047,8 @@ public class StudioApp extends javafx.application.Application {
       alert(I18n.t("status.no.project"));
       return;
     }
-    String fragment = I18n.t("asset.shader.fragment");
-    String vertex = I18n.t("asset.shader.vertex");
-    javafx.scene.control.ChoiceDialog<String> choice =
-        new javafx.scene.control.ChoiceDialog<>(fragment, fragment, vertex);
-    choice.setTitle(I18n.t("asset.new.shader"));
-    choice.setHeaderText(null);
-    choice.setContentText(I18n.t("asset.shader.type"));
-    Theme.style(choice);
-    choice.showAndWait().ifPresent(type -> createAsset(type.equals(vertex)
-        ? ProjectAssetCreator.Kind.VERTEX_SHADER
-        : ProjectAssetCreator.Kind.FRAGMENT_SHADER));
+    // Scratch for Java 7 shaders are fragment shaders only
+    createAsset(ProjectAssetCreator.Kind.FRAGMENT_SHADER);
   }
 
   private void createAsset(ProjectAssetCreator.Kind kind) {
@@ -2085,7 +2076,7 @@ public class StudioApp extends javafx.application.Application {
     dialog.setTitle(I18n.t(switch (kind) {
       case IMAGE -> "asset.new.image";
       case SOUND -> "asset.new.sound";
-      case FRAGMENT_SHADER, VERTEX_SHADER -> "asset.new.shader";
+      case FRAGMENT_SHADER -> "asset.new.shader";
     }));
     dialog.setHeaderText(null);
     Theme.style(dialog);

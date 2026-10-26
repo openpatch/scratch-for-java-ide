@@ -309,7 +309,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     return Files.isRegularFile(candidate) ? candidate : null;
   }
 
-  /** Whether the game window draws pictures crisp ({@code TextureSampling.POINT}). */
+  /** Whether the game window draws pictures crisp ({@code Window.usePixelArt()}). */
   private static boolean windowUsesPixelArt(ScratchProject project) {
     if (project == null) {
       return false;
@@ -1754,17 +1754,17 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private void saveHitbox() {
     if (tool == Tool.NINE_SLICE) {
       writeToolStatement(source -> SpriteRegionWriter.setNineSlice(source,
-          nineSlice[0], nineSlice[1], nineSlice[2], nineSlice[3]), true);
+          nineSlice[0], nineSlice[1], nineSlice[2], nineSlice[3]));
     } else if (tool == Tool.CENTER && rotationCenter != null) {
       writeToolStatement(source -> SpriteRegionWriter.setRotationCenter(source,
-          rotationCenter.getX(), rotationCenter.getY()), false);
+          rotationCenter.getX(), rotationCenter.getY()));
     } else if (hitboxPoints.size() >= 3) {
       double[] points = new double[hitboxPoints.size() * 2];
       for (int i = 0; i < hitboxPoints.size(); i++) {
         points[2 * i] = hitboxPoints.get(i).getX();
         points[2 * i + 1] = hitboxPoints.get(i).getY();
       }
-      writeToolStatement(source -> SpriteRegionWriter.setHitbox(source, points), false);
+      writeToolStatement(source -> SpriteRegionWriter.setHitbox(source, points));
     } else if (tool == Tool.CENTER) {
       alert(I18n.t("imageeditor.center.click"));
     } else {
@@ -1776,23 +1776,12 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     String apply(String source);
   }
 
-  private void writeToolStatement(StatementWriter writer, boolean uiSpriteOnly) {
+  /** Every sprite can take the statement (Scratch for Java 7 nine-slices any sprite). */
+  private void writeToolStatement(StatementWriter writer) {
     try {
       List<String> sprites = project.spriteClasses();
-      if (uiSpriteOnly) {
-        sprites = sprites.stream().filter(name -> {
-          try {
-            return Files.readString(project.root().resolve(name + ".java"))
-                .matches("(?s).*\\bclass\\s+" + java.util.regex.Pattern.quote(name)
-                    + "\\s+extends\\s+UISprite\\b.*");
-          } catch (IOException e) {
-            return false;
-          }
-        }).toList();
-      }
       if (sprites.isEmpty()) {
-        alert(I18n.t(uiSpriteOnly ? "imageeditor.nineslice.no.uisprite"
-            : "designer.no.sprites"));
+        alert(I18n.t("designer.no.sprites"));
         return;
       }
       ChoiceDialog<String> dialog = new ChoiceDialog<>(sprites.get(0), sprites);
