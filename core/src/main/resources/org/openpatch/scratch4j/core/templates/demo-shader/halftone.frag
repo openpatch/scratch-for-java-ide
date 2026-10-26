@@ -3,7 +3,7 @@ uniform int pixelsPerRow;
 void main(void)
 {
   vec2 p = uv;
-  float pixelSize = 1.0 / float(pixelsPerRow);
+  float pixelSize = 1.0 / float(max(pixelsPerRow, 1));
 
   float dx = mod(p.x, pixelSize) - pixelSize*0.5;
   float dy = mod(p.y, pixelSize) - pixelSize*0.5;

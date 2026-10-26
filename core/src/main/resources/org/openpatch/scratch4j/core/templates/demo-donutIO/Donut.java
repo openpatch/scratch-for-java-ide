@@ -35,7 +35,6 @@ public class Donut extends Sprite {
 
   public void run() {
     var touchingDonut = this.getTouchingSprite(Donut.class);
-    debug("touchingDonut: " + getX());
     if (touchingDonut != null && this.strength >= touchingDonut.strength) {
       this.setStrength(this.strength + touchingDonut.strength);
       touchingDonut.remove();

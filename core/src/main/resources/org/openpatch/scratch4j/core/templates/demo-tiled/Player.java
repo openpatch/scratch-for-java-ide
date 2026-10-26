@@ -4,7 +4,7 @@ import org.openpatch.scratch.*;
 public class Player extends Sprite {
 
   private String state = "idle";
-  private double speed = 2.5;
+  private double speed = 2;
   private String dir = "down";
 
   public Player(double x, double y) {

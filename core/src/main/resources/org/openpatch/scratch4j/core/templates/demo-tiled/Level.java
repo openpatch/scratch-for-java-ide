@@ -35,9 +35,10 @@ public class Level extends Stage {
         GameState.get().playerY = start.y;
       }
       player = new Player(GameState.get().playerX, GameState.get().playerY);
-      this.getCamera().setPosition(player.getX(), player.getY());
     }
     this.add(player);
+    // run() starts after the transition: until then the camera has to be on the player already
+    this.getCamera().setPosition(player.getX(), player.getY());
     this.setColor(0, 0, 0);
     // the map's layers are drawn every frame from now on, under the sprites
     this.map.showLayer("Floor", Layer.BACKGROUND);

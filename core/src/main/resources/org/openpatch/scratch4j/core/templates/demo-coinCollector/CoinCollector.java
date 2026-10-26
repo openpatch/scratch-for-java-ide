@@ -1,5 +1,6 @@
 import org.openpatch.scratch.Stage;
 import org.openpatch.scratch.Text;
+import org.openpatch.scratch.TextAlign;
 import org.openpatch.scratch.Window;
 
 /**
@@ -49,7 +50,8 @@ public class CoinCollector extends Stage {
     // end stage designer
 
     this.score = new Text();
-    this.score.setPosition(-330, 200);
+    this.score.setPosition(-380, 200);
+    this.score.setAlign(TextAlign.LEFT);
     this.score.setTextSize(28);
     this.score.showText("Coins: 0 / " + COINS);
     this.add(this.score);

@@ -1,6 +1,6 @@
 public class Bamboo extends Enemy {
 
-  protected double speed = 2.5;
+  protected double speed = 2;
 
   public Bamboo(double x, double y) {
     super(x, y);
