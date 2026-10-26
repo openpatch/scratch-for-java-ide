@@ -82,7 +82,7 @@
         "en": "Copy this into HedgehogSprite.java, inside the if for the trampoline, below setDirection. The hedgehog says Boing! for half a second.",
         "de": "Kopiere das in HedgehogSprite.java, in das if für das Trampolin, unter setDirection. Der Igel sagt eine halbe Sekunde lang Boing!."
       },
-      "code": "        this.say(\"Boing!\", 500);",
+      "code": "        this.say(\"Boing!\", 0.5);",
       "check": {
         "contains": {
           "file": "HedgehogSprite.java",

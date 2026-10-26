@@ -17,12 +17,12 @@ class BuiltinAssetIndexContractTest {
 
   @Test void sharedCatalogCoordinatesAndAliasesMatchThePinnedRuntimeRegistry() {
     for (var entry : org.openpatch.scratch.internal.BuiltinAssets.getEntries()) {
-      assertThat(index.image(entry.sheet + "/" + entry.name)).hasValueSatisfying(image -> {
-        assertThat(image.x()).isEqualTo(entry.x);
-        assertThat(image.y()).isEqualTo(entry.y);
-        assertThat(image.width()).isEqualTo(entry.width);
-        assertThat(image.height()).isEqualTo(entry.height);
-        assertThat(image.direction()).isEqualTo(entry.direction);
+      assertThat(index.image(entry.sheet() + "/" + entry.name())).hasValueSatisfying(image -> {
+        assertThat(image.x()).isEqualTo(entry.x());
+        assertThat(image.y()).isEqualTo(entry.y());
+        assertThat(image.width()).isEqualTo(entry.width());
+        assertThat(image.height()).isEqualTo(entry.height());
+        assertThat(image.direction()).isEqualTo(entry.direction());
         assertThat(image.referenceName()).isEqualTo(org.openpatch.scratch.internal.BuiltinAssets.getReferenceName(entry));
       });
     }

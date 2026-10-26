@@ -96,7 +96,7 @@ final class SpriteAssetsView extends BorderPane {
     soundsTab = new Tab(I18n.t("spriteassets.sounds"), assetPane(sounds,
         SpriteAssets.Kind.SOUND));
     tabs.getTabs().addAll(costumesTab, soundsTab);
-    // animations only for an AnimatedSprite: a plain sprite would show a tab of greyed buttons
+    // every sprite has animations in 7.0
     if (VisualMode.isAnimatedSprite(sourceFile)) {
       animationsTab = new Tab(I18n.t("spriteassets.animations"), assetPane(animations,
           SpriteAssets.Kind.ANIMATION));
@@ -386,7 +386,9 @@ final class SpriteAssetsView extends BorderPane {
             + (entry.tileWidth() > 0 ? "  ·  " + I18n.t("spriteassets.tiles",
                 entry.tileWidth(), entry.tileHeight())
                 + (entry.columns() ? " · " + I18n.t("spriteassets.column", entry.row())
-                    : entry.row() > 0 ? " · " + I18n.t("spriteassets.row", entry.row()) : "")
+                    // 7.0 rows are frame numbers (row() is the first frame then): no row to name
+                    : entry.sheetFrames().isEmpty() && entry.row() > 0
+                        ? " · " + I18n.t("spriteassets.row", entry.row()) : "")
                 : "")
             + (entry.managed() ? "" : "  ·  " + I18n.t("spriteassets.handwritten")));
       }
@@ -513,13 +515,9 @@ final class SpriteAssetsView extends BorderPane {
 
   /** "From sprite sheet...": a project image cut into costumes or an animation. */
   private void fromSheet(SpriteAssets.Kind kind) {
-    try {
-      if (kind == SpriteAssets.Kind.ANIMATION
-          && !Files.readString(file).contains("extends AnimatedSprite")) {
-        alert(I18n.t("spriteassets.animated.only"));
-        return;
-      }
-    } catch (IOException e) {
+    // Scratch for Java 7: every sprite can have animations
+    if (kind == SpriteAssets.Kind.ANIMATION && !VisualMode.isAnimatedSprite(file)) {
+      alert(I18n.t("spriteassets.animated.only"));
       return;
     }
     AssetPickerDialog.pickImage(project.root(), I18n.t("spriteassets.fromsheet"))

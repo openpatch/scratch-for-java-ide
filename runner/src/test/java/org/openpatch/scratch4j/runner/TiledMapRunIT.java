@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Maps the editor saves, and maps from Tiled 1.10 after "make it work",
- * load and draw in the released library: stamped as background, objects read
+ * load and draw in the released library: shown as background, objects read
  * with their names, types and stage coordinates. Needs a display - run under
  * {@code xvfb-run -a} with {@code -Dscratch4j.gltest=true}.
  */
@@ -102,8 +102,10 @@ class TiledMapRunIT {
     String source = Files.readString(stage);
     source = MapCode.insert(source, "assets/maps/made.tmx", List.of("Ground"));
     source = MapCode.insert(source, "assets/maps/tiled.tmx", List.of("Ground"));
-    source = source.replace("    map2.stampLayerToBackground(\"Ground\");\n", """
-            map2.stampLayerToBackground("Ground");
+    String shown = "    map2.showLayer(\"Ground\", Layer.BACKGROUND);\n";
+    assertThat(source).contains(shown);
+    source = source.replace(shown, """
+            map2.showLayer("Ground", Layer.BACKGROUND);
             for (var o : map.getObjectsFromLayer("Objects")) {
               System.out.println("OBJ " + o.name + "|" + o.type + "|" + o.x + "|" + o.y);
             }

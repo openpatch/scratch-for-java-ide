@@ -34,7 +34,7 @@ public class WinStage extends Stage {
   public void whenKeyPressed(KeyCode keyCode) {
     if (keyCode == KeyCode.SPACE) {
       Game.LEVEL += 1;
-      Window.getInstance().transitionToStage(new WorldStage(), 500);
+      Window.getInstance().transitionToStage(new WorldStage(), 0.5);
     }
   }
 }

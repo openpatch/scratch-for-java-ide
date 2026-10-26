@@ -23,8 +23,8 @@ class MapLinterTest {
     MapLinter linter = new MapLinter(Language.EN);
     assertThat(linter.lint(root, world, source)).isEmpty();
 
-    String broken = source.replace("stampLayerToBackground(\"Walls\")",
-        "stampLayerToBackground(\"walls\")").replace("spawn(\"Objects\")",
+    String broken = source.replace("showLayer(\"Walls\"",
+        "showLayer(\"walls\"").replace("spawn(\"Objects\")",
         "spawn(\"Floor\")");
     var findings = new MapLinter(Language.EN).lint(root, world, broken);
     assertThat(findings).extracting(MapLinter.Finding::message).containsExactlyInAnyOrder(
@@ -49,12 +49,12 @@ class MapLinterTest {
         """);
     Path stage = root.resolve("MyStage.java");
     String source = """
-        import org.openpatch.scratch.extensions.tiled.TiledMap;
+        import org.openpatch.scratch.tiled.TiledMap;
         public class MyStage extends Stage {
           public MyStage() {
             TiledMap a = new TiledMap("assets/maps/a.tmx", this);
             TiledMap b = new TiledMap("assets/maps/missing.tmx", this);
-            a.stampLayerToBackground("ground");
+            a.showLayer("ground", Layer.BACKGROUND);
           }
         }
         """;

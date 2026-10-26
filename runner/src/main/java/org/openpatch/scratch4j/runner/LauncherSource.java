@@ -11,6 +11,12 @@ import org.openpatch.scratch4j.core.project.ProjectSettings;
  * closes the window after N seconds so CI can run programs headlessly. With
  * the control channel enabled, that countdown starts after the first frame.
  *
+ * <p>Scratch for Java 7: the IDE's control channel is an extension of the library
+ * ({@code IdeControl}, registered with {@code Window.use} before the program
+ * starts) on its public API only - no reflection into the library. The program
+ * is started through {@code org.openpatch.scratch.Launcher} (see ProjectRunner),
+ * which keeps the first thread for the window on macOS.
+ *
  * <p>The class name is fixed so re-running does not litter the build folder;
  * it lives in the default package like the student's classes.
  */
@@ -28,7 +34,7 @@ public final class LauncherSource {
       beforeStage.append("    Window.useFullScreen();\n");
     }
     if (settings.pixelArt) {
-      beforeStage.append("    Window.useTextureSampling(org.openpatch.scratch.TextureSampling.POINT);\n");
+      beforeStage.append("    Window.usePixelArt();\n");
     }
     if (settings.splashLogo != null && !settings.splashLogo.isBlank()) {
       beforeStage.append("    Window.useSplashLogo(\"")
@@ -38,6 +44,8 @@ public final class LauncherSource {
         ? "    Window.getInstance().setDebug(true);\n" : "";
     return """
         import org.openpatch.scratch.Window;
+        import org.openpatch.scratch.extension.Extension;
+        import org.openpatch.scratch.extension.ExtensionContext;
 
         public class Scratch4JLauncher {
 
@@ -63,6 +71,7 @@ public final class LauncherSource {
               hook.start();
             }
             if (Boolean.getBoolean("scratch4j.ide.control")) {
+              Window.use(IdeControl.INSTANCE);
               IdeControl.start();
             }
         %s    Class<?> start = Class.forName(startClassName(args));
@@ -121,78 +130,108 @@ public final class LauncherSource {
           }
 
           /**
-           * The IDE's line to a running program (only with -Dscratch4j.ide.control=true):
-           * commands arrive on stdin, a heartbeat with the frame count goes to stderr
-           * once a second (the IDE hides these marked lines and spots a frozen program).
-           * It also pauses the game loop, steps single frames, changes the speed, and
-           * reports the sprites' variables a few times a second ("monitor {json}").
+           * The IDE's line to a running program (only with -Dscratch4j.ide.control=true), an
+           * extension of the library: commands arrive on stdin, a heartbeat with the frame count
+           * goes to stderr once a second (the IDE hides these marked lines and spots a frozen
+           * program). It pauses the game, steps single ticks, changes the speed, saves frames and
+           * GIFs, shows pinned values with the library's monitors, and reports the sprites'
+           * variables a few times a second ("monitor {json}"). Learner code and the variables are
+           * only touched on the game thread.
            */
-          public static final class IdeControl {
+          public static final class IdeControl implements Extension {
             static final String MARK = "@@scratch4j-ide@@ ";
-            static final java.util.concurrent.ConcurrentLinkedQueue<Runnable> TASKS =
-                new java.util.concurrent.ConcurrentLinkedQueue<>();
+            static final IdeControl INSTANCE = new IdeControl();
             static volatile long frames = -1;
             static volatile boolean paused;
             static volatile boolean monitoring = true;
-            static org.openpatch.scratch.extensions.recorder.GifRecorder gif;
+            static volatile ExtensionContext ctx;
+            /** A screenshot to save from the next frame, or null. */
+            static volatile String screenshot;
+            /** A pause waits for the first frame after it took effect, to report its tick. */
+            static volatile boolean pauseReport;
+            /** The tick count before a step, -1 when no step waits for its report. */
+            static volatile long stepFrom = -1;
+            static org.openpatch.scratch.recorder.GifRecorder gif;
+            static String gifPath;
             /** Monitors pinned onto the stage: {owner id, field or @property, label}. */
             static final java.util.List<String[]> PINS =
                 new java.util.concurrent.CopyOnWriteArrayList<>();
+            static volatile boolean pinsChanged;
             /** The objects the last report showed, by id: pins look them up. */
             static final java.util.Map<String, java.lang.ref.WeakReference<Object>> SEEN =
                 new java.util.concurrent.ConcurrentHashMap<>();
 
-            /** Counts frames and runs IDE tasks on the render thread (after each frame). */
-            public static final class Hook extends org.openpatch.scratch.extensions.recorder.Recorder {
-              Hook() {
-                super("scratch4j-ide", ".hook");
-                this.start();
-                // draw() runs inside each frame, after the program's own drawing
-                call(applet(), "registerMethod", new Class<?>[] {String.class, Object.class},
-                    "draw", this);
-              }
+            @Override
+            public String id() {
+              return "org.openpatch.scratch4j.ide";
+            }
 
-              @Override
-              public void saveFrame() {
+            @Override
+            public String name() {
+              return "Scratch for Java Studio";
+            }
+
+            @Override
+            public String version() {
+              return "1";
+            }
+
+            @Override
+            public void install(ExtensionContext context) {
+              ctx = context;
+              frames = 0;
+              // after each frame, on the window thread: counting, screenshots, step reports
+              context.afterFrame((stage, frame) -> {
                 frames++;
-                // a task queued by a task runs with the next frame
-                for (int n = TASKS.size(); n > 0; n--) {
-                  Runnable task = TASKS.poll();
-                  if (task == null) break;
+                String shot = screenshot;
+                if (shot != null) {
+                  screenshot = null;
                   try {
-                    task.run();
-                  } catch (Throwable t) {
-                    System.err.println(MARK + "error " + t);
+                    frame.savePng(java.nio.file.Path.of(shot));
+                    System.err.println(MARK + "saved " + shot);
+                  } catch (java.io.IOException e) {
+                    System.err.println(MARK + "error " + e);
                   }
                 }
-                if (Library.monitors()) {
-                  Library.syncPins();
+                if (pauseReport) {
+                  // the batch that took the pause has finished: the tick count is final
+                  pauseReport = false;
+                  context.runOnGameThread(() -> {
+                    System.err.println(MARK + "paused " + ticks());
+                    report();
+                  });
+                }
+                long from = stepFrom;
+                if (from >= 0 && context.getTickCount() > from) {
+                  stepFrom = -1;
+                  context.runOnGameThread(() -> {
+                    System.err.println(MARK + "paused " + ticks());
+                    report();
+                  });
+                }
+                if (pinsChanged || stage != Pins.stage) {
+                  pinsChanged = false;
+                  context.runOnGameThread(Pins::sync);
                 }
                 if (monitoring && !paused && frames %% 15 == 0) {
-                  report();
+                  context.runOnGameThread(IdeControl::report);
                 }
-              }
+              });
+            }
 
-              public void draw() {
-                if (!PINS.isEmpty() && !Library.monitors()) {
-                  Monitors.draw();
-                }
-              }
+            /** Ticks the game ran (they stop while paused, a step adds one). */
+            static long ticks() {
+              ExtensionContext c = ctx;
+              return c == null ? 0 : c.getTickCount();
             }
 
             static void start() {
               Thread beat = new Thread(() -> {
-                boolean hooked = false;
                 while (true) {
-                  if (!hooked && Window.getInstance() != null && applet() != null) {
-                    TASKS.clear();
-                    frames = 0;
-                    new Hook();
-                    hooked = true;
-                  }
-                  // "loading" while the library's loading screen shows (slow PCs stop
-                  // drawing for a while when the stage takes over)
-                  System.err.println(MARK + "frames " + frames + (loading() ? " loading" : ""));
+                  ExtensionContext c = ctx;
+                  // "loading" while the library's loading screen shows
+                  System.err.println(MARK + "frames " + frames
+                      + (c != null && c.isLoading() ? " loading" : ""));
                   try {
                     Thread.sleep(1000);
                   } catch (InterruptedException e) {
@@ -218,80 +257,76 @@ public final class LauncherSource {
               commands.start();
             }
 
+            /** On the game thread, once the window and its game exist. */
+            static void later(Runnable task) {
+              while (ctx == null || Window.getInstance() == null) {
+                try {
+                  Thread.sleep(25);
+                } catch (InterruptedException e) {
+                  return;
+                }
+              }
+              ctx.runOnGameThread(() -> {
+                try {
+                  task.run();
+                } catch (Throwable t) {
+                  System.err.println(MARK + "error " + t);
+                }
+              });
+            }
+
             static void handle(String line) {
               if (line.equals("debug on") || line.equals("debug off")) {
                 boolean on = line.endsWith("on");
-                TASKS.add(() -> Window.getInstance().setDebug(on));
+                later(() -> Window.getInstance().setDebug(on));
               } else if (line.startsWith("screenshot ")) {
-                String path = line.substring("screenshot ".length());
-                TASKS.add(() -> {
-                  try {
-                    Object image = stageImage();
-                    image.getClass().getMethod("save", String.class).invoke(image, path);
-                    System.err.println(MARK + "saved " + path);
-                  } catch (ReflectiveOperationException e) {
-                    System.err.println(MARK + "error " + e);
-                  }
-                });
+                screenshot = line.substring("screenshot ".length());
               } else if (line.startsWith("gif start ")) {
                 String path = line.substring("gif start ".length());
-                if (gif == null) {
-                  gif = new org.openpatch.scratch.extensions.recorder.GifRecorder(path);
-                  TASKS.add(() -> gif.start());
-                }
-              } else if (line.equals("pause")) {
-                // after the frame being drawn: the paused picture is a whole frame
-                TASKS.add(() -> {
-                  if (Library.gameClock()) {
-                    Library.window("pause");
-                  } else {
-                    call(applet(), "noLoop", new Class<?>[0]);
+                later(() -> {
+                  if (gif == null) {
+                    gif = new org.openpatch.scratch.recorder.GifRecorder(path);
+                    gifPath = path;
+                    gif.start();
                   }
+                });
+              } else if (line.equals("gif stop")) {
+                later(() -> {
+                  if (gif != null) {
+                    gif.stop();
+                    System.err.println(MARK + "saved " + gifPath);
+                    gif = null;
+                  }
+                });
+              } else if (line.equals("pause")) {
+                // reported once the pause took effect (see afterFrame): the paused picture
+                // and the reported tick belong together
+                later(() -> {
+                  Window.getInstance().pause();
                   paused = true;
-                  System.err.println(MARK + "paused " + gameFrame());
-                  report();
+                  pauseReport = true;
                 });
               } else if (line.equals("resume")) {
-                if (paused) {
-                  paused = false;
-                  if (Library.gameClock()) {
-                    Library.window("resume");
-                  } else {
-                    freshDelta();
-                    call(applet(), "loop", new Class<?>[0]);
+                later(() -> {
+                  if (paused) {
+                    paused = false;
+                    Window.getInstance().resume();
+                    System.err.println(MARK + "resumed");
                   }
-                  System.err.println(MARK + "resumed");
-                }
+                });
               } else if (line.equals("step")) {
-                if (paused && Library.gameClock()) {
-                  // the library steps with the next frame: report the one after it
-                  TASKS.add(() -> {
-                    Library.window("step");
-                    TASKS.add(() -> {
-                      System.err.println(MARK + "paused " + gameFrame());
-                      report();
-                    });
-                  });
-                } else if (paused) {
-                  TASKS.add(() -> {
-                    System.err.println(MARK + "paused " + gameFrame());
-                    report();
-                  });
-                  freshDelta();
-                  call(applet(), "redraw", new Class<?>[0]);
-                }
+                later(() -> {
+                  if (paused) {
+                    // reported after the frame that shows the stepped tick
+                    stepFrom = ticks();
+                    Window.getInstance().step();
+                  }
+                });
               } else if (line.startsWith("speed ")) {
                 try {
-                  float fps = Float.parseFloat(line.substring("speed ".length()));
-                  if (Library.gameClock()) {
-                    // the whole game in slow motion: run(), timers, gliding, animations
-                    double factor = fps / 60.0;
-                    TASKS.add(() -> Library.window("setGameSpeed", factor));
-                  } else {
-                    // OpenGL changes its frame rate on the render thread only (while
-                    // paused, with the next step or on resume)
-                    TASKS.add(() -> call(applet(), "frameRate", new Class<?>[] {float.class}, fps));
-                  }
+                  // frames per second in the IDE's speed control; the game runs 60 ticks a second
+                  double factor = Float.parseFloat(line.substring("speed ".length())) / 60.0;
+                  later(() -> Window.getInstance().setGameSpeed(factor));
                 } catch (NumberFormatException e) {
                   System.err.println(MARK + "error " + e);
                 }
@@ -301,34 +336,18 @@ public final class LauncherSource {
                 String[] pin = line.substring("pin ".length()).split(" ", 3);
                 if (pin.length == 3) {
                   PINS.add(pin);
+                  pinsChanged = true;
                 }
               } else if (line.startsWith("unpin ")) {
                 String[] pin = line.substring("unpin ".length()).split(" ", 2);
                 if (pin.length == 2) {
                   PINS.removeIf(p -> p[0].equals(pin[0]) && p[1].equals(pin[1]));
-                }
-              } else if (line.equals("gif stop")) {
-                org.openpatch.scratch.extensions.recorder.GifRecorder recording = gif;
-                gif = null;
-                if (recording != null) {
-                  TASKS.add(() -> {
-                    recording.stop();
-                    System.err.println(MARK + "saved " + recording_path(recording));
-                  });
+                  pinsChanged = true;
                 }
               }
             }
 
-            /**
-             * Frames the game ran: the library's game steps when it has a game clock
-             * (its window keeps drawing while paused), else the frames drawn.
-             */
-            static long gameFrame() {
-              Object steps = Library.clockSteps();
-              return steps instanceof Long ? (Long) steps : frames;
-            }
-
-            /** Sends the variables of the stage and its sprites to the IDE. */
+            /** Sends the variables of the stage and its sprites to the IDE (game thread). */
             static void report() {
               try {
                 System.err.println(MARK + "monitor " + Monitors.json());
@@ -336,177 +355,21 @@ public final class LauncherSource {
                 System.err.println(MARK + "error monitor " + e);
               }
             }
-
-            /**
-             * The library measures the time between frames: after a pause, the next
-             * frame would see the whole pause and jump. Make it a normal frame.
-             */
-            static void freshDelta() {
-              try {
-                Object applet = applet();
-                java.lang.reflect.Field last = applet.getClass().getDeclaredField("lastMillis");
-                last.setAccessible(true);
-                int now = (Integer) applet.getClass().getMethod("millis").invoke(applet);
-                last.setInt(applet, now - 16);
-              } catch (ReflectiveOperationException | RuntimeException ignored) {
-                // another library version: the first frame after a pause is longer
-              }
-            }
-
-            static Object call(Object target, String name, Class<?>[] types, Object... args) {
-              try {
-                return target.getClass().getMethod(name, types).invoke(target, args);
-              } catch (java.lang.reflect.InvocationTargetException e) {
-                System.err.println(MARK + "error " + name + ": " + e.getCause());
-                return null;
-              } catch (ReflectiveOperationException | RuntimeException e) {
-                System.err.println(MARK + "error " + name + ": " + e);
-                return null;
-              }
-            }
-
-            /** The library's Processing sketch (reflective: no Processing types needed to compile). */
-            private static java.lang.reflect.Field state;
-
-            /** The library still shows its loading screen (before the stage runs). */
-            static boolean loading() {
-              Object applet = applet();
-              if (applet == null) return false;
-              try {
-                if (state == null) {
-                  java.lang.reflect.Field field = applet.getClass().getDeclaredField("state");
-                  field.setAccessible(true);
-                  state = field;
-                }
-                return String.valueOf(state.get(applet)).equals("LOADING");
-              } catch (ReflectiveOperationException | RuntimeException e) {
-                return false; // an older library: no loading screen to wait for
-              }
-            }
-
-            static Object applet() {
-              try {
-                return Class.forName("org.openpatch.scratch.internal.Applet")
-                    .getMethod("getInstance").invoke(null);
-              } catch (ReflectiveOperationException e) {
-                return null;
-              }
-            }
-
-            /**
-             * The stage at its own size, without the bars around it: a window that is
-             * bigger than the stage (maximized) shows it letterboxed. Newer libraries
-             * cut it out themselves; for older ones it is cut out here, and the oldest
-             * ones, which do not tell the stage's size, give the whole window.
-             */
-            static Object stageImage() throws ReflectiveOperationException {
-              Object applet = applet();
-              Class<?> type = applet.getClass();
-              try {
-                return type.getMethod("getStageImage").invoke(applet);
-              } catch (NoSuchMethodException older) {
-                // cut out below
-              }
-              int stageWidth;
-              int stageHeight;
-              try {
-                stageWidth = (Integer) type.getMethod("getRenderWidth").invoke(applet);
-                stageHeight = (Integer) type.getMethod("getRenderHeight").invoke(applet);
-              } catch (NoSuchMethodException oldest) {
-                return applet;
-              }
-              int windowWidth = type.getField("width").getInt(applet);
-              int windowHeight = type.getField("height").getInt(applet);
-              float ratio = Math.min((float) windowWidth / stageWidth,
-                  (float) windowHeight / stageHeight);
-              int width = Math.round(stageWidth * ratio);
-              int height = Math.round(stageHeight * ratio);
-              Object area = type.getMethod("get", int.class, int.class, int.class, int.class)
-                  .invoke(applet, (windowWidth - width) / 2, (windowHeight - height) / 2,
-                      width, height);
-              if (width != stageWidth || height != stageHeight) {
-                area.getClass().getMethod("resize", int.class, int.class)
-                    .invoke(area, stageWidth, stageHeight);
-              }
-              return area;
-            }
-
-            static String recording_path(Object recorder) {
-              try {
-                java.lang.reflect.Field path =
-                    org.openpatch.scratch.extensions.recorder.Recorder.class
-                        .getDeclaredField("path");
-                path.setAccessible(true);
-                return String.valueOf(path.get(recorder));
-              } catch (ReflectiveOperationException e) {
-                return "";
-              }
-            }
           }
 
-          /**
-           * What the project's library can do itself (newer versions): pause, step and
-           * game speed on its own game clock, and Scratch-style variable monitors. Older
-           * versions get the IDE's own way (Processing's loop and monitors drawn here).
-           */
-          public static final class Library {
-            static Boolean gameClock;
-            static Boolean monitors;
-            static Object pinStage;
-            /** Labels of the pins shown on pinStage. */
+          /** The pinned values, shown by the library's own monitors on the current stage. */
+          public static final class Pins {
+            static volatile Object stage;
+            /** Labels of the pins shown on stage. */
             static final java.util.Set<String> shown = new java.util.HashSet<>();
 
-            static boolean gameClock() {
-              if (gameClock == null) {
-                gameClock = has(Window.class, "pause") && has(Window.class, "setGameSpeed", double.class);
-              }
-              return gameClock;
-            }
-
-            static boolean monitors() {
-              if (monitors == null) {
-                monitors = has(org.openpatch.scratch.Stage.class, "showVariable",
-                    java.util.function.Supplier.class);
-              }
-              return monitors;
-            }
-
-            static boolean has(Class<?> type, String name, Class<?>... parameters) {
-              try {
-                type.getMethod(name, parameters);
-                return true;
-              } catch (NoSuchMethodException e) {
-                return false;
-              }
-            }
-
-            static void window(String name, Object... args) {
-              Class<?>[] types = new Class<?>[args.length];
-              for (int i = 0; i < args.length; i++) {
-                types[i] = args[i] instanceof Double ? double.class : args[i].getClass();
-              }
-              IdeControl.call(Window.getInstance(), name, types, args);
-            }
-
-            /** The library's game steps, or null without a game clock. */
-            static Object clockSteps() {
-              if (!gameClock()) return null;
-              try {
-                Object clock = IdeControl.applet().getClass().getMethod("getClock")
-                    .invoke(IdeControl.applet());
-                return clock.getClass().getMethod("steps").invoke(clock);
-              } catch (ReflectiveOperationException | RuntimeException e) {
-                return null;
-              }
-            }
-
-            /** Shows the pinned values with the library's own monitors, on the current stage. */
-            static void syncPins() {
+            /** Game thread. */
+            static void sync() {
               Window window = Window.getInstance();
-              Object stage = window == null ? null : window.getStage();
-              if (stage == null) return;
-              if (stage != pinStage) {
-                pinStage = stage;
+              org.openpatch.scratch.Stage current = window == null ? null : window.getStage();
+              if (current == null) return;
+              if (current != stage) {
+                stage = current;
                 shown.clear();
               }
               java.util.Set<String> wanted = new java.util.HashSet<>();
@@ -515,15 +378,13 @@ public final class LauncherSource {
                 if (shown.add(pin[2])) {
                   String owner = pin[0];
                   String field = pin[1];
-                  java.util.function.Supplier<Object> value = () -> Monitors.pinned(owner, field);
-                  IdeControl.call(stage, "showVariable",
-                      new Class<?>[] {String.class, java.util.function.Supplier.class}, pin[2], value);
+                  current.showVariable(pin[2], () -> Monitors.pinned(owner, field));
                 }
               }
               for (java.util.Iterator<String> it = shown.iterator(); it.hasNext(); ) {
                 String label = it.next();
                 if (!wanted.contains(label)) {
-                  IdeControl.call(stage, "hideVariable", new Class<?>[] {String.class}, label);
+                  current.hideVariable(label);
                   it.remove();
                 }
               }
@@ -532,7 +393,7 @@ public final class LauncherSource {
 
           /**
            * The variables report (JSON without a library: the program's classpath has
-           * none) and the monitors pinned onto the stage, drawn like Scratch's.
+           * none); pinned values are shown by the library's own monitors.
            */
           public static final class Monitors {
             static final char Q = 34;
@@ -544,7 +405,7 @@ public final class LauncherSource {
               Window window = Window.getInstance();
               org.openpatch.scratch.Stage stage = window == null ? null : window.getStage();
               StringBuilder sb = new StringBuilder("{");
-              sb.append(str("frame")).append(':').append(IdeControl.gameFrame()).append(',')
+              sb.append(str("frame")).append(':').append(IdeControl.ticks()).append(',')
                   .append(str("paused")).append(':').append(IdeControl.paused);
               java.util.Set<Class<?>> classes = new java.util.LinkedHashSet<>();
               if (stage != null) {
@@ -640,7 +501,7 @@ public final class LauncherSource {
             static boolean own(Class<?> c) {
               String n = c.getName();
               return !(n.startsWith("org.openpatch.scratch.") || n.startsWith("java.")
-                  || n.startsWith("javax.") || n.startsWith("processing.")
+                  || n.startsWith("javax.") || n.startsWith("org.lwjgl.")
                   || n.startsWith("Scratch4JLauncher"));
             }
 
@@ -737,22 +598,6 @@ public final class LauncherSource {
               return b.append(Q).toString();
             }
 
-            /** The pinned monitors, top left, like Scratch's: "Cat: score [3]". */
-            static void draw() {
-              if (drawFailed) return;
-              Object g = IdeControl.applet();
-              try {
-                float y = 8;
-                for (String[] pin : IdeControl.PINS) {
-                  box(g, 8, y, pin[2], pinned(pin[0], pin[1]));
-                  y += 30;
-                }
-              } catch (ReflectiveOperationException | RuntimeException e) {
-                drawFailed = true; // say it once, not every frame
-                System.err.println(IdeControl.MARK + "error monitors " + e);
-              }
-            }
-
             static String pinned(String owner, String field) {
               try {
                 if (owner.startsWith("static:")) {
@@ -784,50 +629,6 @@ public final class LauncherSource {
               }
               if (value.startsWith("@ref:")) return value.substring(value.lastIndexOf(':') + 1);
               return value;
-            }
-
-            static final Class<?>[] NONE = {};
-            static final Class<?>[] F1 = {float.class};
-            static final Class<?>[] F3 = {float.class, float.class, float.class};
-            static final Class<?>[] F4 = {float.class, float.class, float.class, float.class};
-            static final Class<?>[] F5 =
-                {float.class, float.class, float.class, float.class, float.class};
-            static final Class<?>[] I1 = {int.class};
-            static final Class<?>[] I2 = {int.class, int.class};
-            static final Class<?>[] S1 = {String.class};
-            static final Class<?>[] SFF = {String.class, float.class, float.class};
-            static final int LEFT = 37;
-            static final int CENTER = 3;
-            static final int CORNER = 0;
-
-            static Object g(Object g, String name, Class<?>[] types, Object... args)
-                throws ReflectiveOperationException {
-              return g.getClass().getMethod(name, types).invoke(g, args);
-            }
-
-            static void box(Object g, float x, float y, String label, String value)
-                throws ReflectiveOperationException {
-              g(g, "pushStyle", NONE);
-              g(g, "pushMatrix", NONE);
-              g(g, "resetMatrix", NONE);
-              // the library draws sprites centred; pushStyle/popStyle restore it
-              g(g, "rectMode", I1, CORNER);
-              g(g, "textSize", F1, 12f);
-              float labelWidth = (Float) g(g, "textWidth", S1, label);
-              float valueWidth = Math.max(30f, (Float) g(g, "textWidth", S1, value) + 14);
-              g(g, "noStroke", NONE);
-              g(g, "fill", F4, 230f, 240f, 255f, 235f);
-              g(g, "rect", F5, x, y, labelWidth + valueWidth + 18, 24f, 4f);
-              g(g, "fill", F3, 87f, 94f, 117f);
-              g(g, "textAlign", I2, LEFT, CENTER);
-              g(g, "text", SFF, label, x + 6, y + 11);
-              g(g, "fill", F3, 255f, 140f, 26f);
-              g(g, "rect", F5, x + labelWidth + 12, y + 3, valueWidth, 18f, 9f);
-              g(g, "fill", F3, 255f, 255f, 255f);
-              g(g, "textAlign", I2, CENTER, CENTER);
-              g(g, "text", SFF, value, x + labelWidth + 12 + valueWidth / 2, y + 11);
-              g(g, "popMatrix", NONE);
-              g(g, "popStyle", NONE);
             }
           }
         }

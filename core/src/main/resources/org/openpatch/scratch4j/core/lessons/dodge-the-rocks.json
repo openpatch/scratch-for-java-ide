@@ -103,7 +103,7 @@
       "check": {
         "classExists": {
           "extends": "Sprite",
-          "min": 2
+          "min": 3
         }
       }
     },

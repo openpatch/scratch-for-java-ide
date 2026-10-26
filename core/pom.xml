@@ -37,13 +37,25 @@
          contract test) and the runtime model of student projects. -->
     <dependency>
       <groupId>org.openpatch</groupId>
-      <artifactId>scratch</artifactId>
+      <artifactId>scratch-all</artifactId>
+    </dependency>
+    <!-- Studio's own JSON (settings, lessons, reports). Scratch for Java 6 brought Jackson along;
+         7's core has none (only its save and tiled extensions use it). Same versions as the library. -->
+    <dependency>
+      <groupId>tools.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>3.2.3</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <version>2.22</version>
     </dependency>
     <!-- The library's sources jar drives the API index generation
          (ApiIndexGenerator + parity test). -->
     <dependency>
       <groupId>org.openpatch</groupId>
-      <artifactId>scratch</artifactId>
+      <artifactId>scratch-all</artifactId>
       <version>${scratch.version}</version>
       <classifier>sources</classifier>
       <scope>test</scope>

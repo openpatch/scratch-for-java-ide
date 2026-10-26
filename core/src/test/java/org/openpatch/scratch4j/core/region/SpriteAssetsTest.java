@@ -46,11 +46,11 @@ class SpriteAssetsTest {
   void pathsTheCodeWorksOutAreListedReadOnly() {
     // the Spielwerkstatt's player: the sheet depends on a constructor parameter
     String source = """
-        public class Spieler extends AnimatedSprite {
+        public class Spieler extends Sprite {
           public Spieler(String pFigur) {
             String bild = "assets/actor/character/" + pFigur + "/sprite-sheet.png";
-            this.addAnimation("unten", bild, 4, 16, 16, 0, true);
-            this.addAnimation("oben", bild, 4, 16, 16, 1, true);
+            this.addAnimation("unten", bild, 16, 16, 0, 4, 8, 12);
+            this.addAnimation("oben", bild, 16, 16, 1, 5, 9, 13);
             this.addSound("schritt", "assets/audio/step.ogg");
             this.addCostume("bild", pFigur + ".png");
           }
@@ -98,13 +98,14 @@ class SpriteAssetsTest {
   @Test
   void sheetCostumesAndSheetAnimationsRoundTrip() {
     String sheet = SpriteAssets.addSheetCostumes(SOURCE, "tile", "assets/images/tiles.png", 32, 16);
+    // a sheet of 8 columns: row 2 starts at frame 16 (Scratch for Java 7 names the frames)
     String animated = SpriteAssets.addSheetAnimation(sheet, "run", "assets/images/hero.png",
-        6, 24, 32, 2);
+        6, 24, 32, 2, 8);
     String top = SpriteAssets.addSheetAnimation(animated, "idle", "assets/images/hero.png",
-        4, 24, 32, 0);
+        4, 24, 32, 0, 8);
     assertThat(top).contains("this.addCostumes(\"tile\", \"assets/images/tiles.png\", 32, 16);")
-        .contains("this.addAnimation(\"run\", \"assets/images/hero.png\", 6, 24, 32, 2);")
-        .contains("this.addAnimation(\"idle\", \"assets/images/hero.png\", 4, 24, 32);");
+        .contains("this.addAnimation(\"run\", \"assets/images/hero.png\", 24, 32, 16, 17, 18, 19, 20, 21);")
+        .contains("this.addAnimation(\"idle\", \"assets/images/hero.png\", 24, 32, 0, 1, 2, 3);");
     var entries = SpriteAssets.list(top);
     var tiles = entries.stream().filter(e -> e.kind() == SpriteAssets.Kind.SHEET).findFirst()
         .orElseThrow();
@@ -113,7 +114,9 @@ class SpriteAssetsTest {
     var run = entries.stream().filter(e -> e.name().equals("run")).findFirst().orElseThrow();
     assertThat(run.isSheetAnimation()).isTrue();
     assertThat(run.frames()).isEqualTo(6);
-    assertThat(run.row()).isEqualTo(2);
+    assertThat(run.row()).as("the first frame").isEqualTo(16);
+    assertThat(run.sheetFrames()).containsExactly(16, 17, 18, 19, 20, 21);
+    assertThat(run.columns()).isFalse();
     String removed = SpriteAssets.remove(SpriteAssets.remove(top, tiles), run);
     assertThat(removed).doesNotContain("addCostumes").doesNotContain("\"run\"")
         .contains("\"idle\"");
@@ -129,8 +132,8 @@ class SpriteAssetsTest {
         .doesNotContain(", 2);");
     String timed = SpriteRegionWriter.setAnimationInterval(second, 80);
     String retimed = SpriteRegionWriter.setAnimationInterval(timed, 150);
-    assertThat(retimed).contains("this.setAnimationInterval(150);")
-        .doesNotContain("setAnimationInterval(80)");
+    assertThat(retimed).contains("this.setAnimationInterval(0.15);")
+        .doesNotContain("setAnimationInterval(0.08)");
     assertThat(SpriteRegionWriter.animationInterval(retimed)).isEqualTo(150);
     assertThat(SpriteRegionWriter.animationInterval(SOURCE)).isEqualTo(-1);
   }

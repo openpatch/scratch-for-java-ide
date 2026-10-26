@@ -1,6 +1,6 @@
 import java.io.IOException;
 import org.openpatch.scratch.*;
-import org.openpatch.scratch.extensions.fs.SaveData;
+import org.openpatch.scratch.save.SaveData;
 
 /** Collect coins, then save and restore the score and both sprite positions. */
 public class SaveSlotStage extends Stage {

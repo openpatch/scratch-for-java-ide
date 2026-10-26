@@ -331,12 +331,13 @@ public final class SpriteLook {
             return null;
           }
         }
-        if (n >= 5 && a.get(1) instanceof String s && ints(a, 3, 5)) {
-          int w = (Integer) a.get(3);
-          int h = (Integer) a.get(4);
-          int index = n >= 6 && a.get(5) instanceof Integer i ? i : 0;
-          return n == 7 ? s + "#" + index * w + ",0," + w + "," + h
-              : s + "#0," + index * h + "," + w + "," + h;
+        // Scratch for Java 7: (name, sheet, width, height, frame, ...), frames row by row from 0;
+        // the first frame's cell needs the sheet's width, which the viewer knows (#frame:)
+        if (n >= 5 && a.get(1) instanceof String s && ints(a, 2, 5)) {
+          int w = (Integer) a.get(2);
+          int h = (Integer) a.get(3);
+          int first = (Integer) a.get(4);
+          return s + "#frame:" + first + "," + w + "," + h;
         }
       }
       default -> { }

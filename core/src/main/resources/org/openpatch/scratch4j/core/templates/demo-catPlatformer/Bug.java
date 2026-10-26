@@ -1,8 +1,8 @@
-import org.openpatch.scratch.AnimatedSprite;
+import org.openpatch.scratch.Sprite;
 import org.openpatch.scratch.RotationStyle;
 
 /** A bug walking to and fro. Jump on it or punch it - but do not walk into it. */
-public class Bug extends AnimatedSprite {
+public class Bug extends Sprite {
 
   /** The costume is 32 pixels high, the legs end 3 pixels above its bottom. */
   private static final double FEET = 13;
@@ -15,7 +15,7 @@ public class Bug extends AnimatedSprite {
   public Bug(double minX, double maxX, double floor) {
     this.addAnimation("walk", "bug_walk_%d", 4);
     this.addAnimation("squished", "bug_squished_%d", 2);
-    this.setAnimationInterval(120);
+    this.setAnimationInterval(0.12);
     this.setRotationStyle(RotationStyle.LEFT_RIGHT);
     this.minX = minX;
     this.maxX = maxX;

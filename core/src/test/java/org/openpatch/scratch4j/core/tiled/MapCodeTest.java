@@ -27,10 +27,10 @@ class MapCodeTest {
     Path stage = tmp.resolve("p/MyStage.java");
     String updated = MapCode.insert(Files.readString(stage), "assets/maps/level.tmx",
         List.of("Ground", "Water \"deep\""));
-    assertThat(updated).contains("import org.openpatch.scratch.extensions.tiled.TiledMap;")
+    assertThat(updated).contains("import org.openpatch.scratch.tiled.TiledMap;")
         .contains("    TiledMap map = new TiledMap(\"assets/maps/level.tmx\", this);\n"
-            + "    map.stampLayerToBackground(\"Ground\");\n"
-            + "    map.stampLayerToBackground(\"Water \\\"deep\\\"\");");
+            + "    map.showLayer(\"Ground\", Layer.BACKGROUND);\n"
+            + "    map.showLayer(\"Water \\\"deep\\\"\", Layer.BACKGROUND);");
     // the designer's regions are untouched
     assertThat(StageDocument.read(updated).model())
         .isEqualTo(StageDocument.read(Files.readString(stage)).model());

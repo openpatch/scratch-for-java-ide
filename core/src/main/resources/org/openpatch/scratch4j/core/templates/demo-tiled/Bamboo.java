@@ -6,10 +6,10 @@ public class Bamboo extends Enemy {
     super(x, y);
 
     // begin sprite editor
-    this.addAnimation("walk-down", "assets/Bamboo.png", 4, 32, 32, 0, true);
-    this.addAnimation("walk-up", "assets/Bamboo.png", 4, 32, 32, 1, true);
-    this.addAnimation("walk-left", "assets/Bamboo.png", 4, 32, 32, 2, true);
-    this.addAnimation("walk-right", "assets/Bamboo.png", 4, 32, 32, 3, true);
+    this.addAnimation("walk-down", "assets/Bamboo.png", 32, 32, 0, 4, 8, 12); // column 0
+    this.addAnimation("walk-up", "assets/Bamboo.png", 32, 32, 1, 5, 9, 13); // column 1
+    this.addAnimation("walk-left", "assets/Bamboo.png", 32, 32, 2, 6, 10, 14); // column 2
+    this.addAnimation("walk-right", "assets/Bamboo.png", 32, 32, 3, 7, 11, 15); // column 3
     // end sprite editor
   }
 

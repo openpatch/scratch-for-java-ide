@@ -112,7 +112,10 @@ def generate(library):
         index.append({"id": name, "kind": "tutorial", "title": TITLES.get(name) or tutorial_title(src),
                       "startClass": start_class(dst), "files": sorted(files),
                       "requiredSheets": requirements.get("tutorial/" + name, [])})
-    demos = library / "src/examples/java/demos"
+    # Scratch for Java 7 keeps them in the examples module; 6.x under src/examples
+    demos = library / "examples/src/main/java/demos"
+    if not demos.is_dir():
+        demos = library / "src/examples/java/demos"
     for src in sorted(p for p in demos.iterdir() if p.is_dir()):
         name = src.name
         prefix = f"demos/{name}/"

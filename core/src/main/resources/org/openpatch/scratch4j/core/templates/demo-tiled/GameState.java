@@ -1,5 +1,5 @@
 import java.io.IOException;
-import org.openpatch.scratch.extensions.fs.SaveData;
+import org.openpatch.scratch.save.SaveData;
 
 public class GameState {
   public String[] items = new String[0];

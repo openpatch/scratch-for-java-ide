@@ -48,13 +48,13 @@
         "de": "Schnellere Beine"
       },
       "text": {
-        "en": "Each walking costume shows for 150 milliseconds: this.setAnimationInterval(150). A smaller number moves the legs faster. Try 80.",
-        "de": "Jedes Lauf-Kostüm wird 150 Millisekunden gezeigt: this.setAnimationInterval(150). Eine kleinere Zahl bewegt die Beine schneller. Probier 80."
+        "en": "Each walking costume shows for 0.15 seconds: this.setAnimationInterval(0.15). A smaller number moves the legs faster. Try 0.08.",
+        "de": "Jedes Lauf-Kostüm wird 0,15 Sekunden gezeigt: this.setAnimationInterval(0.15). Eine kleinere Zahl bewegt die Beine schneller. Probier 0.08."
       },
       "check": {
         "lineChanged": {
           "file": "Walker.java",
-          "line": "this.setAnimationInterval(150);"
+          "line": "this.setAnimationInterval(0.15);"
         }
       }
     },

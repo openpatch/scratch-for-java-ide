@@ -165,6 +165,13 @@ final class AssetPreview extends VBox {
     List<String> out = new ArrayList<>();
     String ref = entry.reference();
     if (ref == null || entry.frames() < 1) return out;
+    if (!entry.sheetFrames().isEmpty()) {
+      // Scratch for Java 7: frame numbers; the cell needs the sheet's width (CostumeView)
+      for (int f : entry.sheetFrames()) {
+        out.add(ref + "#frame:" + f + "," + entry.tileWidth() + "," + entry.tileHeight());
+      }
+      return out;
+    }
     for (int i = 0; i < entry.frames(); i++) {
       if (entry.isSheetAnimation()) {
         int w = entry.tileWidth();

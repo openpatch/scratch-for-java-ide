@@ -93,7 +93,7 @@
         "en": "Copy this into the last else, below the line that shows \"Yes! It was ...\". The wizard congratulates you for 3 seconds.",
         "de": "Kopiere das in das letzte else, unter die Zeile mit \"Yes! It was ...\". Der Zauberer gratuliert dir 3 Sekunden lang."
       },
-      "code": "      this.wizard.say(\"Well done!\", 3000);",
+      "code": "      this.wizard.say(\"Well done!\", 3);",
       "check": {
         "contains": {
           "file": "GuessStage.java",

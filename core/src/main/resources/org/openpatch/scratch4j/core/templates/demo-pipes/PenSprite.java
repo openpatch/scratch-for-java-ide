@@ -11,7 +11,7 @@ public class PenSprite extends Sprite {
     super("pen", "sprites/pen.png");
     this.getPen().down();
     this.getPen().setSize(2);
-    color = Random.random(255);
+    color = Random.random(100);
     this.getPen().setColor(color);
     this.hide();
 
@@ -23,13 +23,12 @@ public class PenSprite extends Sprite {
     PenSprite.color = color;
   }
 
-  // when I start as a clone
-  public PenSprite(PenSprite pen) {
-    super(pen);
-    this.setDirection(pen.getDirection() + 90);
+  @Override
+  public void whenStartsAsClone() {
+    this.setDirection(this.getDirection() + 90);
     this.getPen().setColor(color);
     if (Math.random() < 0.05) {
-      color += Math.random() * 10;
+      color += Math.random() * 4;
     }
   }
 

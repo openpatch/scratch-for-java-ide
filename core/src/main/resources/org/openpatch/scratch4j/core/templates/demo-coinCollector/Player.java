@@ -1,9 +1,9 @@
 import org.openpatch.scratch.KeyCode;
 import org.openpatch.scratch.RotationStyle;
-import org.openpatch.scratch.AnimatedSprite;
+import org.openpatch.scratch.Sprite;
 
 /** The alien you steer with the arrow keys. */
-public class Player extends AnimatedSprite {
+public class Player extends Sprite {
 
   private static final int SIZE = 45;
 
@@ -23,7 +23,7 @@ public class Player extends AnimatedSprite {
     this.addCostume("alienGreen_stand");
     this.addCostume("alienGreen_jump");
     this.addAnimation("walk", "alienGreen_walk%d", 2);
-    this.setAnimationInterval(120);
+    this.setAnimationInterval(0.12);
     this.addSound("handleCoins");
     this.addSound("footstep_grass_000");
     // end sprite editor

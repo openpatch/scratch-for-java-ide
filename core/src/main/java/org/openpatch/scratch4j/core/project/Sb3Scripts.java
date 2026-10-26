@@ -13,7 +13,8 @@ import java.util.Map;
  * a Scratch for Java class. Hat blocks become the library's event methods,
  * "when green flag clicked" goes into the constructor and a trailing
  * "forever" into {@code run()} (which the library calls every frame), the
- * common "forever with one wait" becomes {@code getTimer(..).everyMillis(ms)}.
+ * common "forever with one wait" becomes {@code this.scratchN.every(seconds)} on a Timer field
+ * (Scratch for Java 7 counts seconds and has no named timers).
  * Blocks that have no faithful one-to-one translation — waits in the middle of
  * a script, "ask", "wait until", and clones for a library without them —
  * become {@code // TODO Scratch:} lines that show the original block, so
@@ -61,6 +62,8 @@ final class Sb3Scripts {
   private boolean needsValues;
   private int loopDepth;
   private int timers;
+  /** One Timer field per forever-with-a-wait (Scratch for Java 7: no named timers). */
+  private final StringBuilder timerFields = new StringBuilder();
   /** The library has Scratch's clones (clone(), whenStartsAsClone()). */
   private boolean clones;
   /** This target makes or is clones: run() then tells the original and clones apart. */
@@ -234,7 +237,7 @@ final class Sb3Scripts {
       issue(id, "Scratch scripts can overlap. Java event handlers and helper calls run in sequence; review shared state and waiting.",
           "shared-state");
     }
-    return new Output(ownFields, constructor, run,
+    return new Output(ownFields + timerFields, constructor, run,
         methods + (other.length() > 0 ? "\n" + other : ""), scripts, todos, needsValues, List.copyOf(issues));
   }
 
@@ -302,8 +305,8 @@ final class Sb3Scripts {
 
   /**
    * A forever body: with exactly one wait at its start or end it becomes
-   * {@code if (this.getTimer("..").everyMillis(ms)) { ... }} - Scratch for
-   * Java's way of "do this every N seconds".
+   * {@code if (this.scratchN.every(seconds)) { ... }} with a Timer field - Scratch
+   * for Java's way of "do this every N seconds".
    */
   private String foreverBody(String first, String indent) {
     List<String> chain = chain(first);
@@ -318,8 +321,9 @@ final class Sb3Scripts {
       String wait = chain.remove((int) waits.get(0));
       Expr seconds = num(value(blocks.path(wait), "DURATION"));
       String timer = "scratch" + (++timers);
-      StringBuilder sb = new StringBuilder(indent).append("if (this.getTimer(\"").append(timer)
-          .append("\").everyMillis((int) (").append(seconds.code()).append(" * 1000))) {\n");
+      timerFields.append("  private final Timer ").append(timer).append(" = new Timer();\n");
+      StringBuilder sb = new StringBuilder(indent).append("if (this.").append(timer)
+          .append(".every(").append(seconds.code()).append(")) {\n");
       for (String id : chain) {
         sb.append(statement(id, indent + "  ", chain, false));
       }
@@ -769,7 +773,7 @@ final class Sb3Scripts {
       case "sensing_mousex": return new Expr(self + ".getMouseX()", Type.NUM);
       case "sensing_mousey": return new Expr(self + ".getMouseY()", Type.NUM);
       case "sensing_mousedown": return new Expr(self + ".isMouseDown()", Type.BOOL);
-      case "sensing_timer": return new Expr("(Timer.millis() / 1000.0)", Type.NUM);
+      case "sensing_timer": return new Expr(self + ".getTimer().getSeconds()", Type.NUM);
       case "sensing_keypressed": {
         String key = keyCode(menu(b, "KEY_OPTION"));
         if (key != null) {

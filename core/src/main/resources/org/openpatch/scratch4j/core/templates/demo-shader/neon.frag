@@ -1,13 +1,3 @@
-#ifdef GL_ES
-precision mediump float;
-precision mediump int;
-#endif
-
-#define PROCESSING_TEXTURE_SHADER
-
-varying vec4 vertTexCoord;
-uniform sampler2D texture;
-uniform vec2 texOffset;
 uniform float brt;
 uniform int rad;
 
@@ -18,9 +8,9 @@ void main(void) {
 
   for( i=-rad;i<rad;i++) {
     for( j=-rad;j<rad;j++) {
-        sum += texture2D( texture, vertTexCoord.st + vec2(j,i)*texOffset.st)*brt;
+        sum += texture(costume, uv + vec2(j,i)*(1.0 / resolution))*brt;
     }
   }
 
-  gl_FragColor = sum*sum+ vec4(texture2D( texture, vertTexCoord.st).rgba);
+  color = sum*sum+ vec4(texture(costume, uv).rgba);
 }

@@ -189,7 +189,8 @@ final class SheetSlicerDialog {
         String source = Files.readString(classFile, StandardCharsets.UTF_8);
         String updated = animation.isSelected()
             ? SpriteAssets.addSheetAnimation(source, name.getText().trim(), reference,
-                frames.getValue(), tileWidth.getValue(), tileHeight.getValue(), row.getValue())
+                frames.getValue(), tileWidth.getValue(), tileHeight.getValue(), row.getValue(),
+                (int) sheet.getWidth() / Math.max(1, tileWidth.getValue()))
             : SpriteAssets.addSheetCostumes(source, name.getText().trim(), reference,
                 tileWidth.getValue(), tileHeight.getValue());
         LocalHistory.writeString(project.root(), classFile, updated);
@@ -226,21 +227,10 @@ final class SheetSlicerDialog {
     return base.isEmpty() ? "tile" : base;
   }
 
-  /** Sprite classes of the project; for an animation only AnimatedSprite subclasses. */
+  /** Sprite classes of the project (Scratch for Java 7: every sprite can have animations). */
   private static List<String> spriteClasses(ScratchProject project, boolean animatedOnly) {
     try {
-      return project.spriteClasses().stream().filter(name -> {
-        if (!animatedOnly) {
-          return true;
-        }
-        try {
-          return Pattern.compile("\\bclass\\s+" + Pattern.quote(name)
-              + "\\s+extends\\s+AnimatedSprite\\b").matcher(Files.readString(
-                  project.root().resolve(name + ".java"))).find();
-        } catch (IOException e) {
-          return false;
-        }
-      }).toList();
+      return project.spriteClasses().stream().toList();
     } catch (IOException e) {
       return List.of();
     }

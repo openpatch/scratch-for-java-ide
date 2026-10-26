@@ -15,6 +15,28 @@ class LauncherSourceTest {
 
   @TempDir Path root;
 
+  /** A Window without a window: what the generated launcher calls on it (Scratch for Java 7). */
+  static final String STUB_WINDOW = """
+      package org.openpatch.scratch;
+      public class Window {
+        public Window() {}
+        public Window(int width, int height) {}
+        public void setStage(Stage stage) {}
+        public static Window getInstance() { return new Window(); }
+        public static void use(org.openpatch.scratch.extension.Extension extension) {}
+        public static void useFullScreen() {}
+        public static void usePixelArt() {}
+        public static void useSplashLogo(String path) {}
+        public void setDebug(boolean value) {}
+        public Stage getStage() { return null; }
+        public void pause() {}
+        public void resume() {}
+        public void step() {}
+        public void setGameSpeed(double speed) {}
+        public void exit() { EXIT }
+      }
+      """;
+
   @Test
   void windowOptionsAreEmittedBeforeStageCreationAndDebugAfter() throws Exception {
     ProjectSettings settings = new ProjectSettings();
@@ -26,36 +48,19 @@ class LauncherSourceTest {
 
     int create = launcher.indexOf("Class<?> start = Class.forName(startClassName(args));");
     assertThat(launcher.indexOf("Window.useFullScreen()")) .isLessThan(create);
-    assertThat(launcher.indexOf("TextureSampling.POINT")) .isLessThan(create);
+    assertThat(launcher.indexOf("Window.usePixelArt()")) .isLessThan(create);
     assertThat(launcher.indexOf("Window.useSplashLogo(\"assets/a\\\"b.png\")"))
         .isLessThan(create);
     assertThat(launcher.indexOf("setDebug(true)")) .isGreaterThan(create);
 
     Path file = root.resolve("Scratch4JLauncher.java");
     Path window = root.resolve("org/openpatch/scratch/Window.java");
-    Path sampling = root.resolve("org/openpatch/scratch/TextureSampling.java");
     Files.createDirectories(window.getParent());
     Files.writeString(file, launcher);
-    Files.writeString(window, """
-        package org.openpatch.scratch;
-        public class Window {
-          public Window() {}
-          public Window(int width, int height) {}
-          public void setStage(Stage stage) {}
-          public static Window getInstance() { return new Window(); }
-          public static void useFullScreen() {}
-          public static void useTextureSampling(TextureSampling value) {}
-          public static void useSplashLogo(String path) {}
-          public void setDebug(boolean value) {}
-          public Stage getStage() { return null; }
-          public void exit() {}
-        }
-        """);
-    Files.writeString(sampling, """
-        package org.openpatch.scratch;
-        public enum TextureSampling { POINT }
-        """);
-    assertThat(new CompilerService().compile(List.of(file, window, sampling), List.of(),
+    Files.writeString(window, STUB_WINDOW.replace("EXIT", ""));
+    // the stub shadows the library's Window; everything else (extensions, recorder) is the library's
+    Path jar = LibraryJarSource.allJar(root.resolve("bundled"));
+    assertThat(new CompilerService().compile(List.of(file, window), List.of(jar),
         root.resolve("classes")).errors()).isEmpty();
   }
 
@@ -77,18 +82,8 @@ class LauncherSourceTest {
           }
         }
         """);
-    Files.writeString(window, """
-        package org.openpatch.scratch;
-        public class Window {
-          public Window() {}
-          public Window(int width, int height) {}
-          public void setStage(Stage stage) {}
-          public static Window getInstance() { return new Window(); }
-          public void setDebug(boolean value) {}
-          public Stage getStage() { return null; }
-          public void exit() { System.out.println("SMOKE_EXIT"); System.exit(0); }
-        }
-        """);
+    Files.writeString(window, STUB_WINDOW.replace("EXIT",
+        "System.out.println(\"SMOKE_EXIT\"); System.exit(0);"));
     Path jar = LibraryJarSource.allJar(root.resolve("bundled"));
     assertThat(new CompilerService().compile(List.of(launcher, main, window), List.of(jar), classes)
         .errors()).isEmpty();

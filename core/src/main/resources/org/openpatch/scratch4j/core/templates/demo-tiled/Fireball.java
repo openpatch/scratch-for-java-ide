@@ -1,6 +1,6 @@
 import org.openpatch.scratch.*;
 
-public class Fireball extends AnimatedSprite {
+public class Fireball extends Sprite {
   private String dir;
   private double speed = 3;
 
@@ -10,12 +10,12 @@ public class Fireball extends AnimatedSprite {
     this.dir = dir;
 
     // begin sprite editor
-    this.addAnimation("default", "assets/Fireball.png", 4, 32, 32);
+    this.addAnimation("default", "assets/Fireball.png", 32, 32, 0, 1, 2, 3);
     // end sprite editor
   }
 
   public void run() {
-    if (this.getTimer().afterMillis(1000)) {
+    if (this.getTimer().after(1)) {
       this.remove();
     }
 

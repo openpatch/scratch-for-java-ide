@@ -1,7 +1,7 @@
 import org.openpatch.scratch.*;
 import org.openpatch.scratch.*;
 
-public class Player extends AnimatedSprite {
+public class Player extends Sprite {
 
   private String state = "idle";
   private double speed = 2.5;
@@ -12,12 +12,12 @@ public class Player extends AnimatedSprite {
     this.setY(y);
 
     // begin sprite editor
-    this.addAnimation("walk-down", "assets/Skeleton.png", 4, 32, 32, 0, true);
-    this.addAnimation("walk-up", "assets/Skeleton.png", 4, 32, 32, 1, true);
-    this.addAnimation("walk-left", "assets/Skeleton.png", 4, 32, 32, 2, true);
-    this.addAnimation("walk-right", "assets/Skeleton.png", 4, 32, 32, 3, true);
+    this.addAnimation("walk-down", "assets/Skeleton.png", 32, 32, 0, 4, 8, 12); // column 0
+    this.addAnimation("walk-up", "assets/Skeleton.png", 32, 32, 1, 5, 9, 13); // column 1
+    this.addAnimation("walk-left", "assets/Skeleton.png", 32, 32, 2, 6, 10, 14); // column 2
+    this.addAnimation("walk-right", "assets/Skeleton.png", 32, 32, 3, 7, 11, 15); // column 3
 
-    this.setHitbox(1, 31, 1, 10, 30, 10, 30, 31);
+    this.setHitbox(new Polygon(new double[] {1, 1, 30, 30}, new double[] {31, 10, 10, 31}));
     // end sprite editor
   }
 
@@ -29,7 +29,7 @@ public class Player extends AnimatedSprite {
     this.changeX(dx);
     this.changeY(dy);
     if (!hasItem("scroll-water") && this.isTouchingSprite(Water.class)) {
-      this.think(I18n.get("need-scroll-water"), 5000);
+      this.think(I18n.get("need-scroll-water"), 5);
       this.changeX(-dx);
       this.changeY(-dy);
     }
@@ -80,7 +80,7 @@ public class Player extends AnimatedSprite {
     if (item != null && this.isKeyPressed(KeyCode.E)) {
       item.collect();
     } else if (item != null) {
-      this.getStage().display(I18n.get("tutorial-item-pickup"), 1000);
+      this.getStage().display(I18n.get("tutorial-item-pickup"), 1);
     }
 
     if (state.equals("idle")) {

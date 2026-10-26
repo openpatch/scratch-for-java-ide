@@ -70,7 +70,6 @@ public class Shakespeare extends Stage {
   }
 
   public static void main(String[] args) {
-    Text.useFontSizes(14, 20);
     Window myWindow = new Window(800, 600);
     myWindow.setStage(new Shakespeare());
   }

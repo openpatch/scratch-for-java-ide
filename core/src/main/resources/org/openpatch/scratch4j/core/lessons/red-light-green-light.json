@@ -31,13 +31,13 @@
         "de": "Schnellere Ampel"
       },
       "text": {
-        "en": "In Referee.java the light switches every 2200 milliseconds: everyMillis(2200). Make it switch faster, for example 1500.",
-        "de": "In Referee.java wechselt die Ampel alle 2200 Millisekunden: everyMillis(2200). Lass sie schneller wechseln, zum Beispiel 1500."
+        "en": "In Referee.java the light switches every 2.2 seconds: every(2.2). Make it switch faster, for example 1.5.",
+        "de": "In Referee.java wechselt die Ampel alle 2,2 Sekunden: every(2.2). Lass sie schneller wechseln, zum Beispiel 1.5."
       },
       "check": {
         "lineChanged": {
           "file": "Referee.java",
-          "line": "if (this.getTimer().everyMillis(2200)) {"
+          "line": "if (this.getTimer().every(2.2)) {"
         }
       }
     },

@@ -14,7 +14,7 @@ public class TimedDot extends Stage {
   }
 
   public void run() {
-    if (this.getTimer().everyMillis(2400)) {
+    if (this.getTimer().every(2.4)) {
       this.eraseAll();
     }
   }
@@ -26,6 +26,8 @@ public class TimedDot extends Stage {
 }
 
 class DotSprite extends Sprite {
+  private final Timer timerTimer1 = new Timer();
+  private final Timer timerTimer2 = new Timer();
   public DotSprite() {
     super();
     this.getPen().setSize(40);
@@ -34,14 +36,14 @@ class DotSprite extends Sprite {
 
   public void run() {
     this.ifOnEdgeBounce();
-    if (this.getTimer("timer2").everyMillis(600)) {
-      this.getPen().setColor(200);
+    if (this.timerTimer2.every(0.6)) {
+      this.getPen().setColor(78);
       this.move(20);
       this.getPen().down();
       this.getPen().up();
     }
-    if (this.getTimer("timer1").everyMillis(1200)) {
-      this.getPen().setColor(100);
+    if (this.timerTimer1.every(1.2)) {
+      this.getPen().setColor(39);
       this.move(20);
       this.getPen().down();
       this.getPen().up();

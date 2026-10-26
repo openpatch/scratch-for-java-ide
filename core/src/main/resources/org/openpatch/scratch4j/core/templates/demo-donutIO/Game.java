@@ -14,7 +14,6 @@ public class Game extends Window {
   }
 
   public static void main(String[] args) {
-    Text.useFontSizes(32, 48);
     // begin project settings
     // end project settings
     new Game();

@@ -1,24 +1,11 @@
-#version 140
-
-#ifdef GL_ES
-precision mediump float;
-#endif
-
-#define PROCESSING_TEXTURE_SHADER
-
-in vec4 vertTexCoord;
-uniform sampler2D texture;
-
 uniform vec3[100] lights;
-uniform vec2 resolution;
 
 float intensity = 100.0;
 vec3 ambient_light = vec3(0.1, 0.1, 0.1);
-vec3 color = vec3(0.499, 0.499, 0.999);
+vec3 color_ = vec3(0.499, 0.499, 0.999);
 
 void main(void) {
-    vec2 uv = vertTexCoord.xy;
-    vec4 fragColor = texture2D(texture, uv);
+    vec4 fragColor = texture(costume, uv);
 
     float diffuse = 0.0;
     float combined_intensity = 1.0;
@@ -37,5 +24,5 @@ void main(void) {
             }
         }
     }
-    gl_FragColor = vec4(min(fragColor.rgb * ((color * diffuse) + ambient_light), fragColor.rgb), fragColor.a);
+    color = vec4(min(fragColor.rgb * ((color_ * diffuse) + ambient_light), fragColor.rgb), fragColor.a);
 }

@@ -33,9 +33,10 @@ final class CodePreviews {
   private static final Pattern CROP = Pattern.compile(
       "\\badd(?:Costume)\\(\\s*" + S + "\\s*,\\s*" + S + "\\s*," + N + "," + N + "," + N + ","
           + N + "\\)");
+  /** Scratch for Java 7: addAnimation(name, sheet, width, height, frame, ...). */
   private static final Pattern SHEET_ANIMATION = Pattern.compile(
       "\\baddAnimation\\(\\s*" + S + "\\s*,\\s*" + S + "\\s*," + N + "," + N + "," + N
-          + "(?:," + N + "(?:,\\s*(true|false)\\s*)?)?\\)");
+          + "(?:," + N + ")*\\s*\\)");
   private static final Pattern PATTERN_ANIMATION = Pattern.compile(
       "\\baddAnimation\\(\\s*" + S + "\\s*,\\s*" + S + "\\s*," + N + "\\)");
   private static final Pattern IMAGE = Pattern.compile(
@@ -147,12 +148,9 @@ final class CodePreviews {
       ref = m.group(2) + "#" + m.group(3).trim() + "," + m.group(4).trim() + ","
           + m.group(5).trim() + "," + m.group(6).trim();
     } else if ((m = SHEET_ANIMATION.matcher(line)).find()) {
-      int w = Integer.parseInt(m.group(4).trim());
-      int h = Integer.parseInt(m.group(5).trim());
-      int index = m.group(6) == null ? 0 : Integer.parseInt(m.group(6).trim());
-      boolean columns = "true".equals(m.group(7));
-      ref = m.group(2) + "#" + (columns ? index * w : 0) + "," + (columns ? 0 : index * h)
-          + "," + w + "," + h;
+      // the first frame by number; CostumeView finds its cell in the sheet
+      ref = m.group(2) + "#frame:" + m.group(5).trim() + "," + m.group(3).trim() + ","
+          + m.group(4).trim();
     } else if ((m = PATTERN_ANIMATION.matcher(line)).find()) {
       try {
         ref = String.format(m.group(2), 1);

@@ -47,6 +47,12 @@ public final class RuntimeErrors {
           + "((?:[a-z_][\\w$]*\\.)+[A-Z][\\w$]*(?:Exception|Error|Throwable))(?::\\s?(.*))?$");
   private static final Pattern FRAME = Pattern.compile(
       "^\\s+at\\s+(?:[\\w.$/@ ]+/)?([\\w.$]+)\\.([\\w$<>]+)\\(([^:)]*)(?::(\\d+))?\\)");
+  /**
+   * Scratch for Java 7 reports a learner's exception itself, at the learner's line, then the
+   * learner's frames: {@code Error in MyStage.run (MyStage.java:21): NullPointerException: ...}.
+   */
+  private static final Pattern LIBRARY_HEAD = Pattern.compile(
+      "^Error(?: in [^(]*\\([^)]*\\))?: ([A-Z][\\w$]*(?:Exception|Error|Throwable))(?::\\s?(.*))?$");
   private static final Pattern MORE = Pattern.compile("^\\s+\\.\\.\\. \\d+ (?:more|common frames omitted)");
 
   private RuntimeErrors() {}
@@ -61,6 +67,9 @@ public final class RuntimeErrors {
     /** The crash a finished trace describes, when this line ends one. */
     public Optional<Crash> feed(String line) {
       Matcher head = HEAD.matcher(line);
+      if (!head.matches()) {
+        head = LIBRARY_HEAD.matcher(line);
+      }
       if (head.matches()) {
         boolean cause = line.startsWith("Caused by: ");
         if (exception != null && cause) {

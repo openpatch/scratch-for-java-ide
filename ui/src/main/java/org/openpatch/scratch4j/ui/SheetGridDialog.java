@@ -76,8 +76,16 @@ final class SheetGridDialog {
     // the entry being edited: its cells are selected
     if (entry != null && entry.kind() == SpriteAssets.Kind.ANIMATION) {
       inColumn.setSelected(entry.columns());
-      for (int i = 0; i < entry.frames(); i++) {
-        cells.add(entry.columns() ? new int[] {entry.row(), i} : new int[] {i, entry.row()});
+      if (!entry.sheetFrames().isEmpty()) {
+        // Scratch for Java 7: frame numbers, row by row from 0
+        int columns = Math.max(1, (int) sheet.getWidth() / Math.max(1, w));
+        for (int f : entry.sheetFrames()) {
+          cells.add(new int[] {f % columns, f / columns});
+        }
+      } else {
+        for (int i = 0; i < entry.frames(); i++) {
+          cells.add(entry.columns() ? new int[] {entry.row(), i} : new int[] {i, entry.row()});
+        }
       }
     } else if (entry != null && entry.isSheetCostume()) {
       cells.add(new int[] {entry.cropX() / w, entry.cropY() / h});
@@ -256,14 +264,14 @@ final class SheetGridDialog {
     List<String> out = new ArrayList<>();
     if (cells.isEmpty()) return out;
     if (mode == Mode.ANIMATION) {
-      int[] first = cells.get(0);
-      if (inColumn.isSelected()) {
-        out.add("this.addAnimation(\"" + n + "\", \"" + reference + "\", " + cells.size() + ", "
-            + w + ", " + h + ", " + first[0] + ", true);");
-      } else {
-        out.add("this.addAnimation(\"" + n + "\", \"" + reference + "\", " + cells.size() + ", "
-            + w + ", " + h + (first[1] > 0 ? ", " + first[1] : "") + ");");
+      // Scratch for Java 7: the frames by number, row by row from 0, in the order picked
+      int columns = Math.max(1, (int) sheet.getWidth() / w);
+      StringBuilder frames = new StringBuilder();
+      for (int[] k : cells) {
+        frames.append(", ").append(k[1] * columns + k[0]);
       }
+      out.add("this.addAnimation(\"" + n + "\", \"" + reference + "\", " + w + ", " + h + frames
+          + ");");
       return out;
     }
     for (int i = 0; i < cells.size(); i++) {

@@ -25,10 +25,12 @@ class DesignerOutputCompilesTest {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "p", jar);
     Path root = tmp.resolve("p");
     Files.writeString(root.resolve("Button.java"), """
-        import org.openpatch.scratch.UISprite;
+        import org.openpatch.scratch.Layer;
+        import org.openpatch.scratch.Sprite;
 
-        public class Button extends UISprite {
+        public class Button extends Sprite {
           public Button() {
+            this.setLayer(Layer.UI);
             this.addCostume("button", "assets/images/button.png");
             this.setNineSlice(8, 8, 8, 8);
           }
@@ -67,9 +69,9 @@ class DesignerOutputCompilesTest {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "q", jar);
     Path root = tmp.resolve("q");
     String hero = """
-        import org.openpatch.scratch.AnimatedSprite;
+        import org.openpatch.scratch.Sprite;
 
-        public class Hero extends AnimatedSprite {
+        public class Hero extends Sprite {
           public Hero() {
             // begin sprite editor
             // end sprite editor
@@ -77,7 +79,7 @@ class DesignerOutputCompilesTest {
         }
         """;
     hero = SpriteAssets.addSheetCostumes(hero, "tile", "assets/images/tiles.png", 32, 32);
-    hero = SpriteAssets.addSheetAnimation(hero, "run", "assets/images/hero.png", 6, 24, 32, 1);
+    hero = SpriteAssets.addSheetAnimation(hero, "run", "assets/images/hero.png", 6, 24, 32, 1, 8);
     hero = SpriteAssets.putAnimation(hero, "walk", "assets/images/walk%d.png", 3);
     hero = SpriteRegionWriter.setAnimationInterval(hero, 90);
     Files.writeString(root.resolve("Hero.java"), hero);

@@ -26,8 +26,7 @@ import java.util.Set;
  * The asset calls a sprite's constructors make, in the order they run, with
  * every overload the library has ({@code addCostume(name[, path[, x, y, w, h]])},
  * {@code addCostumes(prefix, sheet, w, h)}, {@code addAnimation(name, pattern,
- * frames)}, {@code addAnimation(name, sheet, frames, w, h[, row])},
- * {@code addAnimation(name, sheet, frames, w, h, column, useColumns)},
+ * frames)}, {@code addAnimation(name, sheet, w, h, frame...)} (Scratch for Java 7),
  * {@code addSound(name[, path])}), however they are formatted and with or
  * without {@code this.}. Arguments that are not literals are null.
  */
@@ -147,13 +146,13 @@ public final class AssetCalls {
               return null;
             }
           }
-          if (n >= 5 && c.string(1) != null && c.number(3) != null && c.number(4) != null) {
-            int w = c.number(3);
-            int h = c.number(4);
-            int index = n >= 6 && c.number(5) != null ? c.number(5) : 0;
-            // (…, column, true): frames go down a column; (…, row): along a row
-            return n == 7 ? crop(c.string(1), index * w, 0, w, h)
-                : crop(c.string(1), 0, index * h, w, h);
+          // Scratch for Java 7: (name, sheet, width, height, frame, ...): the first frame; one of
+          // the top row is exact, a later one is taken along it (the sheet's width is not known here)
+          if (n >= 5 && c.string(1) != null && c.number(2) != null && c.number(3) != null
+              && c.number(4) != null) {
+            int w = c.number(2);
+            int h = c.number(3);
+            return crop(c.string(1), c.number(4) * w, 0, w, h);
           }
         }
         default -> { }

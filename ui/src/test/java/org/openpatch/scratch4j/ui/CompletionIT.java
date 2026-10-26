@@ -38,22 +38,22 @@ class CompletionIT {
 
   @Test
   void compiledLibraryMethodsUseTheNamesOfTheMatchingDocumentedOverload() throws Exception {
-    assertLibraryLabels("this.mo", List.of("move(double steps)", "move(Vector2 v)"));
+    // Scratch for Java 7's overloads
+    assertLibraryLabels("this.mo", List.of("move(double steps)"));
     assertLibraryLabels("this.addAni", List.of(
         "addAnimation(String name, String pattern, int frames)",
-        "addAnimation(String name, Function<Integer,String> builder, int frame)"));
+        "addAnimation(String name, String sheetPath, int width, int height, int[] frames)"));
     assertLibraryLabels("this.isTouchingSp", List.of(
-        "isTouchingSprite(Sprite sprite)", "isTouchingSprite(Class<? extends Sprite> c)"));
+        "isTouchingSprite(Sprite sprite)", "isTouchingSprite(Class<? extends Sprite> type)"));
     assertLibraryLabels("Operators.ma", List.of("max(double[] v)", "max(int[] v)"));
-    assertLibraryLabels("new Timer().intervalMi", List.of(
-        "intervalMillis(int millis, boolean skipFirst)",
-        "intervalMillis(int millis1, int millis2)"));
+    assertLibraryLabels("new Timer().interv", List.of(
+        "interval(double seconds)", "interval(double on, double off)"));
   }
 
   private void assertLibraryLabels(String receiver, List<String> expected) throws Exception {
     String text = """
         import org.openpatch.scratch.*;
-        class Player extends AnimatedSprite {
+        class Player extends Sprite {
           public void run() {
             %s
           }

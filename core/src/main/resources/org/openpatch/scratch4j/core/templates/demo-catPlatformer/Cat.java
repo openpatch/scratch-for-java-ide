@@ -1,9 +1,9 @@
-import org.openpatch.scratch.AnimatedSprite;
+import org.openpatch.scratch.Sprite;
 import org.openpatch.scratch.KeyCode;
 import org.openpatch.scratch.RotationStyle;
 
 /** The Scratch for Java cat. Every one of its animations is on the built-in cat sheet. */
-public class Cat extends AnimatedSprite {
+public class Cat extends Sprite {
 
   /** The costumes are 64 pixels high with the feet on the bottom row. */
   private static final double FEET = 32;
@@ -38,7 +38,7 @@ public class Cat extends AnimatedSprite {
     this.addAnimation("ko", "cat_ko_%d", 5);
     this.addAnimation("cheer", "cat_cheer_%d", 4);
     this.addAnimation("climb", "cat_climb_%d", 4);
-    this.setAnimationInterval(100);
+    this.setAnimationInterval(0.1);
     this.addSound("footstep_grass_000");
     this.addSound("impactPunch_medium_004");
     this.addSound("impactSoft_heavy_000");

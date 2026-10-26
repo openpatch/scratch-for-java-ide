@@ -24,21 +24,18 @@ public final class GraphicsCompatibility {
       "GALLIUM_DRIVER", "llvmpipe");
 
   /**
-   * What Processing and JOGL print when the OpenGL driver cannot do what the
-   * renderer needs: no usable profile, no framebuffer objects, no device.
+   * What Scratch for Java 7 (LWJGL/GLFW) prints when the OpenGL driver cannot do what the
+   * renderer needs: no OpenGL 3.3 core context, no display, GLFW failing to start.
    */
   private static final List<Pattern> FAILURES = List.of(
-      Pattern.compile("Framebuffer objects are not supported"),
-      Pattern.compile("GLProfile: device could not be initialized"),
-      Pattern.compile("Renderer cannot find a JOGL surface"),
-      // JOGL only throws GLException when the driver fails (context, profile, buffers)
-      Pattern.compile("^(?:Exception in thread \"[^\"]*\" )?(?:Caused by: )?"
-          + "com\\.jogamp\\.opengl\\.GLException"),
-      Pattern.compile("Profile \\w+ is not available", Pattern.CASE_INSENSITIVE),
-      Pattern.compile("UnsatisfiedLinkError.*(jogl|gluegen|nativewindow|newt)",
-          Pattern.CASE_INSENSITIVE),
-      Pattern.compile("OpenGL 2(\\.0)? (is )?required|does not support OpenGL",
-          Pattern.CASE_INSENSITIVE));
+      // the library's own message (WindowHost): no GL 3.3 core context or no window at all
+      Pattern.compile("Scratch for Java could not open its window"),
+      Pattern.compile("It needs OpenGL 3\\.3"),
+      // GLFW's error callback: "[LWJGL] GLFW_VERSION_UNAVAILABLE error", "GLFW_API_UNAVAILABLE", ...
+      Pattern.compile("GLFW_(VERSION|API)_UNAVAILABLE"),
+      Pattern.compile("GLFW could not start"),
+      Pattern.compile("no OpenGL 3\\.3 core context"),
+      Pattern.compile("UnsatisfiedLinkError.*(lwjgl|glfw)", Pattern.CASE_INSENSITIVE));
 
   private static volatile boolean software;
 

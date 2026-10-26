@@ -37,7 +37,7 @@ class StagePreviewIT {
         ProgramRuntime.java(), Duration.ofSeconds(60));
 
     assertThat(preview.error()).isNull();
-    assertThat(preview.stage()).isEqualTo("World");
+    assertThat(preview.stage()).isEqualTo("Level");
     assertThat(preview.width()).isEqualTo(640);
     assertThat(Files.size(preview.frame())).isPositive();
     Set<String> types = preview.sprites().stream().map(StagePreview.Sprite::type)
@@ -56,14 +56,14 @@ class StagePreviewIT {
         Path.of(System.getProperty("user.dir"), "target", "bundled"));
     Path root = BundledTemplates.create("demo-tiled", tmp, "running", allJar);
     ScratchProject project = ScratchProject.open(root);
-    assertThat(ProjectRunner.captureOmit(project)).isEqualTo("World:inventory");
+    assertThat(ProjectRunner.captureOmit(project)).isEqualTo("Level:inventory");
 
     var handle = new ProjectRunner().run(project,
         RunConfig.of(project.startStage()).withExitAfter(4), new RunListener() { });
     handle.exitFuture().get(60, java.util.concurrent.TimeUnit.SECONDS);
 
     // the program ran as usual, and drew the world once into the designer's folder
-    var picture = StagePreview.last(project, "World");
+    var picture = StagePreview.last(project, "Level");
     assertThat(picture).isNotNull();
     assertThat(picture.sprites()).extracting(StagePreview.Sprite::type).contains("Player");
     assertThat(picture.sprites()).filteredOn(s -> "inventory".equals(s.field()))

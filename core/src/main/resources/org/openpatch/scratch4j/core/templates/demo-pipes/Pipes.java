@@ -8,7 +8,7 @@ public class Pipes extends Stage {
   // end stage designer
 
   public Pipes() {
-    this.setTint(60);
+    this.setColorEffect(60);
     // begin stage designer
     this.addBackdrop("chalkBoard", "backdrops/chalk_board.jpg");
     this.addSound("bg", "sounds/bensound-enigmatic.ogg");
@@ -19,7 +19,7 @@ public class Pipes extends Stage {
 
   public void whenKeyPressed(KeyCode keyCode) {
     if (keyCode == KeyCode.SPACE) {
-      PenSprite.setColor(Random.random(255));
+      PenSprite.setColor(Random.random(100));
     }
   }
 
@@ -28,7 +28,7 @@ public class Pipes extends Stage {
     var pens = this.find(PenSprite.class);
     for (var pen : pens) {
       if (Random.random() < 0.05 && pens.size() < 15) {
-        this.add(new PenSprite((PenSprite) pen));
+        pen.createClone();
       }
       if (Random.random() < 0.01 && pens.size() > 1) {
         this.remove(pen);

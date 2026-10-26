@@ -175,10 +175,12 @@ class UiSmokeIT {
 
         // UISprite with nine-slice and pixel size, and a Text box on the stage
         Files.writeString(tmp.resolve("uismoke/Button.java"), """
-            import org.openpatch.scratch.UISprite;
+            import org.openpatch.scratch.Layer;
+            import org.openpatch.scratch.Sprite;
 
-            public class Button extends UISprite {
+            public class Button extends Sprite {
               public Button() {
+                this.setLayer(Layer.UI);
                 this.addCostume("buttonLarge");
                 this.setNineSlice(12, 12, 12, 12);
               }
@@ -304,9 +306,9 @@ class UiSmokeIT {
         // animation editor: frames in assets/images, apply writes addAnimation + interval
         Path hero = tmp.resolve("uismoke/Hero.java");
         Files.writeString(hero, """
-            import org.openpatch.scratch.AnimatedSprite;
+            import org.openpatch.scratch.Sprite;
 
-            public class Hero extends AnimatedSprite {
+            public class Hero extends Sprite {
               public Hero() {
                 // begin sprite editor
                 // end sprite editor
@@ -322,7 +324,7 @@ class UiSmokeIT {
         assertThat(written.get()).isEqualTo(hero);
         assertThat(Files.readString(hero))
             .contains("this.addAnimation(\"walk\", \"assets/images/walk%d.png\", 2);")
-            .contains("this.setAnimationInterval(120);");
+            .contains("this.setAnimationInterval(0.12);");
         animation.stop();
 
         // map and font previews from the bundled demos
@@ -598,7 +600,7 @@ class UiSmokeIT {
         snapshot(pond, Path.of("target/designer-readonly.png"));
         // previews in the code's gutter: the frame an animation starts with, a sound, a map
         assertThat(CodePreviews.forLine(
-            "    this.addAnimation(\"walk-down\", \"assets/Skeleton.png\", 4, 32, 32, 0, true);",
+            "    this.addAnimation(\"walk-down\", \"assets/Skeleton.png\", 32, 32, 0, 1, 2, 3);",
             tiled, f -> { })).isNotNull();
         assertThat(CodePreviews.forLine("    this.addSound(\"" + org.openpatch.scratch4j.core.assets
             .BuiltinAssetIndex.get().sounds().get(0) + "\");", tiled, f -> { })).isNotNull();
@@ -731,12 +733,12 @@ class UiSmokeIT {
                 && I18n.t("mode.code").equals(l.getText()))).isEmpty();
         javafx.scene.control.TabPane spriteTabs =
             (javafx.scene.control.TabPane) spriteAssets.getCenter();
-        // a plain Sprite has no animations: costumes, sounds and the hitbox
+        // every sprite has animations in 7.0: costumes, sounds, animations and the hitbox
         assertThat(spriteTabs.getTabs()).extracting(javafx.scene.control.Tab::getText)
             .containsExactly(I18n.t("spriteassets.costumes"), I18n.t("spriteassets.sounds"),
-                I18n.t("spriteassets.hitbox"));
+                I18n.t("spriteassets.animations"), I18n.t("spriteassets.hitbox"));
         javafx.scene.layout.VBox hitboxPane = (javafx.scene.layout.VBox)
-            spriteTabs.getTabs().get(2).getContent();
+            spriteTabs.getTabs().get(3).getContent();
         javafx.scene.layout.HBox hitboxActions =
             (javafx.scene.layout.HBox) hitboxPane.getChildren().get(3);
         ((javafx.scene.control.Button) hitboxActions.getChildren().get(0)).fire();

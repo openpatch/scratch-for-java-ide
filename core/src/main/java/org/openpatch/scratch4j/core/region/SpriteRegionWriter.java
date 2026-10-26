@@ -72,21 +72,29 @@ public final class SpriteRegionWriter {
         "this.setNineSlice(" + top + ", " + right + ", " + bottom + ", " + left + ");");
   }
 
-  /** Writes (or replaces) {@code this.setAnimationInterval(ms);} (AnimatedSprite). */
+  /**
+   * Writes (or replaces) {@code this.setAnimationInterval(seconds);}. The editor works in
+   * milliseconds; Scratch for Java 7 counts seconds, so 150 is written as {@code 0.15}.
+   */
   public static String setAnimationInterval(String source, int millis) {
     source = DesignerRegions.ensureSprite(source);
     if (millis < 1) {
       throw new IllegalArgumentException("the interval must be at least 1 ms");
     }
-    return replaceOwned(source, ANIMATION_INTERVAL, "this.setAnimationInterval(" + millis + ");");
+    return replaceOwned(source, ANIMATION_INTERVAL, "this.setAnimationInterval(" + seconds(millis) + ");");
   }
 
-  /** The literal interval in the setup region, or -1. */
+  /** The literal interval in the setup region in milliseconds (written in seconds), or -1. */
   public static int animationInterval(String source) {
     source = DesignerRegions.ensureSprite(source);
-    java.util.regex.Matcher m = Pattern.compile("this\\.setAnimationInterval\\(\\s*(\\d+)\\s*\\)")
+    java.util.regex.Matcher m = Pattern.compile("this\\.setAnimationInterval\\(\\s*(\\d+(?:\\.\\d+)?|\\.\\d+)\\s*\\)")
         .matcher(RegionParser.find(source, "setup").body());
-    return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    return m.find() ? (int) Math.round(Double.parseDouble(m.group(1)) * 1000) : -1;
+  }
+
+  /** Milliseconds as a seconds literal without needless digits: 150 is "0.15", 1000 is "1". */
+  static String seconds(int millis) {
+    return new java.math.BigDecimal(millis).movePointLeft(3).stripTrailingZeros().toPlainString();
   }
 
   /**

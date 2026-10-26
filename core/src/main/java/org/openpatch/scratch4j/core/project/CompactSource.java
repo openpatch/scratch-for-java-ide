@@ -31,15 +31,16 @@ import java.util.regex.Pattern;
  */
 public final class CompactSource {
 
-  /** What the Online IDE has in scope without imports (as the library's docs test). */
+  /**
+   * What the Online IDE has in scope without imports (as the library's docs test): Scratch for
+   * Java 7's core package and the first-party extensions' packages.
+   */
   public static final String IMPORTS = """
       import org.openpatch.scratch.*;
-      import org.openpatch.scratch.extensions.camera.*;
-      import org.openpatch.scratch.extensions.fs.*;
-      import org.openpatch.scratch.extensions.pixels.*;
-      import org.openpatch.scratch.extensions.shader.*;
-      import org.openpatch.scratch.extensions.sorting.*;
-      import org.openpatch.scratch.extensions.tiled.*;
+      import org.openpatch.scratch.drawing.*;
+      import org.openpatch.scratch.recorder.*;
+      import org.openpatch.scratch.save.*;
+      import org.openpatch.scratch.tiled.*;
       """;
 
   /** The files written and the class Run should start. */

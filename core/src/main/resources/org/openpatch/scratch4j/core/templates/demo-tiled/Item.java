@@ -1,5 +1,5 @@
 import org.openpatch.scratch.*;
-import org.openpatch.scratch.extensions.tiled.MapObject;
+import org.openpatch.scratch.tiled.MapObject;
 
 public class Item extends Sprite {
   private String name;
@@ -26,10 +26,10 @@ public class Item extends Sprite {
     // auto-save when an item is collected
     GameState.save();
     this.hide();
-    this.getStage().display(I18n.get("item-found", I18n.get(name)), 2000);
+    this.getStage().display(I18n.get("item-found", I18n.get(name)), 2);
 
     if (name.equals("scroll-fire")) {
-      this.getStage().display(I18n.get("tutorial-scroll-fire"), 2000);
+      this.getStage().display(I18n.get("tutorial-scroll-fire"), 2);
     }
   }
 

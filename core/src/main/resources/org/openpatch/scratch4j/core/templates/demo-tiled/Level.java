@@ -1,9 +1,11 @@
+import org.openpatch.scratch.Window;
+
 import org.openpatch.scratch.KeyCode;
 import org.openpatch.scratch.Layer;
 import org.openpatch.scratch.Sprite;
 import org.openpatch.scratch.Stage;
-import org.openpatch.scratch.extensions.tiled.MapObject;
-import org.openpatch.scratch.extensions.tiled.TiledMap;
+import org.openpatch.scratch.tiled.MapObject;
+import org.openpatch.scratch.tiled.TiledMap;
 
 public class Level extends Stage {
 
@@ -36,6 +38,11 @@ public class Level extends Stage {
       this.getCamera().setPosition(player.getX(), player.getY());
     }
     this.add(player);
+    this.setColor(0, 0, 0);
+    // the map's layers are drawn every frame from now on, under the sprites
+    this.map.showLayer("Floor", Layer.BACKGROUND);
+    this.map.showLayer("FloorObjects", Layer.BACKGROUND);
+    this.map.showLayer("Walls", Layer.BACKGROUND);
 
     GameState.get().map = mapFile;
     // begin stage designer
@@ -48,22 +55,15 @@ public class Level extends Stage {
 
   public void whenKeyPressed(KeyCode keyCode) {
     if (keyCode == KeyCode.F1) {
-      this.setDebug(!this.isDebug());
+      Window.getInstance().setDebug(!Window.getInstance().isDebug());
     } else if (keyCode == KeyCode.F5) {
       GameState.save();
-      this.display("Game saved", 2000);
+      this.display("Game saved", 2);
     }
   }
 
   public void run() {
-    this.eraseAll();
-    this.setColor(0, 0, 0);
-
     this.getCamera().setPosition(player.getPosition());
-
-    this.map.stampLayerToBackground("Floor");
-    this.map.stampLayerToBackground("FloorObjects");
-    this.map.stampLayerToBackground("Walls");
 
     if (this.isKeyPressed(KeyCode.DIGIT_1)) {
       this.getCamera().changeZoom(1);

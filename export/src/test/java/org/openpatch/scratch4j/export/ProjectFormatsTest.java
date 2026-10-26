@@ -43,7 +43,8 @@ class ProjectFormatsTest {
     assertThat(Zip.readEntry(jar, "Player.class")).isNotNull();
     // the whole library jar is unpacked in
     assertThat(Zip.readEntry(jar, "org/openpatch/scratch/Sprite.class")).isNotNull();
-    assertThat(Zip.readEntry(jar, "processing/core/PApplet.class")).isNotNull();
+    // Scratch for Java 7: LWJGL instead of Processing
+    assertThat(Zip.readEntry(jar, "org/lwjgl/glfw/GLFW.class")).isNotNull();
     assertThat(Zip.readEntry(jar, "blobby.frag")).isEqualTo("shader source");
     assertThat(Zip.readEntry(jar, "assets/images/cat.png")).isEqualTo("image data");
   }

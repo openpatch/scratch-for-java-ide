@@ -1,5 +1,8 @@
+import org.openpatch.scratch.Sprite;
+
+import org.openpatch.scratch.Layer;
+
 import org.openpatch.scratch.KeyCode;
-import org.openpatch.scratch.UISprite;
 import org.openpatch.scratch.Stage;
 import org.openpatch.scratch.Window;
 
@@ -49,9 +52,10 @@ public class UI extends Stage {
   }
 }
 
-class Panel extends UISprite {
+class Panel extends Sprite {
   public Panel() {
     super();
+    this.setLayer(Layer.UI);
     this.addCostume("metal-panel-green-corner", "metalPanel_greenCorner.png");
     this.setNineSlice(30, 25, 30, 70);
   }
@@ -62,9 +66,10 @@ class Panel extends UISprite {
   }
 }
 
-class Bar extends UISprite {
+class Bar extends Sprite {
   public Bar() {
     super();
+    this.setLayer(Layer.UI);
     this.addCostume("bar", "bar_round_gloss_large.png");
     this.addCostume("bar-gray", "bar_round_gloss_large_gray.png");
     this.setNineSlice(12, 24, 12, 24);

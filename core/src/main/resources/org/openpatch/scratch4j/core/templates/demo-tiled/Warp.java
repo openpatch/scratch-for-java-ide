@@ -1,5 +1,5 @@
 import org.openpatch.scratch.*;
-import org.openpatch.scratch.extensions.tiled.MapObject;
+import org.openpatch.scratch.tiled.MapObject;
 
 public class Warp extends Sprite {
   private String toMap;
@@ -27,7 +27,7 @@ public class Warp extends Sprite {
         player.setX(toX);
         player.setY(toY);
         return new Level(toMap, player);
-      }, 500);
+      }, 0.5);
     }
   }
 }

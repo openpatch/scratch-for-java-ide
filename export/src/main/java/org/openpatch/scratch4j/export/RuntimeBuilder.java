@@ -116,45 +116,70 @@ public final class RuntimeBuilder {
   }
 
   /**
-   * The JDK modules a student program needs: what {@code jdeps} reports for
-   * the library jar (plus a safe floor for Processing/JOGL). Falls back to the
-   * floor when jdeps is unavailable.
+   * What a Scratch for Java 7 program runs on: the library uses no {@code java.desktop} (no AWT,
+   * no ImageIO, no Swing); Jackson (save and tiled) reads XML documents ({@code java.xml}); built-in
+   * sounds are found inside the jar ({@code jdk.zipfs}); LWJGL uses {@code jdk.unsupported}.
+   * Checked 2026-10-22 on such a runtime: JSON saving, a Tiled map, built-in sounds, shaders.
    */
+  static final List<String> FLOOR = List.of("java.base", "java.xml", "jdk.unsupported", "jdk.zipfs");
+
+  /** What jdeps names for the library jar that Jackson only uses when present (java.beans, java.sql types). */
+  static final java.util.Set<String> OPTIONAL = java.util.Set.of("java.desktop", "java.sql",
+      "java.datatransfer");
+
+  /** The modules for the library alone (an export adds the student's own classes, see below). */
   public static List<String> modulesFor(Path libraryJar) throws IOException {
-    List<String> floor = List.of("java.base", "java.desktop", "java.logging",
-        "java.management", "jdk.unsupported", "java.datatransfer", "jdk.crypto.ec",
-        "java.naming", "java.sql", "java.xml", "jdk.accessibility", "java.instrument",
-        "jdk.zipfs");
-    if (!Files.isRegularFile(libraryJar)) {
-      return floor;
+    return modulesFor(libraryJar, null);
+  }
+
+  /**
+   * The JDK modules an exported program needs: the floor, what jdeps reports for the library jar
+   * minus Jackson's optional modules, and everything the student's own classes use (a student who
+   * opens a Swing dialog gets {@code java.desktop} back). Exported games stay small (plan.md Phase 7).
+   */
+  public static List<String> modulesFor(Path libraryJar, Path studentClasses) throws IOException {
+    List<String> modules = new ArrayList<>(FLOOR);
+    for (String m : jdeps(libraryJar)) {
+      if (!OPTIONAL.contains(m) && !modules.contains(m)) {
+        modules.add(m);
+      }
+    }
+    if (studentClasses != null) {
+      for (String m : jdeps(studentClasses)) {
+        if (!modules.contains(m)) {
+          modules.add(m);
+        }
+      }
+    }
+    return modules;
+  }
+
+  /** {@code jdeps --print-module-deps} of a jar or folder; empty when there is none or jdeps fails. */
+  private static List<String> jdeps(Path path) throws IOException {
+    if (path == null || !Files.exists(path)) {
+      return List.of();
     }
     Path jdeps = Path.of(System.getProperty("java.home"), "bin",
         System.getProperty("os.name").toLowerCase().contains("win") ? "jdeps.exe" : "jdeps");
     if (!Files.isRegularFile(jdeps)) {
-      return floor;
+      return List.of();
     }
     try {
       ProcessBuilder builder = new ProcessBuilder(jdeps.toString(),
           "--print-module-deps", "--ignore-missing-deps", "--multi-release", "base",
-          libraryJar.toString());
+          path.toString());
       builder.redirectErrorStream(false);
       Process process = builder.start();
       String output = new String(process.getInputStream().readAllBytes(),
           java.nio.charset.StandardCharsets.UTF_8).trim();
       process.waitFor();
       if (output.isBlank() || !output.contains("java.base")) {
-        return floor;
+        return List.of();
       }
-      List<String> modules = new ArrayList<>(List.of(output.split(",")));
-      for (String required : floor) {
-        if (!modules.contains(required)) {
-          modules.add(required);
-        }
-      }
-      return modules;
+      return List.of(output.split(","));
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      return floor;
+      return List.of();
     }
   }
 }

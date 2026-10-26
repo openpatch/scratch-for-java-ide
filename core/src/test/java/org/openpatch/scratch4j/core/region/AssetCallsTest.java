@@ -26,19 +26,21 @@ class AssetCallsTest {
         .filter(e -> e.kind() == SpriteAssets.Kind.ANIMATION).toList();
     assertThat(animations).extracting(SpriteAssets.Entry::name)
         .containsExactly("walk-down", "walk-up", "walk-left", "walk-right");
+    // Scratch for Java 7: column 2 of a 4-column sheet is frames 2, 6, 10, 14
     assertThat(animations.get(2)).isEqualTo(new SpriteAssets.Entry(SpriteAssets.Kind.ANIMATION,
-        "walk-left", "assets/Skeleton.png", 4, true, 32, 32, 2, true));
+        "walk-left", "assets/Skeleton.png", 4, true, 32, 32, 2, true, 0, 0, null,
+        java.util.List.of(2, 6, 10, 14)));
     assertThat(AssetCalls.firstLook(player)).isEqualTo("assets/Skeleton.png#0,0,32,32");
   }
 
   @Test
   void overloadsFormattingAndThis() {
     String source = """
-        public class Hero extends AnimatedSprite {
+        public class Hero extends Sprite {
           public Hero() {
             addCostume("a",
                 "assets/a.png", 0, 16, 16, 16);
-            this.addAnimation("run", "assets/run.png", 6, 24, 24, 2);
+            this.addAnimation("run", "assets/run.png", 24, 24, 0, 1, 2, 3, 4, 5);
             other.addCostume("not mine");
             this.addAnimation("blink", "eye%d.png", 3);
           }
@@ -52,7 +54,7 @@ class AssetCallsTest {
         .containsExactly("addCostume", "addAnimation", "addAnimation");
     assertThat(AssetCalls.firstLook(source)).isEqualTo("assets/a.png#0,16,16,16");
     assertThat(AssetCalls.firstLook(source.replace("addCostume(\"a\",\n"
-        + "        \"assets/a.png\", 0, 16, 16, 16);", ""))).isEqualTo("assets/run.png#0,48,24,24");
+        + "        \"assets/a.png\", 0, 16, 16, 16);", ""))).isEqualTo("assets/run.png#0,0,24,24");
   }
 
   @Test

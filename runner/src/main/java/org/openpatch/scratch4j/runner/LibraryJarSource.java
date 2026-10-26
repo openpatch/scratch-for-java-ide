@@ -10,9 +10,10 @@ import java.nio.file.StandardCopyOption;
 /**
  * Where the self-contained library jar ({@code scratch-<v>-all.jar}) comes from.
  *
- * <p>The jar on Maven Central is *slim* — at runtime it needs
- * Processing/JOGL from its transitive dependencies, so a student project must
- * carry the {@code -all.jar} from the library's GitHub releases (exactly what
+ * <p>The jar on Maven Central is *slim* — at runtime it needs LWJGL and its
+ * natives for every platform from its transitive dependencies, and the
+ * extensions are jars of their own, so a student project must carry the
+ * {@code -all.jar} from the library's GitHub releases (exactly what
  * the tutorial projects' {@code +libs} folders contain). The IDE ships that jar
  * (M6 bundles it in the installer); in dev and CI it is downloaded once and
  * cached. Set {@code SCRATCH4J_ALL_JAR} to point at an existing file for
@@ -20,7 +21,11 @@ import java.nio.file.StandardCopyOption;
  */
 public final class LibraryJarSource {
 
-  public static final String SCRATCH_VERSION = "6.5.0";
+  /**
+   * Scratch for Java 7: projects switch to it as a whole (decision log). Until it is released,
+   * point {@code SCRATCH4J_ALL_JAR} at a locally built {@code all/target/scratch-*-all.jar}.
+   */
+  public static final String SCRATCH_VERSION = "7.0.0";
 
   private static final String RELEASE_URL =
       "https://github.com/openpatch/scratch-for-java/releases/download/v"

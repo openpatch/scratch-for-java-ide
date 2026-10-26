@@ -26,6 +26,20 @@ class RuntimeErrorsTest {
   }
 
   @Test
+  void theLibrarysOwnReportIsExplainedToo() {
+    // Scratch for Java 7 prints a learner's exception itself (RuntimeErrorRunIT)
+    var crashes = collect("""
+        Error in MyStage.run (MyStage.java:21): NullPointerException: Cannot invoke "Player.move(double)" because "this.enemy" is null
+            at MyStage.run(MyStage.java:21)
+        The game has stopped. The window stays open until you close it.""");
+    assertThat(crashes).hasSize(1);
+    var e = RuntimeErrors.explain(crashes.get(0), PROJECT, Language.EN);
+    assertThat(e.title()).isEqualTo("enemy is null");
+    assertThat(e.file()).isEqualTo(Path.of("/p/MyStage.java"));
+    assertThat(e.line()).isEqualTo(21);
+  }
+
+  @Test
   void nullInRunIsExplainedAtTheStudentsLine() {
     // exactly what a crash in a running stage prints (RuntimeErrorRunIT)
     var crashes = collect("""
@@ -56,7 +70,7 @@ class RuntimeErrorsTest {
         \tat Player.run(Player.java:9)""");
     var e = RuntimeErrors.explain(crashes.get(0), PROJECT, Language.EN);
     assertThat(e.title()).isEqualTo("wait() is not the wait block");
-    assertThat(e.hint()).contains("getTimer().everyMillis");
+    assertThat(e.hint()).contains("getTimer().every(");
     assertThat(e.line()).isEqualTo(9);
   }
 

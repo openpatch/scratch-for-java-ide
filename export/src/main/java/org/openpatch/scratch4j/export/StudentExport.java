@@ -72,7 +72,8 @@ public final class StudentExport {
       try {
         Path jmods = JmodsFetcher.jmods(target, feature, cacheDir);
         source = runtime -> RuntimeBuilder.link(jmods, runtime,
-            RuntimeBuilder.modulesFor(libraryJar(project)).toArray(new String[0]));
+            RuntimeBuilder.modulesFor(libraryJar(project),
+                runtime.resolveSibling("app").resolve("classes")).toArray(new String[0]));
       } catch (IOException noJmods) {
         Path jre = JmodsFetcher.jre(target, feature, cacheDir);
         source = runtime -> RuntimeBuilder.copyRuntime(jre, runtime);
@@ -100,7 +101,8 @@ public final class StudentExport {
   private RuntimeSource localRuntimeSource(ScratchProject project, Path jmodsDir) {
     return jmodsDir != null
         ? runtime -> RuntimeBuilder.link(jmodsDir, runtime,
-            RuntimeBuilder.modulesFor(libraryJar(project)).toArray(new String[0]))
+            RuntimeBuilder.modulesFor(libraryJar(project),
+                runtime.resolveSibling("app").resolve("classes")).toArray(new String[0]))
         : RuntimeBuilder::copyRuntime;
   }
 
@@ -137,11 +139,18 @@ public final class StudentExport {
     Files.createDirectories(libs);
     Files.copy(libraryJar, libs.resolve(libraryJar.getFileName()),
         StandardCopyOption.REPLACE_EXISTING);
+    // the licences of what a released game ships (JRE, LWJGL/GLFW, OpenAL Soft, Jackson, fonts)
+    copyNotices(libraryJar, appDir.resolve("THIRD-PARTY-NOTICES.txt"));
     copyProjectFiles(project, appDir.resolve("app"));
     // one argument file for every launcher (java @argfile; paths relative to app/)
+    // a released game: log file and crash box (Scratch for Java 7, -Dscratch4j.release)
+    String release = "-Dscratch4j.release=" + project.name();
     Files.writeString(appDir.resolve("app/launch.args"), "--enable-native-access=ALL-UNNAMED\n"
+        + (os == Os.MACOS ? "-XstartOnFirstThread\n" : "")
+        + "\"" + release + "\"\n"
         + "-cp \"classes" + (os == Os.WINDOWS ? ";" : ":") + "." + (os == Os.WINDOWS ? ";" : ":")
-        + "+libs/*\"\nScratch4JLauncher\n" + startStage + "\n", StandardCharsets.UTF_8);
+        + "+libs/*\"\norg.openpatch.scratch.Launcher\nScratch4JLauncher\n" + startStage + "\n",
+        StandardCharsets.UTF_8);
     Path icon = iconSource(project);
     String version = project.settings().appVersion == null ? "1.0" : project.settings().appVersion;
     Files.writeString(appDir.resolve("VERSION.txt"), project.name() + " " + version + "\n",
@@ -155,10 +164,10 @@ public final class StudentExport {
           #!/bin/sh
           DIR=$(cd "$(dirname "$0")" && pwd)
           cd "$DIR/app"
-          exec "$DIR/runtime/bin/java" --enable-native-access=ALL-UNNAMED \\
+          exec "$DIR/runtime/bin/java" --enable-native-access=ALL-UNNAMED "%s" \\
             -cp "$DIR/app/classes:$DIR/app:$DIR/app/+libs/*" \\
-            Scratch4JLauncher %s
-          """.formatted(startStage), StandardCharsets.UTF_8);
+            org.openpatch.scratch.Launcher Scratch4JLauncher %s
+          """.formatted(release, startStage), StandardCharsets.UTF_8);
       run.toFile().setExecutable(true);
       if (icon != null) {
         AppIcon.writePng(icon, 256, appDir.resolve("icon.png"));
@@ -170,8 +179,9 @@ public final class StudentExport {
           @echo off
           set DIR=%~dp0
           cd /d "%DIR%app"
-          "%DIR%runtime\\bin\\java.exe" --enable-native-access=ALL-UNNAMED -cp "%DIR%app\\classes;%DIR%app;%DIR%app\\+libs\\*" Scratch4JLauncher START_CLASS
-          """.replace("START_CLASS", startStage), StandardCharsets.UTF_8); // batch % is not a format
+          "%DIR%runtime\\bin\\java.exe" --enable-native-access=ALL-UNNAMED "RELEASE" -cp "%DIR%app\\classes;%DIR%app;%DIR%app\\+libs\\*" org.openpatch.scratch.Launcher Scratch4JLauncher START_CLASS
+          """.replace("START_CLASS", startStage).replace("RELEASE", release),
+          StandardCharsets.UTF_8); // batch % is not a format
       if (icon != null) {
         AppIcon.writeIco(icon, appDir.resolve("icon.ico"));
       }
@@ -188,10 +198,10 @@ public final class StudentExport {
           #!/bin/sh
           DIR=$(cd "$(dirname "$0")" && pwd)
           cd "$DIR/app"
-          exec "$DIR/runtime/bin/java" --enable-native-access=ALL-UNNAMED \\
+          exec "$DIR/runtime/bin/java" --enable-native-access=ALL-UNNAMED -XstartOnFirstThread "%s" \\
             -cp "$DIR/app/classes:$DIR/app:$DIR/app/+libs/*" \\
-            Scratch4JLauncher %s
-          """.formatted(startStage), StandardCharsets.UTF_8);
+            org.openpatch.scratch.Launcher Scratch4JLauncher %s
+          """.formatted(release, startStage), StandardCharsets.UTF_8);
       run.toFile().setExecutable(true);
       writeAppBundle(appDir, project.name(), startStage, version, icon);
     }
@@ -340,6 +350,18 @@ public final class StudentExport {
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
   }
 
+  /** The library jar's THIRD-PARTY-NOTICES.txt next to the game; nothing when the jar has none. */
+  static void copyNotices(Path libraryJar, Path target) throws IOException {
+    try (var jar = new java.util.zip.ZipFile(libraryJar.toFile())) {
+      var entry = jar.getEntry("THIRD-PARTY-NOTICES.txt");
+      if (entry != null) {
+        try (var in = jar.getInputStream(entry)) {
+          Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+      }
+    }
+  }
+
   private static void deleteRecursively(Path dir) throws IOException {
     try (Stream<Path> files = Files.walk(dir)) {
       for (Path file : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
@@ -357,8 +379,9 @@ public final class StudentExport {
     // Contents/MacOS -> Contents -> Name.app -> the export folder with runtime/ and app/
     Files.writeString(run, "#!/bin/sh\nDIR=$(cd \"$(dirname \"$0\")/../../..\" && pwd)\n"
         + "cd \"$DIR/app\"\n"
-        + "exec \"$DIR/runtime/bin/java\" --enable-native-access=ALL-UNNAMED -cp \"$DIR/app/classes:$DIR/app:$DIR/app/+libs/*\" "
-        + "Scratch4JLauncher " + startStage + "\n", StandardCharsets.UTF_8);
+        + "exec \"$DIR/runtime/bin/java\" --enable-native-access=ALL-UNNAMED -XstartOnFirstThread "
+        + "\"-Dscratch4j.release=" + name + "\" -cp \"$DIR/app/classes:$DIR/app:$DIR/app/+libs/*\" "
+        + "org.openpatch.scratch.Launcher Scratch4JLauncher " + startStage + "\n", StandardCharsets.UTF_8);
     run.toFile().setExecutable(true);
     Files.writeString(contents.resolve("Info.plist"), """
         <?xml version="1.0" encoding="UTF-8"?>

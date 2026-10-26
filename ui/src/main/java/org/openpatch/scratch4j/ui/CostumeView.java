@@ -41,6 +41,19 @@ final class CostumeView {
     if (costumeRef == null || costumeRef.isBlank()) {
       return null;
     }
+    // a frame of a sprite sheet by number, row by row from 0: "assets/Skeleton.png#frame:6,32,32"
+    java.util.regex.Matcher frame = java.util.regex.Pattern
+        .compile("^(.+)#frame:(\\d+),(\\d+),(\\d+)$").matcher(costumeRef);
+    if (frame.matches()) {
+      Image sheet = costume(frame.group(1), projectRoot);
+      if (sheet == null) return null;
+      int f = Integer.parseInt(frame.group(2));
+      int w = Integer.parseInt(frame.group(3));
+      int h = Integer.parseInt(frame.group(4));
+      int columns = Math.max(1, (int) sheet.getWidth() / Math.max(1, w));
+      return costume(frame.group(1) + "#" + (f % columns) * w + "," + (f / columns) * h + "," + w
+          + "," + h, projectRoot);
+    }
     // a part of a sprite sheet: "assets/Skeleton.png#0,0,32,32"
     java.util.regex.Matcher part = java.util.regex.Pattern
         .compile("^(.+)#(\\d+),(\\d+),(\\d+),(\\d+)$").matcher(costumeRef);

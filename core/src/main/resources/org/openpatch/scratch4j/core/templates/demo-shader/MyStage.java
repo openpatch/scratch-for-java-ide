@@ -10,13 +10,13 @@ public class MyStage extends Stage {
   // end stage designer
 
   public MyStage() {
-    var shader = this.getShaders().add("blobby", "blobby.frag", "default.vert");
+    var shader = this.getShaders().add("blobby", "blobby.frag");
     shader.set("depth", 1.5);
     shader.set("rate", 1.5);
-    shader = this.getShaders().add("glitch", "glitch.frag", "default.vert");
+    shader = this.getShaders().add("glitch", "glitch.frag");
     shader.set("rate", 0.0001);
-    shader = this.getShaders().add("light", "light.frag", "default.vert");
-    shader = this.getShaders().add("pixel", "pixel.frag", "default.vert");
+    shader = this.getShaders().add("light", "light.frag");
+    shader = this.getShaders().add("pixel", "pixel.frag");
     this.getShaders().switchTo("pixel");
     // begin stage designer
     mySprite = new MySprite();
@@ -48,8 +48,6 @@ public class MyStage extends Stage {
             + " next sprite shader. Press M to remove the sprite shader.");
     var shader = this.getShaders().getCurrent();
     if (shader != null) {
-      shader.set("time", Timer.millis() / 1000.0);
-      shader.set("resolution", (float) this.getWidth(), (float) this.getHeight());
       if ("light".equals(shader.getName())) {
         var lights = this.find(LightSprite.class);
         var lightPos = new double[lights.size() * 3 + 3];

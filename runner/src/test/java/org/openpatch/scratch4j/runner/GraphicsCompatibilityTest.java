@@ -13,24 +13,22 @@ class GraphicsCompatibilityTest {
   }
 
   @Test
-  void recognisesTheOpenGlFailuresProcessingAndJoglPrint() {
+  void recognisesTheOpenGlFailuresTheLibraryAndLwjglPrint() {
     for (String line : new String[] {
-        "Framebuffer objects are not supported by this hardware (or driver) Read "
-            + "http://wiki.processing.org/w/OpenGL_Issues for help.",
-        "GLProfile: device could not be initialized: WindowsGraphicsDevice[type .windows]",
-        "com.jogamp.opengl.GLException: Profile GL2ES2 is not available on null",
-        "com.jogamp.opengl.GLException: Unable to create temp OpenGL context(0)",
-        "Caused by: com.jogamp.opengl.GLException: Caught GLException: Error swapping buffers, "
-            + "eglError 0x300d, jogamp.opengl.egl.EGLDrawable[realize",
-        "java.lang.UnsatisfiedLinkError: Can't load library: /tmp/jogamp_0000/libgluegen_rt.so",
-        "RuntimeException: Renderer cannot find a JOGL surface"}) {
+        // what Scratch for Java 7 (LWJGL/GLFW) prints
+        "Scratch for Java could not open its window: no OpenGL 3.3 core context",
+        "It needs OpenGL 3.3 (4.1 on macOS). Update the graphics driver, or run on another computer.",
+        "[LWJGL] GLFW_VERSION_UNAVAILABLE error",
+        "[LWJGL] GLFW_API_UNAVAILABLE error",
+        "java.lang.IllegalStateException: GLFW could not start (no display?)",
+        "java.lang.UnsatisfiedLinkError: Failed to locate library: liblwjgl_opengl.so"}) {
       assertThat(GraphicsCompatibility.isGraphicsFailure(line)).as(line).isTrue();
     }
     for (String line : new String[] {
         "java.lang.NullPointerException: Cannot invoke \"Player.move(int)\"",
         "Could not load costume \"bunny\" - did you mean bunny1_stand?",
         "MESA-EGL: warning: DRI3 error: Could not get DRI3 device",
-        "\tat com.jogamp.opengl.GLException.<init>(GLException.java:12)", ""}) {
+        "\tat org.lwjgl.glfw.GLFW.glfwInit(GLFW.java:12)", ""}) {
       assertThat(GraphicsCompatibility.isGraphicsFailure(line)).as(line).isFalse();
     }
   }

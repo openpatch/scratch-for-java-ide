@@ -33,7 +33,7 @@ import java.util.stream.Stream;
  *
  * <pre>
  * new TiledMap("assets/maps/level.tmx", this)   // exists? loads in Scratch for Java?
- * map.stampLayerToBackground("Ground")          // a tile layer of the map?
+ * map.showLayer("Ground", Layer.BACKGROUND)     // a tile layer of the map?
  * map.getObjectsFromLayer("Objects")            // an object layer of the map?
  * map.spawn("Objects")                          // the same
  * </pre>
@@ -102,8 +102,8 @@ public final class MapLinter {
           public Void visitMethodInvocation(MethodInvocationTree call, Void p) {
             String name = methodName(call);
             if (("getObjectsFromLayer".equals(name) || "spawn".equals(name)
-                || "stampLayerToBackground".equals(name)
-                || "stampLayerToForeground".equals(name)) && call.getArguments().size() == 1
+                || "showLayer".equals(name) || "hideLayer".equals(name))
+                && !call.getArguments().isEmpty()
                 && call.getArguments().get(0) instanceof LiteralTree lit
                 && lit.getValue() instanceof String layer) {
               layerCalls.add(new Object[] {name, layer,

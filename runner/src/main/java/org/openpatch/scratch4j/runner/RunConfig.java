@@ -19,11 +19,31 @@ public record RunConfig(
     String debugAgent) {
 
   /**
-   * JOGL loads its native libraries via {@code System.load}; on JDK 25 that
-   * prints four "restricted method" warnings to stderr (shown in red to
-   * students) unless native access is enabled for the classpath.
+   * LWJGL loads its native libraries via {@code System.load}; on JDK 25 that
+   * prints "restricted method" warnings to stderr (shown in red to students)
+   * unless native access is enabled for the classpath.
    */
   public static final List<String> DEFAULT_JVM_ARGS = List.of("--enable-native-access=ALL-UNNAMED");
+
+  /** The library's launcher: it keeps the first thread for the window (macOS needs that). */
+  public static final String LAUNCHER = "org.openpatch.scratch.Launcher";
+
+  /**
+   * What starts a program, after the JVM options and the classpath: the library's launcher,
+   * then the generated Scratch4JLauncher, then the start class. On macOS GLFW must own the
+   * process's first thread, so Java starts with {@code -XstartOnFirstThread} (returned first,
+   * before the main class).
+   */
+  public static List<String> launch(String startClass) {
+    List<String> out = new java.util.ArrayList<>();
+    if (System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("mac")) {
+      out.add("-XstartOnFirstThread");
+    }
+    out.add(LAUNCHER);
+    out.add("Scratch4JLauncher");
+    out.add(startClass);
+    return out;
+  }
 
   public static RunConfig of(String stageClass) {
     return new RunConfig(stageClass, -1,

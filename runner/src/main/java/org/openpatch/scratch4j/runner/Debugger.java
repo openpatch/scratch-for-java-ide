@@ -414,7 +414,7 @@ public final class Debugger {
     StepRequest step = requests.createStepRequest(thread, StepRequest.STEP_LINE, depth);
     // stay in the student's code: the library and the JDK are stepped over
     for (String excluded : new String[] {"java.*", "javax.*", "jdk.*", "sun.*",
-        "org.openpatch.scratch.*", "processing.*", "com.jogamp.*"}) {
+        "org.openpatch.scratch.*", "org.lwjgl.*"}) {
       step.addClassExclusionFilter(excluded);
     }
     step.addCountFilter(1);

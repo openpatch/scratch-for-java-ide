@@ -1,6 +1,6 @@
 import org.openpatch.scratch.*;
 
-public class Enemy extends AnimatedSprite {
+public class Enemy extends Sprite {
 
   protected String state = "idle";
   protected String dir = "down";

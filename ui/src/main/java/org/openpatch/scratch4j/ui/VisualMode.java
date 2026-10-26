@@ -63,9 +63,10 @@ final class VisualMode {
     };
   }
 
-  /** An {@code AnimatedSprite}, also through project superclasses: it can have animations. */
+  /** Scratch for Java 7: every sprite has animations (AnimatedSprite is part of Sprite). */
   static boolean isAnimatedSprite(Path file) {
-    return "AnimatedSprite".equals(libraryBase(file));
+    String base = libraryBase(file);
+    return "Sprite".equals(base) || "AnimatedSprite".equals(base) || "UISprite".equals(base);
   }
 
   /**

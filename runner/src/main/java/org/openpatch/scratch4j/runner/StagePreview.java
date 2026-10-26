@@ -116,14 +116,17 @@ public final class StagePreview {
       if (omit != null && !omit.isEmpty()) {
         command.add("-Dscratch4j.preview.omit=" + String.join(",", omit));
       }
+      List<String> launch = RunConfig.launch(startClass);
+      if (launch.get(0).startsWith("-")) {
+        command.add(launch.remove(0));
+      }
       command.add("-cp");
       List<String> entries = new ArrayList<>();
       entries.add(outDir.toString());
       entries.add(project.root().toString());
       for (Path jar : project.libs()) entries.add(jar.toString());
       command.add(String.join(System.getProperty("path.separator"), entries));
-      command.add("Scratch4JLauncher");
-      command.add(startClass);
+      command.addAll(launch);
 
       ProcessBuilder builder = GraphicsCompatibility.apply(new ProcessBuilder(command));
       builder.directory(project.root().toFile());
@@ -150,37 +153,13 @@ public final class StagePreview {
   }
 
   /**
-   * What the preview's program runs in so that its window is never seen: on
-   * Linux an X server of its own that draws into memory ({@code xvfb-run}),
-   * because tiling window managers and Wayland compositors place every new
-   * window on the screen, wherever the program puts it. Elsewhere nothing
-   * (the library moves its window out of sight). Without {@code xvfb-run}
-   * the window may show for a moment, which is fine for a preview the user
-   * asked for.
+   * What the preview's program runs in: nothing. Scratch for Java 7 opens a preview's window
+   * hidden ({@code -Dscratch4j.preview}) and takes the picture from its own buffers, which works
+   * on Wayland, X11, Windows and macOS alike, so the Xvfb wrapper of 6.x is gone. Kept as a list
+   * so a platform that needs a wrapper again can add one here.
    */
   public static List<String> hiddenDisplay() {
-    String os = System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT);
-    if (!os.contains("linux")) {
-      return List.of();
-    }
-    Path xvfbRun = onPath("xvfb-run");
-    if (xvfbRun == null) {
-      // asked for with the Refresh button: a window for a moment is fine then
-      return List.of();
-    }
-    // -a: the first free display number; a screen big enough for any window
-    return List.of(xvfbRun.toString(), "-a", "-s", "-screen 0 1920x1200x24");
-  }
-
-  private static Path onPath(String program) {
-    String path = System.getenv("PATH");
-    if (path == null) return null;
-    for (String dir : path.split(java.io.File.pathSeparator)) {
-      if (dir.isEmpty()) continue;
-      Path candidate = Path.of(dir, program);
-      if (Files.isExecutable(candidate)) return candidate;
-    }
-    return null;
+    return List.of();
   }
 
   /** Reads what the library wrote into {@code folder}. */

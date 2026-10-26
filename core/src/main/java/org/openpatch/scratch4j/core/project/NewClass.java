@@ -5,9 +5,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Generates new Sprite / AnimatedSprite / UISprite / Stage classes in the
- * library's documentation style: 2-space indent, {@code this.} prefix, the
- * block the stage designer or sprite editor owns, Java 17 compatible.
+ * Generates new Sprite / Stage classes in the library's documentation style:
+ * 2-space indent, {@code this.} prefix, the block the stage designer or sprite
+ * editor owns, Java 17 compatible. Scratch for Java 7 has no AnimatedSprite and
+ * UISprite: an animated sprite is a Sprite with animations, a UI sprite a Sprite
+ * on the UI layer; the wizard keeps offering both as starting points.
  */
 public final class NewClass {
 
@@ -68,9 +70,9 @@ public final class NewClass {
           }
           """.formatted(name, name);
       case ANIMATED_SPRITE -> """
-          import org.openpatch.scratch.AnimatedSprite;
+          import org.openpatch.scratch.Sprite;
 
-          public class %s extends AnimatedSprite {
+          public class %s extends Sprite {
 
             public %s() {
               this.addAnimation("idle", "bunny1_walk%%d", 2);
@@ -84,11 +86,13 @@ public final class NewClass {
           }
           """.formatted(name, name);
       case UI_SPRITE -> """
-          import org.openpatch.scratch.UISprite;
+          import org.openpatch.scratch.Layer;
+          import org.openpatch.scratch.Sprite;
 
-          public class %s extends UISprite {
+          public class %s extends Sprite {
 
             public %s() {
+              this.setLayer(Layer.UI);
 
               // begin sprite editor
               this.setWidth(100);

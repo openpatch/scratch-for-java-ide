@@ -87,10 +87,10 @@
         "de": "Sag hallo"
       },
       "text": {
-        "en": "Add this at the end of the constructor. When the program starts, the bunny says hello for 2 seconds (2000 milliseconds), like \"say for seconds\" in Scratch.",
-        "de": "Füge das am Ende des Konstruktors ein. Wenn das Programm startet, sagt der Hase 2 Sekunden lang (2000 Millisekunden) hallo, wie \"sage für Sekunden\" in Scratch."
+        "en": "Add this at the end of the constructor. When the program starts, the bunny says hello for 2 seconds, like \"say for seconds\" in Scratch.",
+        "de": "Füge das am Ende des Konstruktors ein. Wenn das Programm startet, sagt der Hase 2 Sekunden lang hallo, wie \"sage für Sekunden\" in Scratch."
       },
-      "code": "    this.say(\"Hello!\", 2000);",
+      "code": "    this.say(\"Hello!\", 2);",
       "check": {
         "contains": { "file": "Bunny.java", "pattern": "this\\.say\\(" }
       }

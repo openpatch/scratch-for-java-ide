@@ -58,13 +58,6 @@ public final class ProjectRunner {
       // hot reload of new attributes and methods, when this Java can do it
       command.addAll(ProgramRuntime.hotReloadArgs(config.javaExecutable()));
     }
-    if (System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("win")) {
-      // With display scaling AWT measures the screen in scaled pixels and JOGL
-      // in real ones, so fullScreen() fills only part of it and windows are
-      // centred off it. Processing only fixes this with the Processing IDE's
-      // fenster.exe at hand; set it here so any library version runs right.
-      command.add("-Dsun.java2d.uiScale=1");
-    }
     command.addAll(config.extraJvmArgs());
     // the stage designer shows each stage as this run first draws it
     command.add("-Dscratch4j.capture="
@@ -73,10 +66,14 @@ public final class ProjectRunner {
     if (!omit.isEmpty()) {
       command.add("-Dscratch4j.capture.omit=" + omit);
     }
+    List<String> launch = RunConfig.launch(config.stageClass());
+    // -XstartOnFirstThread (macOS) is a JVM option: before the classpath and the main class
+    if (launch.get(0).startsWith("-")) {
+      command.add(launch.remove(0));
+    }
     command.add("-cp");
     command.add(classpathString(project, outDir));
-    command.add("Scratch4JLauncher");
-    command.add(config.stageClass());
+    command.addAll(launch);
 
     ProcessBuilder builder = GraphicsCompatibility.apply(new ProcessBuilder(command));
     builder.directory(project.root().toFile());

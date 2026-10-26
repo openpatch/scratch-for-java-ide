@@ -17,10 +17,22 @@ public final class SpriteAssets {
    * {@code computed} is the path expression as written when the code works the
    * path out ({@code addAnimation("unten", bild, ...)}): then {@code reference}
    * is null and the entry is read-only.
+   *
+   * <p>Scratch for Java 7 names a sheet animation's frames: {@code addAnimation(name, sheet,
+   * width, height, frame, frame, ...)}, counted row by row from 0. {@code sheetFrames} holds them;
+   * {@code columns} is true when they step down a column (the step is the sheet's column count)
+   * and {@code row} is then the column, otherwise the first frame.
    */
   public record Entry(Kind kind, String name, String reference, int frames, boolean managed,
       int tileWidth, int tileHeight, int row, boolean columns, int cropX, int cropY,
-      String computed) {
+      String computed, List<Integer> sheetFrames) {
+    public Entry(Kind kind, String name, String reference, int frames, boolean managed,
+        int tileWidth, int tileHeight, int row, boolean columns, int cropX, int cropY,
+        String computed) {
+      this(kind, name, reference, frames, managed, tileWidth, tileHeight, row, columns, cropX,
+          cropY, computed, List.of());
+    }
+
     public Entry(Kind kind, String name, String reference, int frames, boolean managed,
         int tileWidth, int tileHeight, int row, boolean columns, int cropX, int cropY) {
       this(kind, name, reference, frames, managed, tileWidth, tileHeight, row, columns, cropX,
@@ -131,11 +143,16 @@ public final class SpriteAssets {
           return new Entry(Kind.ANIMATION, name, path, c.number(2) == null ? 0 : c.number(2),
               editable, 0, 0, 0, false, 0, 0, computed);
         }
-        if (n >= 5 && n <= 7 && hasPath && c.number(2) != null
-            && c.number(3) != null && c.number(4) != null) {
-          int index = n >= 6 && c.number(5) != null ? c.number(5) : 0;
-          return new Entry(Kind.ANIMATION, name, path, c.number(2), editable,
-              c.number(3), c.number(4), index, n == 7, 0, 0, computed);
+        // Scratch for Java 7: (name, sheet, width, height, frame, frame, ...)
+        if (n >= 5 && hasPath && c.number(2) != null && c.number(3) != null) {
+          List<Integer> frames = new ArrayList<>();
+          for (int i = 4; i < n; i++) {
+            if (c.number(i) == null) return null;
+            frames.add(c.number(i));
+          }
+          boolean down = frames.size() > 1 && frames.get(1) - frames.get(0) > 1;
+          return new Entry(Kind.ANIMATION, name, path, frames.size(), editable,
+              c.number(2), c.number(3), frames.get(0), down, 0, 0, computed, List.copyOf(frames));
         }
         return null;
       }
@@ -170,7 +187,7 @@ public final class SpriteAssets {
    * {@code this.addAnimation(name, sheet, frames, width, height[, row]);}.
    */
   public static String addSheetAnimation(String source, String name, String sheet, int frames,
-      int width, int height, int row) {
+      int width, int height, int row, int sheetColumns) {
     source = DesignerRegions.ensureSprite(source);
     checkName(name);
     checkReference(sheet);
@@ -180,8 +197,13 @@ public final class SpriteAssets {
     if (list(source).stream().anyMatch(e -> e.kind() == Kind.ANIMATION && e.name().equals(name))) {
       throw new IllegalArgumentException("Asset name already exists: " + name);
     }
-    return append(source, "this.addAnimation(\"" + name + "\", \"" + sheet + "\", " + frames
-        + ", " + width + ", " + height + (row > 0 ? ", " + row : "") + ");");
+    // Scratch for Java 7 names the frames, counted row by row from 0
+    StringBuilder numbers = new StringBuilder();
+    for (int i = 0; i < frames; i++) {
+      numbers.append(", ").append(row * Math.max(1, sheetColumns) + i);
+    }
+    return append(source, "this.addAnimation(\"" + name + "\", \"" + sheet + "\", " + width
+        + ", " + height + numbers + ");");
   }
 
   /**

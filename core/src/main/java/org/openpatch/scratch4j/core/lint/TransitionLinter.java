@@ -59,7 +59,7 @@ import java.util.regex.Pattern;
  *       counts very far, in {@code run()}, a constructor or an event method —
  *       it freezes the program; Scratch's "forever" is {@code run()};</li>
  *   <li>{@code Thread.sleep} / {@code wait} in a stage or sprite — there is no
- *       "wait" block; use {@code getTimer().everyMillis(ms)};</li>
+ *       "wait" block; use {@code getTimer().every(seconds)};</li>
  *   <li>{@code new Window(...)} inside a stage or sprite (outside {@code main}),
  *       or two windows in one method — the window is a singleton;</li>
  *   <li>a counter field that is not {@code static} although every instance of

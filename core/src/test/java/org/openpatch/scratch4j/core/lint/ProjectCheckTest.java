@@ -31,7 +31,7 @@ class ProjectCheckTest {
     String source = Files.readString(stage);
     // the block in the constructor, after the one with the fields
     int at = source.indexOf("// end stage designer", source.indexOf("public MyStage()"));
-    String own = source.substring(0, at) + "this.setTint(60);\n    " + source.substring(at);
+    String own = source.substring(0, at) + "this.setColorEffect(60);\n    " + source.substring(at);
     Files.writeString(stage, own);
     assertThat(ProjectCheck.check(ScratchProject.open(tmp.resolve("region")),
         DiagnosticsExplanations.Language.EN)).isEmpty();

@@ -1,4 +1,3 @@
-import org.openpatch.scratch.TextureSampling;
 import org.openpatch.scratch.Window;
 import org.openpatch.scratch.Text;
 
@@ -20,12 +19,11 @@ public class Tiled extends Window {
 
   public static void main(String[] args) {
     // These global settings must be set before starting the game.
-    Text.useFont("assets/Retro Gaming.ttf", 11);
-    Text.useSmoothing(false);
+    Text.useFont("assets/Retro Gaming.ttf");
 
     // Start the Game
     // begin project settings
-    Window.useTextureSampling(TextureSampling.POINT);
+    Window.usePixelArt();
     Window.useFullScreen();
     // end project settings
     new Tiled();

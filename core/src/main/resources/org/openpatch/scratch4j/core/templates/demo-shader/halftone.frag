@@ -1,17 +1,8 @@
-#ifdef GL_ES
-precision mediump float;
-precision mediump int;
-#endif
-
-#define PROCESSING_TEXTURE_SHADER
-
-varying vec4 vertTexCoord;
-uniform sampler2D texture;
 uniform int pixelsPerRow;
 
 void main(void)
 {
-  vec2 p = vertTexCoord.st;
+  vec2 p = uv;
   float pixelSize = 1.0 / float(pixelsPerRow);
 
   float dx = mod(p.x, pixelSize) - pixelSize*0.5;
@@ -19,7 +10,7 @@ void main(void)
 
   p.x -= dx;
   p.y -= dy;
-  vec4 col = texture2D(texture, p).rgba;
+  vec4 col = texture(costume, p).rgba;
   float bright = 0.3333*(col.r+col.g+col.b);
 
   float dist = sqrt(dx*dx + dy*dy);
@@ -27,5 +18,5 @@ void main(void)
   float m = step(dist, rad);
 
   vec3 col2 = mix(vec3(0.0), vec3(1.0), m);
-  gl_FragColor = vec4(col2, col.a);
+  color = vec4(col2, col.a);
 }

@@ -5,7 +5,7 @@ public class Ziel extends Sprite {
   public Ziel() {
     // begin sprite editor
     this.addCostume("target", "assets/target.png");
-    this.setHitbox(10, 38, 10, 10, 38, 10, 38, 38);
+    this.setHitbox(new Polygon(new double[] {10, 10, 38, 38}, new double[] {38, 10, 10, 38}));
     // end sprite editor
   }
 }

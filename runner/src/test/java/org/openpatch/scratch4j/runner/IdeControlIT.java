@@ -43,7 +43,9 @@ class IdeControlIT {
   /** The library pauses and slows down itself (5.7.0 on), so its window keeps drawing. */
   private static boolean libraryGameClock() {
     try (var zip = new java.util.zip.ZipFile(allJar().toFile())) {
-      return zip.getEntry("org/openpatch/scratch/internal/GameClock.class") != null;
+      // 6.x's GameClock, or Scratch for Java 7's tick clock (always its own pause and speed)
+      return zip.getEntry("org/openpatch/scratch/internal/GameClock.class") != null
+          || zip.getEntry("org/openpatch/scratch/internal/loop/TickClock.class") != null;
     } catch (Exception e) {
       return false;
     }
@@ -100,6 +102,10 @@ class IdeControlIT {
   /** The library records the stage at its own size, not the window (newer versions). */
   private static boolean libraryRecordsTheStage() {
     try (var zip = new java.util.zip.ZipFile(allJar().toFile())) {
+      // Scratch for Java 7 records at stage size always (afterFrame)
+      if (zip.getEntry("org/openpatch/scratch/internal/loop/TickClock.class") != null) {
+        return true;
+      }
       var entry = zip.getEntry("org/openpatch/scratch/internal/Applet.class");
       return entry != null && new String(zip.getInputStream(entry).readAllBytes(),
           java.nio.charset.StandardCharsets.ISO_8859_1).contains("getStageImage");
@@ -120,9 +126,35 @@ class IdeControlIT {
     Files.writeString(tmp.resolve("big/MyStage.java"), """
         import org.openpatch.scratch.Sprite;
         import org.openpatch.scratch.Stage;
-        import org.openpatch.scratch.internal.Applet;
+        import org.openpatch.scratch.Window;
+        import org.openpatch.scratch.extension.Extension;
+        import org.openpatch.scratch.extension.ExtensionContext;
 
         public class MyStage extends Stage {
+          static volatile boolean grow;
+          static volatile int width;
+
+          // Scratch for Java 7: what maximizing does, through GLFW on the window thread
+          static {
+            Window.use(new Extension() {
+              public String id() { return "test.resize"; }
+              public String name() { return "Resize"; }
+              public String version() { return "1"; }
+              public void install(ExtensionContext ctx) {
+                ctx.onInputPoll(snapshot -> {
+                  long window = org.lwjgl.glfw.GLFW.glfwGetCurrentContext();
+                  if (grow) {
+                    grow = false;
+                    org.lwjgl.glfw.GLFW.glfwSetWindowSize(window, 1000, 600);
+                  }
+                  int[] w = new int[1], h = new int[1];
+                  org.lwjgl.glfw.GLFW.glfwGetWindowSize(window, w, h);
+                  width = w[0];
+                });
+              }
+            });
+          }
+
           int ticks;
           boolean told;
 
@@ -135,12 +167,10 @@ class IdeControlIT {
           public void run() {
             ticks++;
             if (ticks == 30) {
-              // what maximizing does: the window grows, the stage stays 480x360
-              var window = (com.jogamp.newt.opengl.GLWindow) Applet.getInstance()
-                  .getSurface().getNative();
-              new Thread(() -> window.setSize(1000, 600)).start();
+              // the window grows, the stage stays 480x360
+              grow = true;
             }
-            if (!told && Applet.getInstance().width == 1000) {
+            if (!told && width == 1000) {
               told = true;
               System.out.println("window 1000x600");
             }

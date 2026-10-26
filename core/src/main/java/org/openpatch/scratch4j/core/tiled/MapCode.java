@@ -10,7 +10,7 @@ import java.util.regex.Pattern;
  * <pre>
  * // the map from the map editor
  * TiledMap map = new TiledMap("assets/maps/level.tmx", this);
- * map.stampLayerToBackground("Ground");
+ * map.showLayer("Ground", Layer.BACKGROUND);
  * </pre>
  *
  * written after the stage designer's block in the constructor (or after {@code super(...)}),
@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  */
 public final class MapCode {
 
-  private static final String IMPORT = "import org.openpatch.scratch.extensions.tiled.TiledMap;";
+  private static final String IMPORT = "import org.openpatch.scratch.tiled.TiledMap;";
 
   private MapCode() {}
 
@@ -48,7 +48,7 @@ public final class MapCode {
     // a second map goes after the first one's lines, not above them
     Matcher earlier = Pattern.compile("(?m)^[ \\t]*// the map from the map editor\\n"
         + "[ \\t]*TiledMap \\w+ = new TiledMap\\([^\\n]*\\n"
-        + "(?:[ \\t]*\\w+\\.stampLayerTo\\w+\\([^\\n]*\\n)*").matcher(source);
+        + "(?:[ \\t]*\\w+\\.showLayer\\([^\\n]*\\n)*").matcher(source);
     while (earlier.find()) {
       at = Math.max(at, earlier.end());
     }
@@ -62,24 +62,34 @@ public final class MapCode {
         .append("TiledMap ").append(variable).append(" = new TiledMap(\"").append(mapPath)
         .append("\", this);\n");
     for (String layer : backgroundLayers) {
-      code.append(indent).append(variable).append(".stampLayerToBackground(\"")
-          .append(layer.replace("\\", "\\\\").replace("\"", "\\\"")).append("\");\n");
+      // Scratch for Java 7: shown once, drawn by the map every frame
+      code.append(indent).append(variable).append(".showLayer(\"")
+          .append(layer.replace("\\", "\\\\").replace("\"", "\\\"")).append("\", Layer.BACKGROUND);\n");
     }
     String result = source.substring(0, at) + code + source.substring(at);
     return withImport(result);
   }
 
   private static String withImport(String source) {
+    // showLayer(..., Layer.BACKGROUND) needs Layer, unless the whole package is imported
+    if (!source.contains("import org.openpatch.scratch.*;")
+        && !source.contains("import org.openpatch.scratch.Layer;")) {
+      source = addImport(source, "import org.openpatch.scratch.Layer;");
+    }
     if (source.contains(IMPORT)
-        || source.contains("import org.openpatch.scratch.extensions.tiled.*;")) {
+        || source.contains("import org.openpatch.scratch.tiled.*;")) {
       return source;
     }
+    return addImport(source, IMPORT);
+  }
+
+  private static String addImport(String source, String line) {
     Matcher imports = Pattern.compile("(?m)^import\\s+[^;]+;[ \\t]*\\n").matcher(source);
     int at = 0;
     while (imports.find()) {
       at = imports.end();
     }
-    return source.substring(0, at) + IMPORT + "\n" + (at == 0 ? "\n" : "")
+    return source.substring(0, at) + line + "\n" + (at == 0 ? "\n" : "")
         + source.substring(at);
   }
 }

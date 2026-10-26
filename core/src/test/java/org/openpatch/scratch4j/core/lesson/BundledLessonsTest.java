@@ -60,8 +60,8 @@ class BundledLessonsTest {
     walks.put("make-it-walk", List.of(
         List.of(run()),
         List.of(edit("Walker.java", "this.move(3);", "this.move(6);")),
-        List.of(edit("Walker.java", "this.setAnimationInterval(150);",
-            "this.setAnimationInterval(80);")),
+        List.of(edit("Walker.java", "this.setAnimationInterval(0.15);",
+            "this.setAnimationInterval(0.08);")),
         List.of(run()),
         List.of(after("Walker.java", "      this.switchCostume(\"alienGreen_stand\");\n    }\n")),
         List.of(edit("Walker.java", "    this.setY(-50);\n",
@@ -79,7 +79,7 @@ class BundledLessonsTest {
         List.of(run())));
     walks.put("red-light-green-light", List.of(
         List.of(run()),
-        List.of(edit("Referee.java", "everyMillis(2200)", "everyMillis(1500)")),
+        List.of(edit("Referee.java", "every(2.2)", "every(1.5)")),
         List.of(edit("RaceStage.java", "\"snail\", -60, 1.0", "\"snail\", -60, 2.0")),
         List.of(run()),
         List.of(after("RaceStage.java", "    this.add(new Racer(\"snail\", -60, 2.0));\n")),

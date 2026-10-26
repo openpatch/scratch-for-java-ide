@@ -37,6 +37,11 @@ class AbiturListRunTest {
           public Stage getStage() { return Stage.INSTANCE; }
           public void setDebug(boolean value) {}
           public void exit() {}
+          public static void use(org.openpatch.scratch.extension.Extension extension) {}
+          public void pause() {}
+          public void resume() {}
+          public void step() {}
+          public void setGameSpeed(double speed) {}
         }
         """);
     // The NRW API uses a generic return type because the project's List lives
@@ -45,6 +50,8 @@ class AbiturListRunTest {
         package org.openpatch.scratch;
         public class Stage {
           public static final Stage INSTANCE = new Stage();
+          public void showVariable(String name, java.util.function.Supplier<?> value) {}
+          public void hideVariable(String name) {}
           %s
         }
         """.formatted(nrw ? """

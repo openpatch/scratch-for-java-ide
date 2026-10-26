@@ -39,7 +39,7 @@ public class WorldStage extends Stage {
   }
 
   public void run() {
-    if (this.getTimer().everyMillis(1000)) {
+    if (this.getTimer().every(1)) {
       var food = new Donut();
       food.setStrength(Random.randomInt(2, 5));
       this.add(food);
@@ -55,12 +55,12 @@ public class WorldStage extends Stage {
     }
 
     if (this.count(FollowDonut.class) == 0) {
-      Window.getInstance().transitionToStage(new WinStage(), 500);
+      Window.getInstance().transitionToStage(new WinStage(), 0.5);
       return;
     }
 
     if (this.count(PlayerDonut.class) == 0) {
-      Window.getInstance().transitionToStage(new GameOverStage(), 500);
+      Window.getInstance().transitionToStage(new GameOverStage(), 0.5);
       return;
     }
 

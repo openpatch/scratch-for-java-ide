@@ -24,36 +24,33 @@ class ShaderRenderIT {
     var renderer = new ShaderRenderer(Path.of(System.getProperty("java.home"), "bin", "java"),
         List.of(allJar), tmp.resolve("cache"));
     Path frag = tmp.resolve("red.frag");
+    // Scratch for Java 7's format: the body only; costume, uv, color, time come with the header
     Files.writeString(frag, """
-        #define PROCESSING_TEXTURE_SHADER
-        varying vec4 vertTexCoord;
-        uniform sampler2D texture;
         uniform float amount;
-        uniform float time;
         void main() {
-          vec4 col = texture2D(texture, vertTexCoord.st);
-          gl_FragColor = vec4(amount, col.g * 0.0, fract(time), 1.0);
+          vec4 col = texture(costume, uv);
+          color = vec4(amount, col.g * 0.0, fract(time), 1.0);
         }
         """);
     var result = renderer.render(new ShaderRenderer.Request(frag, null, null, 40, 20, 4, 2,
         Map.of("amount", new double[] {1.0})));
     assertThat(result.failure()).isNull();
     assertThat(result.errors()).isEmpty();
-    assertThat(result.uniforms()).contains("amount", "time");
+    assertThat(result.uniforms()).contains("amount"); // time is the library's, not declared
     assertThat(result.frames()).hasSize(4); // it uses time: animated
     var first = ImageIO.read(result.frames().get(0).toFile());
     assertThat(first.getWidth()).isEqualTo(40);
     assertThat(first.getRGB(10, 10) & 0xffffff).isEqualTo(0xff0000);
     Path secondFrag = tmp.resolve("green.frag");
-    Files.writeString(secondFrag, "void main() { gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0); }");
+    Files.writeString(secondFrag, "void main() { color = vec4(0.0, 1.0, 0.0, 1.0); }");
     var secondResult = renderer.render(new ShaderRenderer.Request(secondFrag, null, null, 40,
         20, 1, 1, Map.of()));
-    assertThat(secondResult.ok()).isTrue();
+    assertThat(secondResult.ok()).as("%s", secondResult).isTrue();
     assertThat(ImageIO.read(secondResult.frames().get(0).toFile()).getRGB(10, 10) & 0xffffff)
         .isEqualTo(0x00ff00);
     Path demo = Path.of("../core/src/main/resources/org/openpatch/scratch4j/core/templates/demo-shader");
     var pixelate = renderer.render(new ShaderRenderer.Request(demo.resolve("pixelate.frag"),
-        demo.resolve("default.vert"), demo.resolve("cat.png"), 40, 40, 1, 1,
+        null, demo.resolve("cat.png"), 40, 40, 1, 1,
         Map.of("pixels", new double[] {20, 10})));
     assertThat(pixelate.ok()).isTrue();
     assertThat(ImageIO.read(pixelate.frames().get(0).toFile()).getRGB(20, 20) >>> 24)
@@ -80,29 +77,24 @@ class ShaderRenderIT {
         Map.of("amount", new double[] {1.0}))).frames()).hasSize(4);
     assertThat(Files.getLastModifiedTime(result.frames().get(0)).toMillis()).isEqualTo(before);
 
-    // like the game: without #version, texture() and textureSize() work (Processing's
-    // rewrite for modern GLSL, the uniform texture becomes texMap)
+    // like the game: texture() and textureSize() on the costume
     Path modern = tmp.resolve("modern.frag");
     Files.writeString(modern, """
-        uniform sampler2D texture;
-        varying vec4 vertTexCoord;
         void main() {
-          vec2 texture_size = vec2(textureSize(texture, 0));
-          vec4 c = texture(texture, vertTexCoord.st + 0.5 / texture_size);
-          gl_FragColor = vec4(c.rgb, 1.0);
+          vec2 texture_size = vec2(textureSize(costume, 0));
+          vec4 c = texture(costume, uv + 0.5 / texture_size);
+          color = vec4(c.rgb, 1.0);
         }
         """);
     var modernResult = renderer.render(new ShaderRenderer.Request(modern, null, null, 40, 20,
         1, 1, Map.of()));
     assertThat(modernResult.errors()).isEmpty();
     assertThat(modernResult.ok()).isTrue();
-    assertThat(modernResult.uniforms()).contains("texture");
     // a warning is no error: the shader still draws, the line is the file's
     Files.writeString(modern, """
-        varying vec4 vertTexCoord;
         void main() {
           float size;
-          gl_FragColor = vec4(size, vertTexCoord.s, 0.0, 1.0);
+          color = vec4(size, uv.x, 0.0, 1.0);
         }
         """);
     var warned = renderer.render(new ShaderRenderer.Request(modern, null, null, 40, 20, 1, 1,
@@ -110,10 +102,10 @@ class ShaderRenderIT {
     assertThat(warned.ok()).isTrue();
     assertThat(warned.errors()).isEmpty();
     if (!warned.warnings().isEmpty()) { // drivers differ in what they warn about
-      assertThat(warned.warnings().get(0).line()).isEqualTo(4);
+      assertThat(warned.warnings().get(0).line()).isEqualTo(3);
     }
 
-    Files.writeString(frag, "void main() {\n  gl_FragColor = vec4(oops);\n}\n");
+    Files.writeString(frag, "void main() {\n  color = vec4(oops);\n}\n");
     var broken = renderer.render(new ShaderRenderer.Request(frag, null, null, 40, 20, 1, 1,
         Map.of()));
     assertThat(broken.ok()).isFalse();

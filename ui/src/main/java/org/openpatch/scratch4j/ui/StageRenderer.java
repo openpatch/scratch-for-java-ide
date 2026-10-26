@@ -487,7 +487,8 @@ final class StageRenderer {
 
   /**
    * Whether a sprite class is drawn on the UI layer: a UISprite, or a class
-   * (or one of its project superclasses) that calls {@code setUI(true)}.
+   * (or one of its project superclasses) that calls {@code setLayer(Layer.UI)}
+   * (Scratch for Java 7) or {@code setUI(true)} (6.x).
    */
   boolean isScreenFixed(String className) {
     String name = className;
@@ -497,7 +498,10 @@ final class StageRenderer {
       if (!Files.isRegularFile(file)) return false;
       try {
         String source = Files.readString(file, StandardCharsets.UTF_8);
-        if (source.matches("(?s).*\\bsetUI\\(\\s*true\\s*\\).*")) return true;
+        if (source.matches("(?s).*\\bsetUI\\(\\s*true\\s*\\).*")
+            || source.matches("(?s).*\\bsetLayer\\(\\s*(?:org\\.openpatch\\.scratch\\.)?Layer\\.UI\\s*\\).*")) {
+          return true;
+        }
         Matcher m = Pattern.compile("\\bclass\\s+" + Pattern.quote(name)
             + "\\s+extends\\s+(\\w+)").matcher(source);
         name = m.find() ? m.group(1) : null;
@@ -649,9 +653,12 @@ final class StageRenderer {
     return lines;
   }
 
-  /** Whether the class extends {@code UISprite} (it is sized in pixels). */
+  /**
+   * Whether the class is sized in pixels: it extends {@code UISprite} (6.x), or it is a sprite on
+   * the UI layer (Scratch for Java 7, where UISprite is part of Sprite).
+   */
   boolean isUiSprite(String className) {
-    if ("UISprite".equals(className)) {
+    if ("UISprite".equals(className) || isScreenFixed(className)) {
       return true;
     }
     try {

@@ -7,10 +7,10 @@ public class MySprite extends Sprite {
     // begin sprite editor
     this.addCostume("cat", "cat.png");
     // end sprite editor
-    var shader = this.getShaders().add("halftone", "halftone.frag", "default.vert");
-    shader = this.getShaders().add("pixelate", "pixelate.frag", "default.vert");
+    var shader = this.getShaders().add("halftone", "halftone.frag");
+    shader = this.getShaders().add("pixelate", "pixelate.frag");
     shader.set("pixels", 20.0, 10.0);
-    shader = this.getShaders().add("neon", "neon.frag", "default.vert");
+    shader = this.getShaders().add("neon", "neon.frag");
     shader.set("brt", 0.4);
     shader.set("rad", 1);
     this.getShaders().switchTo("halftone");

@@ -1,22 +1,11 @@
-#ifdef GL_ES
-precision mediump float;
-#endif
-
-#define PROCESSING_TEXTURE_SHADER
-
-varying vec4 vertTexCoord;
-uniform sampler2D texture;
-
-uniform float time;
-uniform vec2 resolution;
 uniform float depth;
 uniform float rate;
 
 #define N 16
 
 void main( void ) {
-  vec2 p = vertTexCoord.st;
-  vec4 col = texture2D(texture, p).rgba;
+  vec2 p = uv;
+  vec4 col = texture(costume, p).rgba;
 
   vec2 v=(gl_FragCoord.xy-(resolution*0.5))/min(resolution.y,resolution.x)*10.0;
   float t=time * 0.3,r=2.0;
@@ -27,5 +16,5 @@ void main( void ) {
   }
     r = (sin(r*0.09)*0.5)+0.5;
   r = pow(r, depth);
-  gl_FragColor = vec4(col.r,pow(max(r-0.55,0.0)*2.2,2.0),pow(max(r-4.875,0.1)*3.0,6.0), col.a );
+  color = vec4(col.r,pow(max(r-0.55,0.0)*2.2,2.0),pow(max(r-4.875,0.1)*3.0,6.0), col.a );
 }

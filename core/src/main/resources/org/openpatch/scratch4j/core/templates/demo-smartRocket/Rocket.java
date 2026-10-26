@@ -13,7 +13,7 @@ public class Rocket extends Sprite {
   public Rocket(Vector2 pPosition, DNA pDna, Ziel pZiel) {
     // begin sprite editor
     this.addCostume("rocket", "assets/rocket.png");
-    this.setHitbox(68, 27, 68, 20, 76, 21, 76, 26);
+    this.setHitbox(new Polygon(new double[] {68, 68, 76, 76}, new double[] {27, 20, 21, 26}));
     // end sprite editor
     this.setPosition(pPosition);
     this.beschleunigung = new Vector2();
@@ -40,10 +40,10 @@ public class Rocket extends Sprite {
       beschleunigung = beschleunigung.add(dna.gibGene()[geneZaehler]);
       geneZaehler = (geneZaehler + 1) % dna.gibGene().length;
       geschwindigkeit = geschwindigkeit.add(beschleunigung);
-      move(geschwindigkeit);
+      changePosition(geschwindigkeit);
       beschleunigung = beschleunigung.multiply(0);
     } else {
-      this.setTint(200);
+      this.setColorEffect(100);
     }
   }
 }

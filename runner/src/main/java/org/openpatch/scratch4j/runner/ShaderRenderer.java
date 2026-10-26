@@ -66,7 +66,7 @@ public final class ShaderRenderer {
     Path log = out.resolve("result.txt");
     if (!Files.isRegularFile(log)) {
       Files.createDirectories(out);
-      List<String> answer = server().request(String.join("\t", arguments(request, out)));
+      List<String> answer = server(request).request(String.join("\t", arguments(request, out)));
       if (answer == null) {
         return new Result(List.of(), List.of(), List.of(), "timeout");
       }
@@ -87,7 +87,7 @@ public final class ShaderRenderer {
     List<String> args = new ArrayList<>(List.of("LIVE", String.valueOf(time),
         file.toString()));
     args.addAll(arguments(request, file.getParent()));
-    List<String> answer = server().request(String.join("\t", args));
+    List<String> answer = server(request).request(String.join("\t", args));
     if (answer == null) {
       return new Result(List.of(), List.of(), List.of(), "timeout");
     }
@@ -110,12 +110,16 @@ public final class ShaderRenderer {
     return args;
   }
 
-  /** The helper process: one per JVM and classpath, kept running between previews. */
+  /**
+   * The helper process: one per JVM, classpath and frame size, kept running between previews
+   * (it draws in the library's window, which keeps the size it opened with).
+   */
   private static final Map<String, Server> SERVERS = new java.util.concurrent.ConcurrentHashMap<>();
 
-  private Server server() throws IOException {
+  private Server server(Request request) throws IOException {
     Path program = program();
-    String key = javaExecutable + "|" + classpath + "|" + program;
+    String key = javaExecutable + "|" + classpath + "|" + program + "|" + request.width() + "x"
+        + request.height();
     return SERVERS.computeIfAbsent(key, k -> new Server(List.of(javaExecutable.toString(),
         "--enable-native-access=ALL-UNNAMED", "-Djava.awt.headless=true", "-cp",
         String.join(System.getProperty("path.separator"),
