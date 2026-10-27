@@ -155,7 +155,8 @@ jobs:
             sudo apt-get install -y xvfb libgl1-mesa-dri
             LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio"
           elif [ "$RUNNER_OS" = macOS ]; then
-            python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio.app"
+            # the macOS runners have no OpenGL: a project's window is checked on a real Mac
+            SCRATCH4J_SMOKE_NO_GL_OK=1 python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio.app"
           else
             python scripts/smoke-packaged.py "target/package/Scratch for Java Studio"
           fi
