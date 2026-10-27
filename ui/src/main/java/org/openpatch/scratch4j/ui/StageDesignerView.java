@@ -1215,8 +1215,8 @@ final class StageDesignerView extends BorderPane {
 
   private void drawSelection(GraphicsContext g, double scale) {
     StageRenderer.Look look = renderer.look(selected);
-    double dw = look.width() * scale;
-    double dh = look.height() * scale;
+    double dw = look.width() * scale * renderer.zoom(selected);
+    double dh = look.height() * scale * renderer.zoom(selected);
     double[] c = centre(selected, scale);
     g.save();
     g.translate(c[0], c[1]);
@@ -1244,7 +1244,9 @@ final class StageDesignerView extends BorderPane {
   }
 
   /** Canvas centre of the drawn box (a text's box is not centred on its position). */
-  private double[] centre(SpriteRef ref, double scale) {
+  private double[] centre(SpriteRef ref, double canvasScale) {
+    // the camera's zoom enlarges the world, not the UI
+    double scale = canvasScale * renderer.zoom(ref);
     double[] at = renderer.position(ref);
     double x = at[0];
     double y = at[1];
@@ -1266,14 +1268,14 @@ final class StageDesignerView extends BorderPane {
   // --- interaction ---------------------------------------------------------------
 
   private double[] toScratch(double canvasX, double canvasY) {
-    double scale = scale();
+    double scale = scale() * renderer.zoom();
     return new double[] {(canvasX - canvas.getWidth() / 2) / scale + renderer.cameraX(),
         (canvas.getHeight() / 2 - canvasY) / scale + renderer.cameraY()};
   }
 
   /** A canvas point in the coordinates of {@code ref} (screen coordinates for UI sprites). */
   private double[] toScratch(double canvasX, double canvasY, SpriteRef ref) {
-    double scale = scale();
+    double scale = scale() * renderer.zoom(ref);
     return new double[] {(canvasX - canvas.getWidth() / 2) / scale + renderer.cameraX(ref),
         (canvas.getHeight() / 2 - canvasY) / scale + renderer.cameraY(ref)};
   }
@@ -1294,8 +1296,8 @@ final class StageDesignerView extends BorderPane {
     }
     double scale = scale();
     StageRenderer.Look look = renderer.look(selected);
-    double dw = look.width() * scale;
-    double dh = look.height() * scale;
+    double dw = look.width() * scale * renderer.zoom(selected);
+    double dh = look.height() * scale * renderer.zoom(selected);
     double[] p = local(selected, cx, cy, scale);
     if (!look.isText()
         && Math.hypot(p[0] - (dw / 2 + ROTATE_HANDLE_GAP), p[1]) <= HANDLE_RADIUS + 3) {
@@ -1313,8 +1315,9 @@ final class StageDesignerView extends BorderPane {
       SpriteRef ref = model.sprites().get(i);
       StageRenderer.Look look = renderer.look(ref);
       double[] p = local(ref, cx, cy, scale);
-      if (Math.abs(p[0]) <= look.width() * scale / 2 + 2
-          && Math.abs(p[1]) <= look.height() * scale / 2 + 2) {
+      double s = scale * renderer.zoom(ref);
+      if (Math.abs(p[0]) <= look.width() * s / 2 + 2
+          && Math.abs(p[1]) <= look.height() * s / 2 + 2) {
         return ref;
       }
     }

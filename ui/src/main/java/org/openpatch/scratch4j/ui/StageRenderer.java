@@ -164,6 +164,19 @@ final class StageRenderer {
   private final Map<Path, Image> tilesets = new ConcurrentHashMap<>();
   private double cameraX;
   private double cameraY;
+  /** The camera's zoom as a factor (setZoom(400) -> 4): the world looks this much bigger. */
+  private double zoom = 1;
+  /** The zoom the stage's code sets, for a stage without a preview; 1 when it sets none. */
+  private double codeZoom = 1;
+  /**
+   * The tile layers the stage shows ({@code map.showLayer("Floor", Layer.BACKGROUND)}) in that
+   * order, each with whether it lies in front of the sprites; empty: the code names none.
+   */
+  private List<Map.Entry<String, Boolean>> shownLayers = List.of();
+  private static final Pattern SHOW_LAYER = Pattern.compile(
+      "\\.showLayer\\(\\s*\"([^\"]*)\"\\s*,\\s*(?:[\\w.]*\\.)?(\\w+)\\s*\\)");
+  private static final Pattern SET_ZOOM = Pattern.compile(
+      "\\.setZoom\\(\\s*(\\d+(?:\\.\\d+)?)\\s*\\)");
   private boolean showMap = true;
 
   private List<Path> mapChoices = List.of();
@@ -178,6 +191,15 @@ final class StageRenderer {
     map = null;
     cameraX = 0;
     cameraY = 0;
+    zoom = 1;
+    List<Map.Entry<String, Boolean>> layers = new java.util.ArrayList<>();
+    Matcher shown = SHOW_LAYER.matcher(stageSource);
+    while (shown.find()) {
+      layers.add(Map.entry(shown.group(1), "FOREGROUND".equals(shown.group(2))));
+    }
+    shownLayers = List.copyOf(layers);
+    Matcher zoomed = SET_ZOOM.matcher(stageSource);
+    codeZoom = zoomed.find() ? Math.max(0.01, Double.parseDouble(zoomed.group(1)) / 100) : 1;
     mapChoices = org.openpatch.scratch4j.core.tiled.MapReferences.forStage(project.root(),
         stageSource);
     if (chosenMap == null || !mapChoices.contains(chosenMap)) {
@@ -374,8 +396,9 @@ final class StageRenderer {
 
   /** The map object under a canvas point (map pixels from the camera), or null. */
   org.openpatch.scratch4j.core.tiled.TmxDocument.MapObject mapObjectAt(double canvasX,
-      double canvasY, double w, double h, double scale) {
+      double canvasY, double w, double h, double canvasScale) {
     if (map == null || !showMap || !showMapObjects) return null;
+    double scale = canvasScale * zoom;
     double mx = (canvasX - w / 2) / scale + cameraX;
     double my = (canvasY - h / 2) / scale - cameraY;
     for (int i = mapObjects.size() - 1; i >= 0; i--) {
@@ -426,13 +449,26 @@ final class StageRenderer {
     if (preview != null) {
       cameraX = preview.cameraX();
       cameraY = preview.cameraY();
+      zoom = preview.zoom() > 0 ? preview.zoom() / 100 : 1;
     } else if (map != null) {
-      cameraX = stageWidth / 2;
-      cameraY = -stageHeight / 2;
+      zoom = codeZoom;
+      cameraX = stageWidth / 2 / zoom;
+      cameraY = -stageHeight / 2 / zoom;
     } else {
       cameraX = 0;
       cameraY = 0;
+      zoom = 1;
     }
+  }
+
+  /** The camera's zoom a sprite is seen through: none for UI sprites (they ignore the camera). */
+  double zoom(SpriteRef ref) {
+    return isScreenFixed(ref.type()) ? 1 : zoom;
+  }
+
+  /** The camera's zoom as a factor (1: none). */
+  double zoom() {
+    return zoom;
   }
 
   /**
@@ -520,17 +556,31 @@ final class StageRenderer {
     return cameraY;
   }
 
-  /** Tile (0,0) sits at the world origin; the map extends right and down (as TiledMap stamps it). */
-  private void drawMap(GraphicsContext g, double w, double h, double scale) {
+  /**
+   * Tile (0,0) sits at the world origin; the map extends right and down (as TiledMap stamps it).
+   * Draws the layers the stage shows behind the sprites ({@code front} false) or in front of them,
+   * as the game does; every visible layer behind them when the code names none.
+   */
+  private void drawMap(GraphicsContext g, double w, double h, double scale, boolean front) {
     var m = map;
     if (m == null || !showMap) {
       return;
     }
     g.setImageSmoothing(false);
-    for (var layer : m.layers()) {
-      if (!layer.visible()) {
-        continue;
+    List<org.openpatch.scratch4j.core.assets.TiledMapReader.Layer> layers =
+        new java.util.ArrayList<>();
+    if (shownLayers.isEmpty()) {
+      if (!front) {
+        m.layers().stream().filter(l -> l.visible()).forEach(layers::add);
       }
+    } else {
+      for (var shown : shownLayers) {
+        if (shown.getValue() != front) continue;
+        m.layers().stream().filter(l -> l.name().equals(shown.getKey())).findFirst()
+            .ifPresent(layers::add);
+      }
+    }
+    for (var layer : layers) {
       g.setGlobalAlpha(layer.opacity());
       for (int i = 0; i < layer.gids().length; i++) {
         long gid = layer.gids()[i];
@@ -847,7 +897,9 @@ final class StageRenderer {
   }
 
   /** The code sprite under a canvas point, or null. */
-  CodeSprite codeSpriteAt(double canvasX, double canvasY, double w, double h, double scale) {
+  CodeSprite codeSpriteAt(double canvasX, double canvasY, double w, double h,
+      double canvasScale) {
+    double scale = canvasScale * zoom;
     for (int i = codeSprites.size() - 1; i >= 0; i--) {
       var sprite = codeSprites.get(i);
       double cx = w / 2 + (sprite.x() - cameraX) * scale;
@@ -882,7 +934,7 @@ final class StageRenderer {
         g.setImageSmoothing(true);
         g.drawImage(backdrop, 0, 0, w, h);
       }
-      drawMap(g, w, h, scale);
+      drawMap(g, w, h, scale * zoom, false);
     }
     if (grid) {
       g.setLineWidth(1);
@@ -899,21 +951,22 @@ final class StageRenderer {
       line(g, w / 2, 0, w / 2, h);
       line(g, 0, h / 2, w, h / 2);
     }
-    // sprites live in the world: the camera moves the view over them
-    g.save();
-    g.translate(-cameraX * scale, cameraY * scale);
+    // sprites live in the world: the camera moves and zooms the view over them;
+    // a UI sprite (setUI(true), UISprite) stays where it is on the screen
     for (SpriteRef ref : model.sprites()) {
       if (!ref.hasPosition() && !ref.isAdded() || drawnByPreview.contains(ref.name())) {
         continue;
       }
-      // a UI sprite (setUI(true), UISprite) stays where it is on the screen
+      double s = scale * zoom(ref);
       g.save();
-      g.translate((cameraX - cameraX(ref)) * scale, -(cameraY - cameraY(ref)) * scale);
-      drawSprite(g, ref, look(ref), w, h, scale);
+      g.translate(-cameraX(ref) * s, cameraY(ref) * s);
+      drawSprite(g, ref, look(ref), w, h, s);
       g.restore();
     }
-    g.restore();
-    drawMapObjects(g, w, h, scale);
+    if (previewImage == null) {
+      drawMap(g, w, h, scale * zoom, true);
+    }
+    drawMapObjects(g, w, h, scale * zoom);
   }
 
   private static void line(GraphicsContext g, double x1, double y1, double x2, double y2) {
@@ -1018,14 +1071,7 @@ final class StageRenderer {
   }
 
   /** Designer preview of an explicit polygon hitbox, or costume bounds otherwise. */
-  void drawHitboxes(GraphicsContext g, StageModel model, double scale) {
-    g.save();
-    g.translate(-cameraX * scale, cameraY * scale);
-    drawHitboxesInWorld(g, model, scale);
-    g.restore();
-  }
-
-  private void drawHitboxesInWorld(GraphicsContext g, StageModel model, double scale) {
+  void drawHitboxes(GraphicsContext g, StageModel model, double canvasScale) {
     g.setStroke(Color.web("#e8a317"));
     g.setLineWidth(2);
     g.setLineDashes(5, 3);
@@ -1033,16 +1079,17 @@ final class StageRenderer {
       if (ref.isText()) {
         continue;
       }
+      double scale = canvasScale * zoom(ref);
       g.save();
-      g.translate((cameraX - cameraX(ref)) * scale, -(cameraY - cameraY(ref)) * scale);
+      g.translate(-cameraX(ref) * scale, cameraY(ref) * scale);
       Look look = look(ref);
       ClassDefaults defaults = defaultsOf(ref.type());
       double[] at = position(ref);
       double x = at[0];
       double y = at[1];
       g.save();
-      g.translate(model.width() * scale / 2 + x * scale,
-          model.height() * scale / 2 - y * scale);
+      g.translate(model.width() * canvasScale / 2 + x * scale,
+          model.height() * canvasScale / 2 - y * scale);
       g.rotate(look.rotationAngle());
       if (look.mirrored()) {
         g.scale(-1, 1);
