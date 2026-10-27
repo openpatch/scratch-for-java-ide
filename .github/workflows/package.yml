@@ -148,15 +148,16 @@ jobs:
         if: runner.os == 'Windows'
         uses: ./.github/actions/setup-windows-opengl
 
+      # not on macOS: its runners have no OpenGL for the projects (checked on a real Mac)
       - name: Start packaged Studio and run offline projects
+        if: runner.os != 'macOS'
         shell: bash
         run: |
           if [ "$RUNNER_OS" = Linux ]; then
             sudo apt-get install -y xvfb libgl1-mesa-dri
             LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio"
           elif [ "$RUNNER_OS" = macOS ]; then
-            # the macOS runners have no OpenGL: a project's window is checked on a real Mac
-            SCRATCH4J_SMOKE_NO_GL_OK=1 python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio.app"
+            python3 scripts/smoke-packaged.py "target/package/Scratch for Java Studio.app"
           else
             python scripts/smoke-packaged.py "target/package/Scratch for Java Studio"
           fi

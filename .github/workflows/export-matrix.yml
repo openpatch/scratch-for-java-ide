@@ -55,14 +55,9 @@ jobs:
             archive: cat-windows-x64.zip
             folder: cat-windows-x64
             start: run.bat
-          - os: macos-15
-            archive: cat-mac-aarch64.tar.gz
-            folder: cat-mac-aarch64
-            start: ./run.command
-          - os: macos-15-intel
-            archive: cat-mac-x64.tar.gz
-            folder: cat-mac-x64
-            start: ./run.command
+          # no macOS: Scratch for Java 7 needs OpenGL 4.1 there, which the macOS runners
+          # lack (the app stops at an error box); the macOS exports are built above and
+          # run on a real Mac
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -96,13 +91,5 @@ jobs:
           elif [ "$RUNNER_OS" = Windows ]; then
             timeout 120 cmd //c ${{ matrix.start }}
           else
-            # the macOS runners have no OpenGL: an app that gets that far (bundle, Java,
-            # natives, GLFW) but cannot open its window is checked on a real Mac instead
-            status=0
-            perl -e 'alarm 120; exec @ARGV' ${{ matrix.start }} 2>&1 | tee run.log || status=$?
-            if [ "$status" -ne 0 ] && grep -q "no OpenGL" run.log; then
-              echo "::warning::${{ matrix.folder }}: no OpenGL on this runner, the window was not checked"
-            else
-              exit "$status"
-            fi
+            perl -e 'alarm 120; exec @ARGV' ${{ matrix.start }}
           fi

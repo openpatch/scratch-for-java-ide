@@ -20,10 +20,6 @@ final class PackagedSmoke {
         Files.createDirectories(output);
         Path bundled = StudioApp.bundledLibraryDir();
         Path java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java");
-        // CI's macOS runners have no OpenGL: there a project that cannot open its window is
-        // inconclusive, not a failure (a real Mac decides); everything else is still checked
-        boolean noGlOk = "1".equals(System.getenv("SCRATCH4J_SMOKE_NO_GL_OK"));
-        boolean rendered = true;
         for (LibraryFlavour flavour : LibraryFlavour.values()) {
           String suffix = flavour == LibraryFlavour.NRW ? "-nrw" : "";
           Path jar = bundled.resolve("scratch-" + LibraryJarSource.SCRATCH_VERSION + suffix + "-all.jar");
@@ -50,32 +46,21 @@ final class PackagedSmoke {
           int code;
           try { code = handle.exitFuture().get(40, TimeUnit.SECONDS); }
           catch (Exception e) {
-            if (noGlOk && (errors + " " + outputLines).contains("no OpenGL")) {
-              handle.stop();
-              code = -1;
-            } else {
-              Path jcmd = java.resolveSibling(isWindows() ? "jcmd.exe" : "jcmd");
-              try {
-                if (Files.isRegularFile(jcmd)) {
-                  Process dump = new ProcessBuilder(jcmd.toString(), Long.toString(handle.pid()),
-                      "Thread.print").inheritIO().start();
-                  if (!dump.waitFor(5, TimeUnit.SECONDS)) dump.destroyForcibly();
-                }
-              } catch (Exception diagnosticError) {
-                System.err.println("Thread diagnostic failed: " + diagnosticError);
+            Path jcmd = java.resolveSibling(isWindows() ? "jcmd.exe" : "jcmd");
+            try {
+              if (Files.isRegularFile(jcmd)) {
+                Process dump = new ProcessBuilder(jcmd.toString(), Long.toString(handle.pid()),
+                    "Thread.print").inheritIO().start();
+                if (!dump.waitFor(5, TimeUnit.SECONDS)) dump.destroyForcibly();
               }
-              handle.stop();
-              throw new IllegalStateException(name + " timed out; frames=" + frames.get()
-                  + "; stdout=" + outputLines + "; stderr=" + errors, e);
+            } catch (Exception diagnosticError) {
+              System.err.println("Thread diagnostic failed: " + diagnosticError);
             }
+            handle.stop();
+            throw new IllegalStateException(name + " timed out; frames=" + frames.get()
+                + "; stdout=" + outputLines + "; stderr=" + errors, e);
           }
-          boolean noGl = (errors + " " + outputLines).contains("no OpenGL");
-          if (noGlOk && noGl) {
-            System.err.println("packaged smoke: " + name + " could not open an OpenGL window here; rendering not checked");
-            rendered = false;
-          } else if (code != 0 || frames.get() <= 0) {
-            throw new IllegalStateException(name + " did not draw: " + code + " " + errors);
-          }
+          if (code != 0 || frames.get() <= 0) throw new IllegalStateException(name + " did not draw: " + code + " " + errors);
           Path source = project.root().resolve("MyStage.java");
           String saved = Files.readString(source);
           AtomicFiles.writeString(source, saved + "\n// saved in packaged Studio\n");
@@ -100,9 +85,7 @@ final class PackagedSmoke {
           } finally { checks.stop(); }
         }
         Files.writeString(output.resolve("report.txt"),
-            "PASS: native Studio window; bundled Java/compiler/JUnit; offline standard/NRW project creation and teaching checks; "
-                + (rendered ? "rendered first projects" : "first projects NOT rendered (no OpenGL on this machine)")
-                + "; save/reopen and interrupted temporary write recovery\n");
+            "PASS: native Studio window; bundled Java/compiler/JUnit; offline standard/NRW project creation and teaching checks; rendered first projects; save/reopen and interrupted temporary write recovery\n");
         javafx.application.Platform.runLater(() -> { stage.close(); javafx.application.Platform.exit(); });
       } catch (Throwable error) {
         error.printStackTrace();
