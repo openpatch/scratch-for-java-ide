@@ -67,6 +67,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private java.util.function.Predicate<Path> mayShowFrame = frame -> true;
   private java.util.function.BiConsumer<Path, Path> onFrameShown = (from, to) -> { };
   private Runnable onFramesChanged = () -> { };
+  /** The animation preview of a sprite sheet, made when first shown; null until then. */
+  private SheetAnimationPanel sheetPanel;
+  private ToggleButton sheetToggle;
+  private final VBox bottomBox = new VBox();
   private WritableImage image;
   /** One view per layer, bottom first; the overlay sits on top. */
   // layers are painted on a canvas: an ImageView of a WritableImage smooths
@@ -224,10 +228,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     FrameSequence sequence = project == null ? null : sequenceOf(project.root(), file);
     if (sequence != null) {
       frameStrip = new FrameStrip(sequence, frameHost());
-      setBottom(new VBox(frameStrip, bottom));
-    } else {
-      setBottom(bottom);
+      bottomBox.getChildren().add(frameStrip);
     }
+    bottomBox.getChildren().add(bottom);
+    setBottom(bottomBox);
     updateOnionToggle();
     // the usual shortcuts anywhere in the editor (Ctrl is Cmd on macOS)
     addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
@@ -404,6 +408,11 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     Path previous = file;
     file = frame;
     fileName.set(frame.getFileName().toString());
+    if (sheetPanel != null) {
+      bottomBox.getChildren().remove(sheetPanel);
+      sheetPanel = null;
+      sheetToggle.setSelected(false);
+    }
     selection = null;
     floating = null;
     selectDrag = SelectDrag.NONE;
@@ -435,6 +444,73 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private void updateFrameThumb() {
     if (frameStrip != null) {
       frameStrip.updateShown();
+    }
+    if (sheetPanel != null && sheetPanel.isVisible()) {
+      sheetPanel.pictureChanged();
+    }
+  }
+
+  /** Shows or hides the sprite sheet's animation preview under the canvas. */
+  void showSheetAnimation(boolean show) {
+    sheetToggle.setSelected(show);
+    if (show && sheetPanel == null) {
+      List<SheetAnimationPanel.Animation> known;
+      try {
+        known = SheetAnimationPanel.known(project.javaSources(), reference());
+      } catch (IOException e) {
+        known = List.of();
+      }
+      sheetPanel = new SheetAnimationPanel(reference(), () -> layers.size() == 1 ? image
+          : flattened(), known, this::redrawOverlay);
+      bottomBox.getChildren().add(bottomBox.getChildren().size() - 1, sheetPanel);
+    }
+    if (sheetPanel != null) {
+      sheetPanel.setVisible(show);
+      sheetPanel.setManaged(show);
+    }
+    redrawOverlay();
+  }
+
+  SheetAnimationPanel sheetPanel() {
+    return sheetPanel;
+  }
+
+  /** The picture's path as code names it. */
+  private String reference() {
+    return project.root().toAbsolutePath().normalize()
+        .relativize(file.toAbsolutePath().normalize()).toString().replace('\\', '/');
+  }
+
+  /** The sheet's tile grid, and the animation's tiles numbered in their order. */
+  private void drawSheetGrid(javafx.scene.canvas.GraphicsContext g) {
+    int w = sheetPanel.tileWidth();
+    int h = sheetPanel.tileHeight();
+    int columns = SheetAnimationPanel.columns((int) image.getWidth(), w);
+    int rows = (int) image.getHeight() / Math.max(1, h);
+    g.setStroke(Color.rgb(133, 92, 214, 0.55));
+    g.setLineWidth(1);
+    for (int x = 0; x <= columns; x++) {
+      g.strokeLine(x * w * zoom + 0.5, 0, x * w * zoom + 0.5, rows * h * zoom);
+    }
+    for (int y = 0; y <= rows; y++) {
+      g.strokeLine(0, y * h * zoom + 0.5, columns * w * zoom, y * h * zoom + 0.5);
+    }
+    List<Integer> frames = sheetPanel.frames();
+    g.setLineWidth(2);
+    g.setFont(javafx.scene.text.Font.font(11));
+    for (int i = 0; i < frames.size(); i++) {
+      int tile = frames.get(i);
+      if (columns == 0 || tile >= columns * rows) {
+        continue;
+      }
+      double x = tile % columns * w * zoom;
+      double y = tile / columns * h * zoom;
+      g.setStroke(Color.rgb(133, 92, 214));
+      g.strokeRect(x + 1, y + 1, w * zoom - 2, h * zoom - 2);
+      g.setFill(Color.rgb(133, 92, 214));
+      g.fillRect(x + 1, y + 1, 18, 14);
+      g.setFill(Color.WHITE);
+      g.fillText(Integer.toString(i + 1), x + 4, y + 12);
     }
   }
 
@@ -950,6 +1026,12 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       redrawOverlay();
     });
     Button slice = Icons.button("fth-grid", I18n.t("slicer.title"), this::sliceSheet);
+    sheetToggle = new ToggleButton(null, Icons.of("mdi2f-filmstrip"));
+    sheetToggle.getStyleClass().addAll("button-icon", "flat");
+    sheetToggle.setTooltip(new javafx.scene.control.Tooltip(I18n.t("sheetanim.tooltip")));
+    sheetToggle.setVisible(project != null);
+    sheetToggle.setManaged(project != null);
+    sheetToggle.setOnAction(e -> showSheetAnimation(sheetToggle.isSelected()));
     Region spacer = new Region();
     HBox.setHgrow(spacer, Priority.ALWAYS);
     HBox bar = new HBox(4,
@@ -969,7 +1051,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         zoomLabel,
         Icons.button("fth-zoom-in", I18n.t("designer.zoomin"), () -> setZoom(zoom * 1.5)),
         Icons.button("fth-maximize", I18n.t("designer.fit"), this::fitZoom),
-        pixelGrid, smoothing, facesRight, onion, slice,
+        pixelGrid, smoothing, facesRight, onion, slice, sheetToggle,
         spacer, cropButton, applyToSprite, save);
     cropButton.setText(I18n.t("imageeditor.crop"));
     cropButton.setGraphic(Icons.of("fth-crop"));
@@ -1479,6 +1561,9 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       drawOnion(g, onionAfter);
       g.setGlobalAlpha(1);
     }
+    if (sheetPanel != null && sheetPanel.isVisible()) {
+      drawSheetGrid(g);
+    }
     if (showPixelGrid && zoom >= 6 && image.getWidth() <= 1024
         && image.getHeight() <= 1024) {
       g.setStroke(Color.rgb(35, 45, 60, 0.28));
@@ -1701,6 +1786,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     applyZoom();
     redrawOverlay();
     updateStatus();
+    updateFrameThumb();
   }
 
   private static WritableImage copy(WritableImage source) {
@@ -1748,7 +1834,6 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     dirty.set(true);
     redoStack.push(snapshot());
     restore(previous);
-    updateFrameThumb();
   }
 
   private void redo() {
@@ -1759,7 +1844,6 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     dirty.set(true);
     undoStack.push(snapshot());
     restore(next);
-    updateFrameThumb();
   }
 
   // --- layers ----------------------------------------------------------------

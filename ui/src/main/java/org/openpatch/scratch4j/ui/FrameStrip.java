@@ -32,8 +32,8 @@ import java.util.List;
  * The frames of a numbered sequence ({@code walk1.png}, {@code walk2.png},
  * ...) under the image editor's canvas: a thumbnail per frame to paint it
  * (the frame shown is saved first), buttons to add, duplicate, delete and
- * move frames, a looping preview, and how many frames before and after the
- * onion skin shows.
+ * move frames and to copy the {@code addAnimation} line for them, a looping
+ * preview, and how many frames before and after the onion skin shows.
  */
 final class FrameStrip extends HBox {
 
@@ -69,6 +69,8 @@ final class FrameStrip extends HBox {
   private final Spinner<Integer> before = new Spinner<>(0, 3, 1);
   private final Spinner<Integer> after = new Spinner<>(0, 3, 1);
   private final Label message = new Label();
+  private final javafx.scene.control.Button copyButton =
+      Icons.labeled("fth-clipboard", I18n.t("sheetanim.copy"), () -> { });
   private final Timeline player = new Timeline();
   private List<Path> frames = List.of();
   private final List<Image> images = new ArrayList<>();
@@ -95,13 +97,16 @@ final class FrameStrip extends HBox {
         Icons.button("fth-copy", I18n.t("frames.duplicate"), this::duplicate),
         Icons.button("fth-trash-2", I18n.t("frames.delete"), this::delete),
         Icons.button("fth-arrow-left", I18n.t("frames.left"), () -> move(-1)),
-        Icons.button("fth-arrow-right", I18n.t("frames.right"), () -> move(1)));
+        Icons.button("fth-arrow-right", I18n.t("frames.right"), () -> move(1)),
+        copyButton);
     actions.setAlignment(Pos.CENTER_LEFT);
+    copyButton.setOnAction(e -> copyCode());
 
     play.getStyleClass().addAll("button-icon", "flat");
     play.setTooltip(new Tooltip(I18n.t("frames.play")));
     play.setOnAction(e -> restartPlayer());
     fps.setPrefWidth(70);
+    fps.setMinWidth(70);
     fps.setTooltip(new Tooltip(I18n.t("frames.fps")));
     fps.valueProperty().addListener((o, a, b) -> restartPlayer());
     preview.setFitWidth(THUMB + 16);
@@ -173,6 +178,7 @@ final class FrameStrip extends HBox {
     for (int i = 0; i < frames.size(); i++) {
       thumbs.getChildren().add(thumb(i));
     }
+    copyButton.setTooltip(new Tooltip(code()));
     previewFrame = Math.max(0, current());
     preview.setImage(images.isEmpty() ? null : images.get(previewFrame));
     restartPlayer();
@@ -295,6 +301,25 @@ final class FrameStrip extends HBox {
     } catch (IOException | RuntimeException e) {
       message.setText(I18n.t("frames.error", e.getMessage()));
     }
+  }
+
+  /** {@code this.addAnimation("walk", "assets/images/walk%d.png", 4);} for these frames. */
+  String code() {
+    return code(sequence.pattern(), frames.size());
+  }
+
+  static String code(String pattern, int frames) {
+    String file = pattern.substring(pattern.lastIndexOf('/') + 1);
+    String name = file.substring(0, file.indexOf("%d")).replaceAll("[^A-Za-z0-9_]", "");
+    return "this.addAnimation(\"" + (name.isEmpty() ? "animation" : name) + "\", \""
+        + pattern + "\", " + frames + ");";
+  }
+
+  void copyCode() {
+    javafx.scene.input.ClipboardContent content = new javafx.scene.input.ClipboardContent();
+    content.putString(code());
+    javafx.scene.input.Clipboard.getSystemClipboard().setContent(content);
+    message.setText(I18n.t("sheetanim.copied"));
   }
 
   private void restartPlayer() {

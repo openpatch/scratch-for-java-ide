@@ -2,7 +2,6 @@ package org.openpatch.scratch4j.ui;
 
 import javafx.scene.Scene;
 import javafx.scene.control.Tab;
-import javafx.scene.control.TabPane;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 import org.junit.jupiter.api.Test;

@@ -305,30 +305,6 @@ class UiSmokeIT {
         assertThat(SheetSlicerDialog.guessTile(128, 32)).containsExactly(32, 32);
         assertThat(SheetSlicerDialog.guessTile(96, 64)).containsExactly(32, 32);
 
-        // animation editor: frames in assets/images, apply writes addAnimation + interval
-        Path hero = tmp.resolve("uismoke/Hero.java");
-        Files.writeString(hero, """
-            import org.openpatch.scratch.Sprite;
-
-            public class Hero extends Sprite {
-              public Hero() {
-                // begin sprite editor
-                // end sprite editor
-              }
-            }
-            """);
-        AtomicReference<Path> written = new AtomicReference<>();
-        AnimationEditorView animation = new AnimationEditorView(project, hero, "walk",
-            "assets/images/walk%d.png", f -> { }, written::set);
-        animation.addBlank();
-        animation.addBlank();
-        animation.apply();
-        assertThat(written.get()).isEqualTo(hero);
-        assertThat(Files.readString(hero))
-            .contains("this.addAnimation(\"walk\", \"assets/images/walk%d.png\", 2);")
-            .contains("this.setAnimationInterval(0.12);");
-        animation.stop();
-
         // map and font previews from the bundled demos
         Path tiled = org.openpatch.scratch4j.core.project.BundledTemplates.create("demo-tiled",
             tmp, "tiled", null);

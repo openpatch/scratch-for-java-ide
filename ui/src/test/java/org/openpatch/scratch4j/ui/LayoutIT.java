@@ -65,6 +65,13 @@ class LayoutIT {
     mouse(node, javafx.scene.input.MouseEvent.MOUSE_RELEASED, x2, y2, false);
   }
 
+  /** A primary-button click in the middle of a node. */
+  static void click(Node node) {
+    var bounds = node.getLayoutBounds();
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_CLICKED, bounds.getCenterX(),
+        bounds.getCenterY(), false);
+  }
+
   private static void mouse(Node node,
       javafx.event.EventType<javafx.scene.input.MouseEvent> type, double x, double y,
       boolean down) {

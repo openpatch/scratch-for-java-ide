@@ -1682,14 +1682,31 @@ public class StudioApp extends javafx.application.Application {
     editor.openAt(stageFile, line);
   }
 
-  /** The animation editor for one file-pattern animation of an AnimatedSprite class. */
+  /**
+   * A file-pattern animation opens in the image editor on its first frame:
+   * the frame strip paints, plays and copies the {@code addAnimation} line.
+   * A new animation gets an empty first frame.
+   */
   private void openAnimationEditor(Path spriteFile, String name, String pattern) {
     ScratchProject p = project.get();
     if (p == null) return;
-    String className = spriteFile.getFileName().toString().replaceFirst("\\.java$", "");
-    editor.openTool("animation:" + spriteFile + ":" + name, className + " \u00b7 " + name,
-        "fth-film", () -> new AnimationEditorView(p, spriteFile, name, pattern,
-            this::openByType, this::afterSpriteClassWritten));
+    try {
+      org.openpatch.scratch4j.core.assets.FrameSequence frames =
+          new org.openpatch.scratch4j.core.assets.FrameSequence(p.root(), pattern);
+      Path first;
+      if (!frames.frames().isEmpty()) {
+        first = frames.frame(1);
+      } else if (Files.isRegularFile(frames.frame(0))) {
+        first = frames.frame(0); // counts from 0 (addAnimation(name, pattern, 0, n))
+      } else {
+        first = frames.addBlank(64, 64);
+        fileTree.reload();
+      }
+      openByType(first);
+      setStatus(I18n.t("animation.opened", name));
+    } catch (IOException | IllegalArgumentException e) {
+      alert(I18n.t("error.openfile", e.getMessage()), e);
+    }
   }
 
   /** Breakpoints read on the FX thread before a debug run starts. */
@@ -2996,7 +3013,6 @@ public class StudioApp extends javafx.application.Application {
     if (tool instanceof DiagramView diagrams) diagrams.refresh();
     else if (tool instanceof StageDesignerView designer) designer.reload();
     else if (tool instanceof SpriteAssetsView assets) assets.reload();
-    else if (tool instanceof AnimationEditorView animation) animation.reload();
   }
 
   /** The stage designers on screen now (the others catch up when their tab is shown). */
