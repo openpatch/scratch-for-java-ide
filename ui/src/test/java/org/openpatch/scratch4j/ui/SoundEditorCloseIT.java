@@ -75,4 +75,39 @@ class SoundEditorCloseIT {
       LayoutIT.onFx(() -> window.get().hide());
     }
   }
+
+  @Test
+  void spacePausesAndResumesWhereItWasAndHomeGoesBackToTheStart() throws Exception {
+    float rate = 22050;
+    Path wav = tmp.resolve("beep.wav");
+    SoundIO.writeWav(new SoundClip(new float[][] {new float[(int) (rate * 5)]}, rate), wav);
+    LayoutIT.startFx();
+    AtomicReference<SoundEditorView> view = new AtomicReference<>();
+    AtomicBoolean playing = new AtomicBoolean();
+    LayoutIT.onFx(() -> {
+      try {
+        view.set(new SoundEditorView(tmp, wav));
+      } catch (java.io.IOException e) {
+        throw new java.io.UncheckedIOException(e);
+      }
+      new Scene(view.get(), 700, 400);
+      view.get().shortcut(KeyCode.SPACE, false, false);
+      playing.set(view.get().playing());
+    });
+    try {
+      Assumptions.assumeTrue(playing.get(), "no audio device");
+      Thread.sleep(400);
+      LayoutIT.onFx(() -> {
+        view.get().shortcut(KeyCode.SPACE, false, false);
+        assertThat(view.get().playing()).as("paused").isFalse();
+        assertThat(view.get().pausedAt()).as("paused partway").isPositive();
+        view.get().shortcut(KeyCode.HOME, false, false);
+        assertThat(view.get().pausedAt()).as("back at the start").isEqualTo(-1);
+        view.get().shortcut(KeyCode.SPACE, false, false);
+        assertThat(view.get().playing()).as("playing again").isTrue();
+      });
+    } finally {
+      LayoutIT.onFx(() -> view.get().shortcut(KeyCode.ESCAPE, false, false));
+    }
+  }
 }

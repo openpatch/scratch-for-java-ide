@@ -98,9 +98,12 @@ final class UsagesDialog {
   }
 
   /** A deletion preview, with a warning and the references that would break when still used. */
-  static Choice forDelete(Window owner, Path root, Path path, List<FileUsages.Usage> usages) {
+  static Choice forDelete(Window owner, Path root, List<Path> paths,
+      List<FileUsages.Usage> usages) {
     boolean used = !usages.isEmpty();
-    String what = path.getFileName().toString();
+    boolean many = paths.size() > 1;
+    String what = many ? I18n.t("tree.items", paths.size())
+        : paths.getFirst().getFileName().toString();
     ButtonType delete = new ButtonType(I18n.t(used ? "usages.delete.anyway" : "usages.delete.do"),
         ButtonBar.ButtonData.OTHER);
     ButtonType show = new ButtonType(I18n.t("usages.show"), ButtonBar.ButtonData.OTHER);
@@ -108,13 +111,15 @@ final class UsagesDialog {
     Alert alert = new Alert(used ? Alert.AlertType.WARNING : Alert.AlertType.CONFIRMATION,
         "", used ? new ButtonType[] {delete, show, cancel} : new ButtonType[] {delete, cancel});
     alert.setTitle(I18n.t("usages.delete.title"));
-    alert.setHeaderText(I18n.t(used ? "usages.delete.header" : "usages.delete.confirm",
-        what, usages.size()));
-    Label file = new Label(shown(root, path));
+    alert.setHeaderText(I18n.t((used ? "usages.delete.header" : "usages.delete.confirm")
+        + (many ? ".many" : ""), what, usages.size()));
+    Label file = new Label(String.join("\n", paths.stream().map(path -> shown(root, path))
+        .toList()));
     file.getStyleClass().add("search-line");
     file.setWrapText(true);
     file.setMinHeight(Region.USE_PREF_SIZE);
-    Label text = new Label(I18n.t(used ? "usages.delete.summary" : "usages.delete.unused"));
+    Label text = new Label(I18n.t((used ? "usages.delete.summary" : "usages.delete.unused")
+        + (many ? ".many" : "")));
     text.setWrapText(true);
     text.setMinHeight(Region.USE_PREF_SIZE);
     VBox content = new VBox(10, file, text);

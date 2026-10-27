@@ -181,7 +181,10 @@ public final class Completions {
       List<CompilationUnitTree> trees = new ArrayList<>();
       task.parse().forEach(trees::add);
       try {
-        task.analyze();
+        // classes and members only: the scope lookup below attributes just the
+        // method around the caret, not every method body of the project
+        // (an element lookup enters the parsed trees; JavacTask has no public enter())
+        task.getElements().getTypeElement("java.lang.Object");
       } catch (RuntimeException ignored) {
         // best effort
       }

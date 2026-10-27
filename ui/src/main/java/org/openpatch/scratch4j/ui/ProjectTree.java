@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -57,5 +58,22 @@ final class ProjectTree {
       return null;
     }
     return item;
+  }
+
+  /**
+   * The index of the first name from {@code start} on (wrapping around) that
+   * starts with {@code query}, ignoring case, else of the first that contains
+   * it; -1 when none does.
+   */
+  static int match(List<String> names, int start, String query) {
+    String q = query.toLowerCase(java.util.Locale.ROOT);
+    for (int contains = 0; contains < 2; contains++) {
+      for (int i = 0; i < names.size(); i++) {
+        int at = Math.floorMod(start + i, names.size());
+        String name = names.get(at).toLowerCase(java.util.Locale.ROOT);
+        if (contains == 0 ? name.startsWith(q) : name.contains(q)) return at;
+      }
+    }
+    return -1;
   }
 }

@@ -65,13 +65,61 @@ class SoundPlayerTest {
     assertThat(written.get()).hasSize(4);
   }
 
+  @Test
+  void positionFollowsWhatTheDeviceHasPlayed() throws Exception {
+    AtomicInteger played = new AtomicInteger();
+    CountDownLatch writing = new CountDownLatch(1);
+    SourceDataLine line = fakeLine((bytes, offset, length) -> {
+      writing.countDown();
+      Thread.sleep(5);
+      return length;
+    }, played::get);
+    SoundPlayer player = new SoundPlayer(format -> line);
+    SoundClip clip = new SoundClip(new float[][] {new float[10]}, 44100);
+    assertThat(player.position()).isEqualTo(-1);
+
+    player.play(clip, new SoundEffects.Selection(2, 5), true, null);
+    assertThat(writing.await(2, TimeUnit.SECONDS)).isTrue();
+    assertThat(player.position()).isEqualTo(2);
+    played.set(6); // the loop of four samples went round once and two more
+    assertThat(player.position()).isEqualTo(4);
+    player.stop();
+    assertThat(player.position()).isEqualTo(-1);
+  }
+
+  @Test
+  void resumesFromAGivenSample() throws Exception {
+    CountDownLatch completed = new CountDownLatch(1);
+    AtomicReference<byte[]> written = new AtomicReference<>();
+    SourceDataLine line = fakeLine((bytes, offset, length) -> {
+      written.set(Arrays.copyOfRange(bytes, offset, offset + length));
+      return length;
+    }, () -> 0);
+    SoundPlayer player = new SoundPlayer(format -> line);
+    SoundClip clip = new SoundClip(new float[][] {{0, 0, 0.5f, -0.5f}}, 44100);
+
+    assertThat(player.play(clip, null, false, 2, completed::countDown)).isTrue();
+    assertThat(completed.await(2, TimeUnit.SECONDS)).isTrue();
+    // only samples 2 and 3: 0.5, -0.5
+    assertThat(written.get()).hasSize(4);
+    assertThat(written.get()[1] & 0xff).isEqualTo(64);
+  }
+
   private interface Writer {
     int write(byte[] bytes, int offset, int length) throws InterruptedException;
   }
 
   private static SourceDataLine fakeLine(Writer writer) {
+    return fakeLine(writer, () -> 0);
+  }
+
+  private static SourceDataLine fakeLine(Writer writer,
+      java.util.function.IntSupplier framePosition) {
     return (SourceDataLine) Proxy.newProxyInstance(SoundPlayerTest.class.getClassLoader(),
         new Class<?>[] {SourceDataLine.class}, (proxy, method, args) -> {
+          if (method.getName().equals("getLongFramePosition")) {
+            return (long) framePosition.getAsInt();
+          }
           if (method.getName().equals("write")) {
             return writer.write((byte[]) args[0], (int) args[1], (int) args[2]);
           }

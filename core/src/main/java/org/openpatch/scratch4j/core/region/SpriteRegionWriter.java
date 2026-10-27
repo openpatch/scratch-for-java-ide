@@ -39,20 +39,30 @@ public final class SpriteRegionWriter {
     return replaceOwned(source, ROTATION_CENTER, null);
   }
 
-  /** Writes (or replaces) the hitbox line: {@code this.setHitbox(x1, y1, x2, y2, ...);}. */
+  /**
+   * Writes (or replaces) the hitbox line as Scratch for Java 7's shape:
+   * {@code this.setHitbox(new Polygon(new double[] {x1, x2, ...}, new double[] {y1, y2, ...}));},
+   * importing {@code Polygon}. {@code points} are x/y pairs.
+   */
   public static String setHitbox(String source, double... points) {
     source = DesignerRegions.ensureSprite(source);
     if (points.length < 6 || points.length % 2 != 0) {
       throw new IllegalArgumentException("a hitbox needs at least three x/y pairs");
     }
-    StringBuilder sb = new StringBuilder("this.setHitbox(");
-    for (int i = 0; i < points.length; i++) {
+    StringBuilder xs = new StringBuilder();
+    StringBuilder ys = new StringBuilder();
+    for (int i = 0; i < points.length; i += 2) {
       if (i > 0) {
-        sb.append(", ");
+        xs.append(", ");
+        ys.append(", ");
       }
-      sb.append(RegionStatements.number(points[i]));
+      xs.append(RegionStatements.number(points[i]));
+      ys.append(RegionStatements.number(points[i + 1]));
     }
-    return replaceOwned(source, HITBOX, sb.append(");").toString());
+    String updated = replaceOwned(source, HITBOX, "this.setHitbox(new Polygon(new double[] {"
+        + xs + "}, new double[] {" + ys + "}));");
+    return org.openpatch.scratch4j.core.project.JavaImports.ensure(updated,
+        "org.openpatch.scratch.Polygon");
   }
 
   /** Removes a hitbox owned by the setup region. */

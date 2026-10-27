@@ -130,6 +130,89 @@ public final class ProjectFileManagement {
     }
   }
 
+  /**
+   * Paste: copies a file or folder (of this project or from outside it) into
+   * {@code folder}, as {@code cat-2.png} when the name is taken there. A class
+   * of the project is duplicated as {@code Name2}; Java files only go into the
+   * project folder, so a folder with Java files in it is not copied.
+   */
+  public static Path copyInto(ScratchProject project, Path source, Path folder)
+      throws IOException {
+    Path root = project.root().toRealPath();
+    Path directory = folder.toRealPath();
+    Path from = source.toRealPath();
+    if (!Files.isDirectory(directory) || !directory.startsWith(root)
+        || closed(root, directory)) {
+      throw new IOException("Choose a folder of this project");
+    }
+    String name = from.getFileName().toString();
+    if (Files.isDirectory(from)) {
+      if (directory.startsWith(from)) {
+        throw new IOException("A folder cannot be pasted into itself");
+      }
+      try (var walk = Files.walk(from)) {
+        if (walk.anyMatch(p -> p.getFileName().toString().endsWith(".java"))) {
+          throw new IOException(name + " contains Java classes, which stay in the "
+              + "project folder");
+        }
+      }
+      Path target = directory.resolve(freeName(directory, name));
+      try (var walk = Files.walk(from)) {
+        for (Path p : (Iterable<Path>) walk::iterator) {
+          Files.copy(p, target.resolve(from.relativize(p).toString()));
+        }
+      }
+      return target;
+    }
+    if (!Files.isRegularFile(from)) {
+      throw new IOException("Choose a file or folder: " + name);
+    }
+    if (name.endsWith(".java")) {
+      if (!directory.equals(root)) {
+        throw new IOException("Java classes stay in the project folder, where BlueJ and "
+            + "VS Code find them");
+      }
+      String className = name.substring(0, name.length() - 5);
+      if (from.getParent().equals(root)) {
+        int i = 2;
+        while (Files.exists(root.resolve(className + i + ".java"))) i++;
+        return StageManagement.duplicateClass(project, className, className + i);
+      }
+      if (Files.exists(root.resolve(name))) {
+        throw new IOException("The project already has a class " + className);
+      }
+    }
+    return Files.copy(from, directory.resolve(freeName(directory, name)));
+  }
+
+  /** {@code name}, or {@code name-2} (-3, ...) when {@code folder} already has it. */
+  private static String freeName(Path folder, String name) {
+    return Files.exists(folder.resolve(name)) ? copyName(folder.resolve(name)) : name;
+  }
+
+  /**
+   * Undoes a delete: moves {@code trashed} (as a delete returned it) back to
+   * {@code original}, which must still be free.
+   */
+  public static Path restore(ScratchProject project, Path trashed, Path original)
+      throws IOException {
+    Path root = project.root().toRealPath();
+    Path from = trashed.toRealPath();
+    Path target = original.toAbsolutePath().normalize();
+    if (!from.startsWith(root.resolve(".scratch4j/trash"))) {
+      throw new IOException("Not in the project trash: " + trashed.getFileName());
+    }
+    if (!target.startsWith(root) && !target.startsWith(project.root().toAbsolutePath()
+        .normalize())) {
+      throw new IOException("Not a path of this project: " + original);
+    }
+    if (Files.exists(target)) {
+      throw new IOException(target.getFileName() + " exists again");
+    }
+    Files.createDirectories(target.getParent());
+    return Files.move(from, target);
+  }
+
   private static Path movable(ScratchProject project, Path file) throws IOException {
     Path root = project.root().toRealPath();
     Path source = file.toRealPath();

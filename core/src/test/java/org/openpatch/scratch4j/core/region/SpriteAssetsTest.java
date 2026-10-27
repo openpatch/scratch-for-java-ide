@@ -96,6 +96,17 @@ class SpriteAssetsTest {
   }
 
   @Test
+  void readsHandwrittenPolygonAndOldVarargsHitboxes() {
+    String polygon = SOURCE.replace("this.setSize(80);", "this.setSize(80);\n      "
+        + "this.setHitbox(new Polygon(new double[] {1, 30, 30}, new double[] {31, 10, 31}));");
+    assertThat(SpriteAssets.hitbox(polygon)).containsExactly(1, 31, 30, 10, 30, 31);
+    String old = SOURCE.replace("this.setSize(80);",
+        "this.setSize(80);\n      this.setHitbox(0, 0, 24, 0, 24, 30);");
+    assertThat(SpriteAssets.hitbox(old)).containsExactly(0, 0, 24, 0, 24, 30);
+    assertThat(SpriteAssets.literalHitbox("this.setHitbox(new Ellipse(0, 0, 10, 10));")).isNull();
+  }
+
+  @Test
   void sheetCostumesAndSheetAnimationsRoundTrip() {
     String sheet = SpriteAssets.addSheetCostumes(SOURCE, "tile", "assets/images/tiles.png", 32, 16);
     // a sheet of 8 columns: row 2 starts at frame 16 (Scratch for Java 7 names the frames)

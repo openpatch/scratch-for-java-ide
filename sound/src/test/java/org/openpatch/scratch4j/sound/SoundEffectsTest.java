@@ -89,6 +89,41 @@ class SoundEffectsTest {
     assertThat(slower.sampleCount()).isEqualTo(2000);
   }
 
+  private static SoundClip sine(double hz, double seconds, float rate) {
+    float[][] channel = new float[1][(int) (seconds * rate)];
+    for (int i = 0; i < channel[0].length; i++) {
+      channel[0][i] = (float) (0.5 * Math.sin(2 * Math.PI * hz * i / rate));
+    }
+    return new SoundClip(channel, rate);
+  }
+
+  /** Upward zero crossings per second. */
+  private static double frequency(SoundClip clip) {
+    int crossings = 0;
+    for (int i = 1; i < clip.sampleCount(); i++) {
+      if (clip.sample(0, i - 1) < 0 && clip.sample(0, i) >= 0) crossings++;
+    }
+    return crossings / clip.duration();
+  }
+
+  @Test
+  void speedKeepsThePitch() {
+    SoundClip tone = sine(440, 1, 44100);
+    SoundClip faster = SoundEffects.speed(tone, 1.25);
+    assertThat(faster.duration()).isCloseTo(0.8, org.assertj.core.data.Offset.offset(0.001));
+    assertThat(frequency(faster)).isCloseTo(440, org.assertj.core.data.Offset.offset(10.0));
+    SoundClip slower = SoundEffects.speed(tone, 0.8);
+    assertThat(slower.duration()).isCloseTo(1.25, org.assertj.core.data.Offset.offset(0.001));
+    assertThat(frequency(slower)).isCloseTo(440, org.assertj.core.data.Offset.offset(10.0));
+  }
+
+  @Test
+  void resampleChangesThePitch() {
+    SoundClip higher = SoundEffects.resample(sine(440, 1, 44100), 2);
+    assertThat(higher.sampleCount()).isEqualTo(22050);
+    assertThat(frequency(higher)).isCloseTo(880, org.assertj.core.data.Offset.offset(10.0));
+  }
+
   @Test
   void volumeScalesAndClamps() {
     SoundClip clip = ramp(10);

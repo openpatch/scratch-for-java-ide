@@ -62,6 +62,25 @@ final class MapEditorView extends BorderPane implements SavableTool {
   private enum Tool { PAINT, ERASE, FILL, RECTANGLE, PICK, SELECT_TILES, SELECT, NEW_RECTANGLE,
     NEW_ELLIPSE, NEW_POINT, NEW_POLYGON }
 
+  /** Each tool with its icon and tooltip, in the toolbar's order. */
+  private static final String[][] TOOLS = {
+      {"PAINT", "fth-edit-2", "map.tool.paint"}, {"ERASE", "fth-delete", "map.tool.erase"},
+      {"FILL", "fth-droplet", "map.tool.fill"}, {"RECTANGLE", "fth-square", "map.tool.rect"},
+      {"PICK", "fth-eye", "map.tool.pick"},
+      {"SELECT_TILES", "fth-crop", "map.tool.selecttiles"},
+      {"SELECT", "fth-mouse-pointer", "map.tool.select"},
+      {"NEW_RECTANGLE", "fth-plus-square", "map.tool.newrect"},
+      {"NEW_ELLIPSE", "fth-circle", "map.tool.newellipse"},
+      {"NEW_POINT", "fth-map-pin", "map.tool.newpoint"},
+      {"NEW_POLYGON", "fth-hexagon", "map.tool.newpolygon"}};
+
+  private static String toolIcon(Tool tool) {
+    for (String[] s : TOOLS) {
+      if (s[0].equals(tool.name())) return s[1];
+    }
+    return "fth-circle";
+  }
+
   private final ScratchProject project;
   /** Draws objects whose type names a sprite class as that sprite. */
   private final StageRenderer sprites;
@@ -166,6 +185,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
       if (e.getButton() == MouseButton.MIDDLE || spaceDown) {
         panStart = new double[] {e.getScreenX(), e.getScreenY(), scroll.getHvalue(),
             scroll.getVvalue()};
+        updateCursor(null);
         return;
       }
       press(e);
@@ -180,6 +200,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
     canvas.setOnMouseReleased(e -> {
       if (panStart != null) {
         panStart = null;
+        updateCursor(pixelAt(e));
         return;
       }
       release(e);
@@ -189,6 +210,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
     });
     canvas.setOnMouseMoved(e -> {
       hover = tileAt(e);
+      updateCursor(pixelAt(e));
       updateStatus();
       redraw();
     });
@@ -198,9 +220,13 @@ final class MapEditorView extends BorderPane implements SavableTool {
       if (shortcut(e.getCode(), e.isShortcutDown(), e.isShiftDown())) e.consume();
     });
     addEventHandler(javafx.scene.input.KeyEvent.KEY_RELEASED, e -> {
-      if (e.getCode() == KeyCode.SPACE) spaceDown = false;
+      if (e.getCode() == KeyCode.SPACE) {
+        spaceDown = false;
+        updateCursor(null);
+      }
     });
     reloadAll();
+    updateCursor(null);
   }
 
   Path file() {
@@ -235,17 +261,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
     HBox bar = new HBox(4);
     bar.setAlignment(Pos.CENTER_LEFT);
     bar.getStyleClass().add("tool-bar-row");
-    String[][] spec = {
-        {"PAINT", "fth-edit-2", "map.tool.paint"}, {"ERASE", "fth-delete", "map.tool.erase"},
-        {"FILL", "fth-droplet", "map.tool.fill"}, {"RECTANGLE", "fth-square", "map.tool.rect"},
-        {"PICK", "fth-eye", "map.tool.pick"},
-        {"SELECT_TILES", "fth-crop", "map.tool.selecttiles"},
-        {"SELECT", "fth-mouse-pointer", "map.tool.select"},
-        {"NEW_RECTANGLE", "fth-plus-square", "map.tool.newrect"},
-        {"NEW_ELLIPSE", "fth-circle", "map.tool.newellipse"},
-        {"NEW_POINT", "fth-map-pin", "map.tool.newpoint"},
-        {"NEW_POLYGON", "fth-hexagon", "map.tool.newpolygon"}};
-    for (String[] s : spec) {
+    for (String[] s : TOOLS) {
       ToggleButton button = new ToggleButton(null, Icons.of(s[1], 16));
       button.setTooltip(new Tooltip(I18n.t(s[2])));
       button.setToggleGroup(tools);
@@ -525,7 +541,10 @@ final class MapEditorView extends BorderPane implements SavableTool {
         if (tool != Tool.NEW_POLYGON) return false;
         finishPolygon();
       }
-      case SPACE -> spaceDown = true;
+      case SPACE -> {
+        spaceDown = true;
+        updateCursor(null);
+      }
       case LEFT, RIGHT, UP, DOWN -> {
         if (selectedObject == null) return false;
         double step = shift ? (code == KeyCode.LEFT || code == KeyCode.RIGHT
@@ -661,6 +680,45 @@ final class MapEditorView extends BorderPane implements SavableTool {
     }
     updateStatus();
     redraw();
+    updateCursor(null);
+  }
+
+  /** The visible object at map pixel {@code p} with its layer, the topmost first; or null. */
+  private java.util.Map.Entry<TmxDocument.ObjectLayer, TmxDocument.MapObject> objectAt(
+      double[] p) {
+    for (int i = doc.layers.size() - 1; i >= 0; i--) {
+      if (doc.layers.get(i) instanceof TmxDocument.ObjectLayer objects && objects.visible) {
+        TmxDocument.MapObject hit = hit(objects, p);
+        if (hit != null) return java.util.Map.entry(objects, hit);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The cursor shows the tool: a hand while Space or the middle button pans, with
+   * Select a move cursor over an object. {@code at} is the map pixel under the
+   * mouse, null when unknown.
+   */
+  private void updateCursor(double[] at) {
+    canvas.setCursor(cursor(at));
+  }
+
+  private javafx.scene.Cursor cursor(double[] at) {
+
+    if (panStart != null) return javafx.scene.Cursor.CLOSED_HAND;
+    if (spaceDown) return javafx.scene.Cursor.OPEN_HAND;
+    return switch (tool) {
+      case PAINT -> ToolCursors.pencil();
+      case ERASE -> ToolCursors.eraser();
+      case FILL -> ToolCursors.fill();
+      case PICK -> ToolCursors.picker();
+      case SELECT -> at != null && objectAt(at) != null ? javafx.scene.Cursor.MOVE
+          : javafx.scene.Cursor.DEFAULT;
+      // the others work at a point: a crosshair with the tool beside it
+      default -> ToolCursors.badge(toolIcon(tool));
+
+    };
   }
 
 
@@ -1302,19 +1360,16 @@ final class MapEditorView extends BorderPane implements SavableTool {
     if (tool == Tool.SELECT) {
       // any visible object, whichever layer is chosen: its layer becomes the active one
       double[] p = pixelAt(e);
-      for (int i = doc.layers.size() - 1; i >= 0; i--) {
-        if (doc.layers.get(i) instanceof TmxDocument.ObjectLayer objects && objects.visible) {
-          TmxDocument.MapObject hit = hit(objects, p);
-          if (hit != null) {
-            if (active != objects) {
-              layerList.getSelectionModel().select(objects);
-            }
-            selectObject(hit);
-            objectDragOffset = new double[] {p[0] - hit.x, p[1] - hit.y};
-            redraw();
-            return;
-          }
+      var found = objectAt(p);
+      if (found != null) {
+        if (active != found.getKey()) {
+          layerList.getSelectionModel().select(found.getKey());
         }
+        TmxDocument.MapObject hit = found.getValue();
+        selectObject(hit);
+        objectDragOffset = new double[] {p[0] - hit.x, p[1] - hit.y};
+        redraw();
+        return;
       }
       selectObject(null);
       redraw();

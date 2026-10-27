@@ -48,7 +48,9 @@ class SpriteRegionWriterTest {
     assertThatThrownBy(() -> SpriteRegionWriter.setHitbox(PLAYER, 0, 0, 10, 10))
         .isInstanceOf(IllegalArgumentException.class);
     String withHitbox = SpriteRegionWriter.setHitbox(PLAYER, 0, 0, 32.5, 0, 32.5, 48);
-    assertThat(withHitbox).contains("this.setHitbox(0, 0, 32.5, 0, 32.5, 48);")
+    assertThat(withHitbox).contains(
+            "this.setHitbox(new Polygon(new double[] {0, 32.5, 32.5}, new double[] {0, 0, 48}));")
+        .contains("import org.openpatch.scratch.Polygon;")
         .contains("this.setSize(50);");
   }
 

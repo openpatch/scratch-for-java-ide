@@ -191,6 +191,9 @@ final class EditorTabs extends TabPane {
       }
       return completion.complete(root, source, content, offset);
     });
+    if (fileName.endsWith(".java")) {
+      editor.warmUpSemantic();
+    }
     editor.breakpoints().addAll(breakpoints.getOrDefault(file, java.util.Set.of()));
     editor.breakpoints().addListener((javafx.collections.SetChangeListener<Integer>) c -> {
       java.util.Set<Integer> lines = java.util.Set.copyOf(editor.breakpoints());

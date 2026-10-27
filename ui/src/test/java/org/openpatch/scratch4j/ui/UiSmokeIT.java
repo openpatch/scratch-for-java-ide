@@ -63,6 +63,25 @@ class UiSmokeIT {
         tree.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
             "", "", javafx.scene.input.KeyCode.DELETE, false, false, false, false));
         assertThat(folderDeletion.get()).isEqualTo(images);
+        // several rows: Delete hands over all of them, without what lies in a selected folder
+        AtomicReference<List<Path>> deletions = new AtomicReference<>();
+        tree.setOnDeleteAll(deletions::set);
+        Path assets = tmp.resolve("uismoke/assets");
+        Path player = tmp.resolve("uismoke/Player.java");
+        tree.selectPath(images);
+        for (var item : tree.getRoot().getChildren()) {
+          if (item.getValue().equals(assets) || item.getValue().equals(player)) {
+            tree.getSelectionModel().select(item);
+          }
+        }
+        assertThat(tree.selectedPaths())
+            .as("images goes with assets").containsExactlyInAnyOrder(assets, player);
+        tree.fireEvent(new javafx.scene.input.KeyEvent(javafx.scene.input.KeyEvent.KEY_PRESSED,
+            "", "", javafx.scene.input.KeyCode.DELETE, false, false, false, false));
+        assertThat(deletions.get()).containsExactlyInAnyOrder(assets, player);
+        tree.selectPath(images);
+        assertThat(tree.selectedPaths()).as("selectPath selects only that row")
+            .containsExactly(images);
 
         var apiIndex = org.openpatch.scratch4j.core.api.ApiIndex.load();
         EditorTabs editor = new EditorTabs(apiIndex, () -> tmp.resolve("uismoke"));
@@ -734,7 +753,7 @@ class UiSmokeIT {
             .doesNotContain("Save hitbox", "Hitbox speichern");
         spriteAssets.saveHitboxNow();
         Path playerFile = project.root().resolve("Player.java");
-        assertThat(Files.readString(playerFile)).contains("this.setHitbox(3, 0,");
+        assertThat(Files.readString(playerFile)).contains("this.setHitbox(new Polygon(new double[] {3, ");
         assertThat(hitboxState.getText()).isEqualTo(I18n.t("spriteassets.hitbox.saved"));
         assertThat(pointsList.getSelectionModel().getSelectedIndex()).as("still selected")
             .isZero();
@@ -848,8 +867,10 @@ class UiSmokeIT {
     });
     // the coin stage's preview compiles the project and starts a program
     assertThat(done.await(90, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
-    javafx.application.Platform.exit();
+    // no Platform.exit(): the toolkit can't start again in this JVM, and the UI tests
+    // after this one share it
     assertThat(failure.get()).as("no exception on the FX thread").isNull();
+
   }
 
   /** Writes a node snapshot as PNG (for eyeballing renderer changes). */

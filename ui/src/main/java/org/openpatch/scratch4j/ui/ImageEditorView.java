@@ -3,9 +3,7 @@ package org.openpatch.scratch4j.ui;
 import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Point2D;
-import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Button;
-import javafx.scene.control.ColorPicker;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -86,7 +84,9 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private final javafx.scene.control.ListView<Integer> layerList =
       new javafx.scene.control.ListView<>();
   private final javafx.scene.canvas.Canvas overlay = new javafx.scene.canvas.Canvas();
-  private final StackPane stack = new StackPane(layerCanvas, overlay);
+  /** What the brush would paint under the mouse; redrawn alone, as the mouse moves. */
+  private final javafx.scene.canvas.Canvas brushPreview = new javafx.scene.canvas.Canvas();
+  private final StackPane stack = new StackPane(layerCanvas, overlay, brushPreview);
   private final ScratchColorPicker colorPicker;
   private PalettePanel palettePanel;
   private final ComboBox<Integer> brushSize = new ComboBox<>();
@@ -94,7 +94,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private enum Tool { SELECT, PENCIL, ERASER, FILL, LINE, RECT, ELLIPSE, TEXT, PICKER,
     CENTER, HITBOX, NINE_SLICE }
 
-  private enum SelectDrag { NONE, AREA, MOVE, SCALE }
+  private enum SelectDrag { NONE, AREA, MOVE, SCALE, ROTATE }
 
   private Tool tool = Tool.PENCIL;
   private final java.util.Map<Tool, ToggleButton> toolButtons = new java.util.EnumMap<>(Tool.class);
@@ -102,6 +102,17 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private Point2D dragStart;
   private Point2D rotationCenter;
   private final List<Point2D> hitboxPoints = new ArrayList<>();
+  /** The hitbox point picked last (Delete removes it), and the one being dragged; -1: none. */
+  private int selectedHitboxPoint = -1;
+  private int draggedHitboxPoint = -1;
+  /** Whether the press being handled is the secondary (right) button. */
+  private boolean secondaryPress;
+  /** The hitbox, rotation centre and nine-slice show with every tool, not only their own. */
+  private boolean showMarkers = true;
+  /** The nine-slice was set up here: it shows among the markers. */
+  private boolean nineSliceUsed;
+  /** The line, rectangle or ellipse being dragged, painted as it will be; null when none. */
+  private WritableImage shapePixels;
   /** Margins in the library's top, right, bottom, left order. */
   private final int[] nineSlice = {8, 8, 8, 8};
   private int draggedSlice = -1;
@@ -114,6 +125,23 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private double floatW;
   private double floatH;
   private SelectDrag selectDrag = SelectDrag.NONE;
+  /**
+   * The floating pixels before they were turned: every angle starts from these,
+   * so turning back and forth loses nothing. Null while the selection is not turned.
+   */
+  private WritableImage unrotated;
+  /** The selection's turn in degrees clockwise, and the point it turns about. */
+  private double rotation;
+  private double rotationCentreX;
+  private double rotationCentreY;
+  /** Where on the circle the rotate handle was grabbed, less the turn then. */
+  private double rotateGrab;
+  private final javafx.scene.control.Spinner<Double> angle = new javafx.scene.control.Spinner<>(
+      new javafx.scene.control.SpinnerValueFactory.DoubleSpinnerValueFactory(-360, 360, 0, 15));
+  private final ComboBox<SpriteRotation.Algorithm> rotationAlgorithm = new ComboBox<>();
+  private final HBox rotationBox = new HBox(4);
+  /** Set while the angle field shows a turn made elsewhere (the handle). */
+  private boolean showingAngle;
   private double moveDX;
   private boolean areaDragged;
   private double moveDY;
@@ -136,6 +164,15 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private static final double ONION_ALPHA = 0.35;
   private static final Color BEFORE_TINT = Color.rgb(230, 60, 60);
   private static final Color AFTER_TINT = Color.rgb(60, 120, 240);
+  /** The facing arrow and the hitbox, the sprite editor's hitbox orange. */
+  private static final Color MARKER = Color.web("#ff7800");
+  /** The hitbox point picked last, as the sprite editor marks it. */
+  private static final Color SELECTED = Color.web("#0678d6");
+
+  /** The faint dark edge around a marker's white rim, for light pixels. */
+  private static final Color HALO = Color.rgb(0, 0, 0, 0.45);
+
+
 
   /** Undo entries hold every layer (strokes and layer edits undo alike). */
   private record Snapshot(List<WritableImage> layers, List<Boolean> visible, int active) {}
@@ -177,6 +214,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       if (tool == Tool.SELECT) {
         selectPress(e.getX() / zoom, e.getY() / zoom);
       } else {
+        secondaryPress = e.isSecondaryButtonDown();
         press(toPixel(e.getX(), e.getY()));
         redrawOverlay();
       }
@@ -205,17 +243,30 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       updateFrameThumb();
     });
     stack.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED, e -> {
+      mouseX = e.getX() / zoom;
+      mouseY = e.getY() / zoom;
+      updateCursor();
+      drawBrushPreview();
       if (sheetPicking()) {
         sheetHover(tileAt(e.getX() / zoom, e.getY() / zoom));
       }
     });
+    // while painting the preview follows the brush
+    stack.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_DRAGGED, e -> {
+      mouseX = e.getX() / zoom;
+      mouseY = e.getY() / zoom;
+      drawBrushPreview();
+    });
     stack.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_EXITED, e -> {
+      mouseX = Double.NaN;
+      mouseY = Double.NaN;
+      drawBrushPreview();
       if (sheetHoverTile >= 0) {
         sheetHover(-1);
       }
     });
     stack.setFocusTraversable(true);
-    stack.setCursor(javafx.scene.Cursor.CROSSHAIR);
+    updateCursor();
 
     StackPane holder = new StackPane(stack);
     holder.setPadding(new Insets(24));
@@ -388,6 +439,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     }
     selection = null;
     floating = null;
+    forgetRotation();
     selectDrag = SelectDrag.NONE;
     image = new WritableImage(loaded.getPixelReader(),
         (int) Math.max(1, loaded.getWidth()), (int) Math.max(1, loaded.getHeight()));
@@ -441,7 +493,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       sheetPanel.setManaged(show);
     }
     if (!show) {
-      stack.setCursor(javafx.scene.Cursor.CROSSHAIR);
+      updateCursor();
       updateStatus();
     } else {
       status.setText(I18n.t("sheetanim.pick.status"));
@@ -520,7 +572,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     int h = sheetPanel.tileHeight();
     int columns = sheetPanel.columns();
     int rows = sheetPanel.rows();
-    stack.setCursor(sheetPicking() ? javafx.scene.Cursor.HAND : javafx.scene.Cursor.CROSSHAIR);
+    updateCursor();
     if (columns == 0 || rows == 0) {
       return;
     }
@@ -671,6 +723,25 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   double zoomForTest() {
     return zoom;
   }
+
+  List<Point2D> hitboxPointsForTest() {
+    return hitboxPoints;
+  }
+
+  Color penColorForTest() {
+    return colorPicker.getValue();
+  }
+
+  double rotationForTest() {
+    return rotation;
+  }
+
+  ComboBox<SpriteRotation.Algorithm> rotationAlgorithmForTest() {
+    return rotationAlgorithm;
+  }
+
+
+
 
   /** Paints one pixel of the active layer as one stroke (tests). */
   void paintPixelForTest(int x, int y, Color color) {
@@ -853,6 +924,9 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private void syncOverlay() {
     overlay.setWidth(Math.max(1, image.getWidth() * zoom));
     overlay.setHeight(Math.max(1, image.getHeight() * zoom));
+    brushPreview.setWidth(overlay.getWidth());
+    brushPreview.setHeight(overlay.getHeight());
+    drawBrushPreview();
   }
 
   private Node toolRail() {
@@ -897,10 +971,124 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       selection = null;
     }
     tool = t;
+    if (t == Tool.NINE_SLICE) nineSliceUsed = true;
     ToggleButton button = toolButtons.get(t);
     if (button != null) button.setSelected(true);
     updateApplyButton();
     redrawOverlay();
+    updateCursor();
+    drawBrushPreview();
+  }
+
+
+  /** Where the mouse last was over the picture (picture pixels); NaN before it came. */
+  private double mouseX = Double.NaN;
+  private double mouseY = Double.NaN;
+
+  /** The cursor shows the tool, and with Select what a press there does (move or scale). */
+  private void updateCursor() {
+    stack.setCursor(cursor());
+  }
+
+  private javafx.scene.Cursor cursor() {
+
+    if (sheetPicking()) {
+      return javafx.scene.Cursor.HAND;
+    }
+    return switch (tool) {
+      case PENCIL -> ToolCursors.pencil();
+      case ERASER -> ToolCursors.eraser();
+      case FILL -> ToolCursors.fill();
+      case PICKER -> ToolCursors.picker();
+      case HITBOX -> {
+        if (draggedHitboxPoint >= 0) yield javafx.scene.Cursor.CLOSED_HAND;
+        yield !Double.isNaN(mouseX) && nearestHitboxPoint(new Point2D(mouseX, mouseY)) >= 0
+            ? javafx.scene.Cursor.OPEN_HAND : ToolCursors.badge(toolIcon(tool));
+      }
+      case SELECT -> {
+        if (selectDrag == SelectDrag.ROTATE) yield ToolCursors.rotate();
+        if (selection != null && !Double.isNaN(mouseX)) {
+          if (onRotateHandle(mouseX, mouseY)) yield ToolCursors.rotate();
+          if (onScaleHandle(mouseX, mouseY)) yield javafx.scene.Cursor.SE_RESIZE;
+          if (currentSelectionBox().contains(mouseX, mouseY)) yield javafx.scene.Cursor.MOVE;
+        }
+        yield ToolCursors.badge(toolIcon(tool));
+      }
+      default -> ToolCursors.badge(toolIcon(tool));
+    };
+  }
+
+  /** What the text tool's sample shows: where a click puts the text, and how big. */
+  static final String TEXT_SAMPLE = "Test";
+
+  /** A sample text where a click would write, in the pen's colour and size, outlined. */
+  private void drawTextPreview(javafx.scene.canvas.GraphicsContext g) {
+    int scale = brushSize.getValue() == null ? 1 : brushSize.getValue();
+    int w = PixelFont.width(TEXT_SAMPLE, scale);
+    int h = PixelFont.HEIGHT * scale;
+    WritableImage sample = new WritableImage(Math.max(1, w), h);
+    PixelFont.draw(sample.getPixelWriter(), 0, 0, TEXT_SAMPLE, scale, colorPicker.getValue(),
+        w, h);
+    double x = Math.floor(mouseX) * zoom;
+    double y = Math.floor(mouseY) * zoom;
+    g.setImageSmoothing(false);
+    g.setGlobalAlpha(0.75);
+    g.drawImage(sample, x, y, w * zoom, h * zoom);
+    g.setGlobalAlpha(1);
+    // the box it fills, light and dark, so it shows on any pixels and in any colour
+    g.setLineWidth(1);
+    g.setLineDashes(3, 3);
+    g.setStroke(Color.rgb(255, 255, 255, 0.9));
+    g.strokeRect(x - 0.5, y - 0.5, w * zoom + 1, h * zoom + 1);
+    g.setStroke(Color.rgb(0, 0, 0, 0.6));
+    g.setLineDashOffset(3);
+    g.strokeRect(x - 0.5, y - 0.5, w * zoom + 1, h * zoom + 1);
+    g.setLineDashOffset(0);
+    g.setLineDashes();
+  }
+
+  /** The tools that paint with the brush: they preview it under the mouse. */
+
+  private boolean paintsWithBrush() {
+    return !sheetPicking() && (tool == Tool.PENCIL || tool == Tool.ERASER
+        || tool == Tool.LINE || tool == Tool.RECT || tool == Tool.ELLIPSE);
+  }
+
+  /**
+   * The pixels the brush would paint at the mouse, in the pen's colour (the
+   * eraser's as an outline), as {@link #plot} paints them.
+   */
+  private void drawBrushPreview() {
+    var g = brushPreview.getGraphicsContext2D();
+    g.clearRect(0, 0, brushPreview.getWidth(), brushPreview.getHeight());
+    if (shapePixels != null) {
+      g.setImageSmoothing(false);
+      g.drawImage(shapePixels, 0, 0, image.getWidth() * zoom, image.getHeight() * zoom);
+      return;
+    }
+    if (!Double.isNaN(mouseX) && tool == Tool.TEXT && !sheetPicking()) {
+      drawTextPreview(g);
+      return;
+    }
+    if (Double.isNaN(mouseX) || !paintsWithBrush()) return;
+    int r = (brushSize.getValue() == null ? 1 : brushSize.getValue()) - 1;
+    int px = (int) Math.floor(mouseX);
+    int py = (int) Math.floor(mouseY);
+    double x0 = Math.max(0, px - r) * zoom;
+    double y0 = Math.max(0, py - r) * zoom;
+    double x1 = Math.min(image.getWidth(), px + r + 1) * zoom;
+    double y1 = Math.min(image.getHeight(), py + r + 1) * zoom;
+    if (x1 <= x0 || y1 <= y0) return;
+    if (tool != Tool.ERASER) {
+      g.setFill(colorPicker.getValue());
+      g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    }
+    // a light and a dark edge, so the square shows on any pixels and in any colour
+    g.setLineWidth(1);
+    g.setStroke(Color.rgb(255, 255, 255, 0.9));
+    g.strokeRect(x0 - 0.5, y0 - 0.5, x1 - x0 + 1, y1 - y0 + 1);
+    g.setStroke(Color.rgb(0, 0, 0, 0.6));
+    g.strokeRect(x0 - 1.5, y0 - 1.5, x1 - x0 + 3, y1 - y0 + 3);
   }
 
   /** The letter that picks a tool, as in most paint programs; null for none. */
@@ -956,6 +1144,12 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     }
     switch (code) {
       case DELETE, BACK_SPACE -> {
+        if (tool == Tool.HITBOX && selectedHitboxPoint >= 0) {
+          hitboxPoints.remove(selectedHitboxPoint);
+          selectedHitboxPoint = -1;
+          redrawOverlay();
+          return true;
+        }
         if (tool != Tool.SELECT || selection == null) return false;
         deleteSelection();
       }
@@ -1071,6 +1265,9 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     colorPicker.setTooltip(new javafx.scene.control.Tooltip(I18n.t("imageeditor.color")));
     brushSize.getItems().addAll(1, 2, 4, 8, 16);
     brushSize.getSelectionModel().selectFirst();
+    brushSize.valueProperty().addListener((o, a, b) -> drawBrushPreview());
+    colorPicker.valueProperty().addListener((o, a, b) -> drawBrushPreview());
+
     brushSize.setPrefWidth(76);
     brushSize.setMinWidth(Region.USE_PREF_SIZE);
     colorPicker.setMinWidth(Region.USE_PREF_SIZE);
@@ -1088,6 +1285,14 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     pixelGrid.setTooltip(new javafx.scene.control.Tooltip(I18n.t("imageeditor.grid.tooltip")));
     pixelGrid.setOnAction(e -> {
       showPixelGrid = pixelGrid.isSelected();
+      redrawOverlay();
+    });
+    ToggleButton markers = new ToggleButton(null, Icons.of("mdi2v-vector-polygon"));
+    markers.getStyleClass().addAll("button-icon", "flat");
+    markers.setTooltip(new javafx.scene.control.Tooltip(I18n.t("imageeditor.markers.tooltip")));
+    markers.setSelected(showMarkers);
+    markers.setOnAction(e -> {
+      showMarkers = markers.isSelected();
       redrawOverlay();
     });
     ToggleButton facesRight = new ToggleButton(null, Icons.of("fth-arrow-right"));
@@ -1141,8 +1346,40 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         zoomLabel,
         Icons.button("fth-zoom-in", I18n.t("designer.zoomin"), () -> setZoom(zoom * 1.5)),
         Icons.button("fth-maximize", I18n.t("designer.fit"), this::fitZoom),
-        pixelGrid, smoothing, facesRight, onion, sheetToggle,
-        spacer, cropButton, applyToSprite, save);
+        pixelGrid, smoothing, markers, facesRight, onion, sheetToggle,
+
+        spacer, rotationBox, cropButton, applyToSprite, save);
+    // turning the selection: the angle, and how its pixels are worked out
+    angle.setEditable(true);
+    angle.setPrefWidth(90);
+    angle.setMinWidth(Region.USE_PREF_SIZE);
+    angle.setTooltip(new javafx.scene.control.Tooltip(I18n.t("imageeditor.rotation.angle")));
+    angle.valueProperty().addListener((o, a, degrees) -> {
+      if (!showingAngle && degrees != null) rotateSelection(degrees);
+    });
+    rotationAlgorithm.getItems().setAll(SpriteRotation.Algorithm.values());
+    rotationAlgorithm.setValue(SpriteRotation.Algorithm.ROTSPRITE);
+    rotationAlgorithm.setConverter(new javafx.util.StringConverter<>() {
+      @Override
+      public String toString(SpriteRotation.Algorithm algorithm) {
+        return algorithm == null ? "" : I18n.t(algorithm == SpriteRotation.Algorithm.FAST
+            ? "imageeditor.rotation.fast" : "imageeditor.rotation.rotsprite");
+      }
+
+      @Override
+      public SpriteRotation.Algorithm fromString(String text) {
+        return null;
+      }
+    });
+    rotationAlgorithm.setTooltip(new javafx.scene.control.Tooltip(
+        I18n.t("imageeditor.rotation.algorithm")));
+    rotationAlgorithm.setMinWidth(Region.USE_PREF_SIZE);
+    rotationAlgorithm.valueProperty().addListener((o, a, b) -> {
+      if (unrotated != null) rotateSelection(rotation);
+    });
+    Label angleIcon = new Label(null, Icons.of("mdi2r-rotate-right"));
+    rotationBox.getChildren().setAll(angleIcon, angle, rotationAlgorithm);
+    rotationBox.setAlignment(Pos.CENTER_LEFT);
     cropButton.setText(I18n.t("imageeditor.crop"));
     cropButton.setGraphic(Icons.of("fth-crop"));
     cropButton.setOnAction(e -> cropToSelection());
@@ -1158,6 +1395,8 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     boolean select = tool == Tool.SELECT;
     cropButton.setVisible(select && selection != null);
     cropButton.setManaged(select && selection != null);
+    rotationBox.setVisible(select && selection != null);
+    rotationBox.setManaged(select && selection != null);
     boolean center = tool == Tool.CENTER;
     boolean hitbox = tool == Tool.HITBOX;
     boolean slice = tool == Tool.NINE_SLICE;
@@ -1259,8 +1498,21 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         redrawOverlay();
       }
       case HITBOX -> {
-        hitboxPoints.add(p);
+        // a point: drag it (right-click removes it); elsewhere a click adds one
+        int near = nearestHitboxPoint(p);
+        if (secondaryPress) {
+          if (near >= 0) hitboxPoints.remove(near);
+          selectedHitboxPoint = -1;
+        } else if (near >= 0) {
+          selectedHitboxPoint = near;
+          draggedHitboxPoint = near;
+        } else {
+          hitboxPoints.add(p);
+          selectedHitboxPoint = hitboxPoints.size() - 1;
+          draggedHitboxPoint = selectedHitboxPoint;
+        }
         redrawOverlay();
+        updateCursor();
       }
       case NINE_SLICE -> draggedSlice = nearestSlice(p);
       default -> { }
@@ -1281,6 +1533,12 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         moveSlice(p);
         redrawOverlay();
       }
+      case HITBOX -> {
+        if (draggedHitboxPoint >= 0 && !hitboxPoints.get(draggedHitboxPoint).equals(p)) {
+          hitboxPoints.set(draggedHitboxPoint, p);
+          redrawOverlay();
+        }
+      }
       default -> { }
     }
     if (tool == Tool.PENCIL || tool == Tool.ERASER) {
@@ -1293,14 +1551,15 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     if (dragStart == null) {
       return;
     }
-    switch (tool) {
-      case LINE -> line(dragStart, p);
-      case RECT -> rect(dragStart, p);
-      case ELLIPSE -> ellipse(dragStart, p);
-      default -> { }
+    if (tool == Tool.LINE || tool == Tool.RECT || tool == Tool.ELLIPSE) {
+      pushUndo();
+      drawShape(image.getPixelWriter(), dragStart, p);
     }
+    shapePixels = null;
     dragStart = null;
     draggedSlice = -1;
+    draggedHitboxPoint = -1;
+    drawBrushPreview();
     overlay.getGraphicsContext2D().clearRect(0, 0, overlay.getWidth(), overlay.getHeight());
     redrawOverlay();
   }
@@ -1327,7 +1586,11 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   }
 
   void selectPress(double x, double y) {
-    if (selection != null && onScaleHandle(x, y)) {
+    if (selection != null && onRotateHandle(x, y)) {
+      rotateSelection(rotation); // lifts the pixels and fixes the centre
+      rotateGrab = angleAt(x, y) - rotation;
+      selectDrag = SelectDrag.ROTATE;
+    } else if (selection != null && onScaleHandle(x, y)) {
       lift();
       selectDrag = SelectDrag.SCALE;
     } else if (selection != null && currentSelectionBox().contains(x, y)) {
@@ -1358,10 +1621,25 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         selection = new javafx.geometry.Rectangle2D(minX, minY, w, h);
       }
       case MOVE -> {
-        floatX = Math.round(x - moveDX);
-        floatY = Math.round(y - moveDY);
+        double nextX = Math.round(x - moveDX);
+        double nextY = Math.round(y - moveDY);
+        rotationCentreX += nextX - floatX;
+        rotationCentreY += nextY - floatY;
+        floatX = nextX;
+        floatY = nextY;
+      }
+      case ROTATE -> {
+        // Shift snaps to 15 degrees
+        double degrees = angleAt(x, y) - rotateGrab;
+        if (keepAspect) degrees = Math.round(degrees / 15) * 15;
+        rotateSelection(degrees);
+        return;
       }
       case SCALE -> {
+        // a turned selection scales as it looks now; that is its new upright
+        unrotated = null;
+        rotation = 0;
+        showAngle(0);
         double w = Math.max(1, Math.round(x - floatX));
         double h = Math.max(1, Math.round(y - floatY));
         if (keepAspect) {
@@ -1391,6 +1669,95 @@ final class ImageEditorView extends BorderPane implements SavableTool {
 
   private double clampY(double y) {
     return Math.max(0, Math.min(image.getHeight() - 1, y));
+  }
+
+  // --- turning the selection --------------------------------------------------
+
+  /** Screen pixels between the selection's top edge and its rotate handle. */
+  private static final double ROTATE_HANDLE_GAP = 22;
+
+  /**
+   * Turns the selection {@code degrees} clockwise about its centre, from its pixels
+   * as they were lifted, with the chosen algorithm (Fast or RotSprite).
+   */
+  void rotateSelection(double degrees) {
+    if (selection == null && floating == null) return;
+    lift();
+    if (unrotated == null) {
+      // what the selection looks like now (also if it was scaled) is the upright
+      unrotated = scaledFloating();
+      rotationCentreX = floatX + floatW / 2;
+      rotationCentreY = floatY + floatH / 2;
+    }
+    rotation = degrees;
+    floating = SpriteRotation.rotate(unrotated, degrees, rotationAlgorithm.getValue());
+    floatW = floating.getWidth();
+    floatH = floating.getHeight();
+    floatX = Math.round(rotationCentreX - floatW / 2);
+    floatY = Math.round(rotationCentreY - floatH / 2);
+    dirty.set(true);
+    showAngle(degrees);
+    redrawOverlay();
+  }
+
+  /** The floating pixels at the size they are shown (nearest neighbour). */
+  private WritableImage scaledFloating() {
+    int w = (int) floatW;
+    int h = (int) floatH;
+    if (w == (int) floating.getWidth() && h == (int) floating.getHeight()) {
+      return new WritableImage(floating.getPixelReader(), w, h);
+    }
+    WritableImage scaled = new WritableImage(w, h);
+    PixelReader reader = floating.getPixelReader();
+    PixelWriter writer = scaled.getPixelWriter();
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        writer.setArgb(x, y, reader.getArgb(
+            (int) Math.min(floating.getWidth() - 1, x * floating.getWidth() / w),
+            (int) Math.min(floating.getHeight() - 1, y * floating.getHeight() / h)));
+      }
+    }
+    return scaled;
+  }
+
+  /** Once placed (or dropped), the next turn starts upright again. */
+  private void forgetRotation() {
+    unrotated = null;
+    rotation = 0;
+    showAngle(0);
+  }
+
+  /** Shows {@code degrees} in the angle field without turning again. */
+  private void showAngle(double degrees) {
+    showingAngle = true;
+    angle.getValueFactory().setValue(Math.round(degrees * 10) / 10.0);
+    showingAngle = false;
+  }
+
+  /** The direction from the turning centre to a picture point: 0 up, clockwise. */
+  private double angleAt(double x, double y) {
+    double cx = unrotated != null ? rotationCentreX : floatX + floatW / 2;
+    double cy = unrotated != null ? rotationCentreY : floatY + floatH / 2;
+    return Math.toDegrees(Math.atan2(x - cx, cy - y));
+  }
+
+  /**
+   * The rotate handle over the selection's middle, in canvas pixels: above it,
+   * below it where the picture ends above, inside its top where it fills the picture.
+   */
+  private Point2D rotateHandle() {
+    var r = currentSelectionBox();
+    double x = (r.getMinX() + r.getWidth() / 2) * zoom;
+    double above = r.getMinY() * zoom - ROTATE_HANDLE_GAP;
+    double below = r.getMaxY() * zoom + ROTATE_HANDLE_GAP;
+    double y = above >= 10 ? above
+        : below <= overlay.getHeight() - 10 ? below
+        : r.getMinY() * zoom + ROTATE_HANDLE_GAP;
+    return new Point2D(x, y);
+  }
+
+  private boolean onRotateHandle(double x, double y) {
+    return selection != null && rotateHandle().distance(x * zoom, y * zoom) <= 9;
   }
 
   /** Cuts the selected pixels out (the hole becomes transparent) so they can move. */
@@ -1447,12 +1814,14 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     selection = x1 > x0 && y1 > y0
         ? new javafx.geometry.Rectangle2D(x0, y0, x1 - x0, y1 - y0) : null;
     floating = null;
+    forgetRotation();
     redrawOverlay();
   }
 
   private void deleteSelection() {
     if (floating != null) {
       floating = null; // the hole was cleared when the pixels were lifted
+      forgetRotation();
     } else if (selection != null) {
       pushUndo();
       PixelWriter writer = image.getPixelWriter();
@@ -1491,12 +1860,26 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   }
 
   private void line(Point2D from, Point2D to, Color color) {
+    line(image.getPixelWriter(), from, to, color);
+  }
+
+  /** The line, rectangle or ellipse tool's shape from {@code from} to {@code to}, onto {@code writer}. */
+  private void drawShape(PixelWriter writer, Point2D from, Point2D to) {
+    Color color = colorPicker.getValue();
+    switch (tool) {
+      case LINE -> line(writer, from, to, color);
+      case RECT -> rect(writer, from, to, color);
+      case ELLIPSE -> ellipse(writer, from, to, color);
+      default -> { }
+    }
+  }
+
+  private void line(PixelWriter writer, Point2D from, Point2D to, Color color) {
     int x0 = (int) from.getX();
     int y0 = (int) from.getY();
     int x1 = (int) to.getX();
     int y1 = (int) to.getY();
     int steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-    PixelWriter writer = image.getPixelWriter();
     int radius = brushSize.getValue() == null ? 1 : brushSize.getValue();
     for (int i = 0; i <= Math.max(0, steps); i++) {
       int x = steps == 0 ? x0 : x0 + (x1 - x0) * i / steps;
@@ -1505,41 +1888,50 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     }
   }
 
-  private void line(Point2D from, Point2D to) {
-    line(from, to, colorPicker.getValue());
-  }
-
-  private void rect(Point2D from, Point2D to) {
+  private void rect(PixelWriter writer, Point2D from, Point2D to, Color color) {
     int x0 = Math.min((int) from.getX(), (int) to.getX());
     int y0 = Math.min((int) from.getY(), (int) to.getY());
     int x1 = Math.max((int) from.getX(), (int) to.getX());
     int y1 = Math.max((int) from.getY(), (int) to.getY());
-    line(new Point2D(x0, y0), new Point2D(x1, y0));
-    line(new Point2D(x0, y1), new Point2D(x1, y1));
-    line(new Point2D(x0, y0), new Point2D(x0, y1));
-    line(new Point2D(x1, y0), new Point2D(x1, y1));
+    line(writer, new Point2D(x0, y0), new Point2D(x1, y0), color);
+    line(writer, new Point2D(x0, y1), new Point2D(x1, y1), color);
+    line(writer, new Point2D(x0, y0), new Point2D(x0, y1), color);
+    line(writer, new Point2D(x1, y0), new Point2D(x1, y1), color);
   }
 
-  private void ellipse(Point2D from, Point2D to) {
-    double cx = (from.getX() + to.getX()) / 2;
-    double cy = (from.getY() + to.getY()) / 2;
-    double rx = Math.abs(to.getX() - from.getX()) / 2;
-    double ry = Math.abs(to.getY() - from.getY()) / 2;
-    PixelWriter writer = image.getPixelWriter();
-    for (int y = (int) Math.max(0, cy - ry); y <= Math.min(image.getHeight() - 1, cy + ry); y++) {
-      for (int x = (int) Math.max(0, cx - rx); x <= Math.min(image.getWidth() - 1, cx + rx); x++) {
-        double nx = (x - cx) / (rx == 0 ? 1 : rx);
-        double ny = (y - cy) / (ry == 0 ? 1 : ry);
-        double d = nx * nx + ny * ny;
-        double innerX = ((x - 1) - cx) / (rx == 0 ? 1 : rx);
-        double innerY = ((y - 1) - cy) / (ry == 0 ? 1 : ry);
-        double dInner = innerX * innerX + innerY * innerY;
-        if (d <= 1 && dInner >= 1 || d <= 1 && (x == cx - rx + 1 || y == cy - ry + 1)) {
-          writer.setColor(x, y, colorPicker.getValue());
+  /**
+   * The ellipse filling the box from {@code from} to {@code to} (both corners
+   * included): its outline is every pixel inside it with a side-neighbour
+   * outside, drawn with the brush.
+   */
+  private void ellipse(PixelWriter writer, Point2D from, Point2D to, Color color) {
+    int x0 = (int) Math.min(from.getX(), to.getX());
+    int x1 = (int) Math.max(from.getX(), to.getX());
+    int y0 = (int) Math.min(from.getY(), to.getY());
+    int y1 = (int) Math.max(from.getY(), to.getY());
+    double cx = (x0 + x1) / 2.0;
+    double cy = (y0 + y1) / 2.0;
+    // radii to the box's outer pixel edges, so its first and last pixels count
+    double rx = (x1 - x0) / 2.0 + 0.5;
+    double ry = (y1 - y0) / 2.0 + 0.5;
+    int radius = brushSize.getValue() == null ? 1 : brushSize.getValue();
+    for (int y = y0; y <= y1; y++) {
+      for (int x = x0; x <= x1; x++) {
+        if (inEllipse(x, y, cx, cy, rx, ry)
+            && (!inEllipse(x - 1, y, cx, cy, rx, ry) || !inEllipse(x + 1, y, cx, cy, rx, ry)
+            || !inEllipse(x, y - 1, cx, cy, rx, ry) || !inEllipse(x, y + 1, cx, cy, rx, ry))) {
+          plot(writer, x, y, radius, color);
         }
       }
     }
   }
+
+  private static boolean inEllipse(int x, int y, double cx, double cy, double rx, double ry) {
+    double nx = (x - cx) / rx;
+    double ny = (y - cy) / ry;
+    return nx * nx + ny * ny <= 1;
+  }
+
 
   private void plot(PixelWriter writer, int x, int y, int radius, Color color) {
     int r = radius - 1;
@@ -1586,46 +1978,28 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     }
   }
 
-  private void drawText(int x, int y, String text) {
-    // rasterize text through a temporary canvas snapshot
-    javafx.scene.canvas.Canvas canvas = new javafx.scene.canvas.Canvas(
-        image.getWidth(), image.getHeight());
-    var g = canvas.getGraphicsContext2D();
-    g.setFill(colorPicker.getValue());
-    g.setFont(javafx.scene.text.Font.font("SansSerif", 20));
-    g.fillText(text, x, y + 16);
-    SnapshotParameters params = new SnapshotParameters();
-    WritableImage snapshot = canvas.snapshot(params, null);
-    PixelReader reader = snapshot.getPixelReader();
-    PixelWriter writer = image.getPixelWriter();
-    for (int py = 0; py < image.getHeight(); py++) {
-      for (int px = 0; px < image.getWidth(); px++) {
-        Color c = reader.getColor(px, py);
-        if (c.getOpacity() > 0.5) {
-          writer.setColor(px, py, colorPicker.getValue());
-        }
-      }
-    }
+  /**
+   * Writes {@code text} in the pixel font, its top-left corner at the click; the
+   * brush size is the size of a dot (1: letters 7 pixels tall).
+   */
+  void drawText(int x, int y, String text) {
+    int scale = brushSize.getValue() == null ? 1 : brushSize.getValue();
+    PixelFont.draw(image.getPixelWriter(), x, y, text, scale, colorPicker.getValue(),
+        (int) image.getWidth(), (int) image.getHeight());
   }
 
+  /** The shape as it will be painted: its pixels, in the pen's colour and brush size. */
   private void previewShape(Point2D from, Point2D to) {
-    redrawOverlay();
-    var g = overlay.getGraphicsContext2D();
-    g.setStroke(javafx.scene.paint.Color.ORANGE);
-    g.setLineWidth(1);
-    switch (tool) {
-      case LINE -> g.strokeLine(from.getX() * zoom, from.getY() * zoom,
-          to.getX() * zoom, to.getY() * zoom);
-      case RECT -> g.strokeRect(Math.min(from.getX(), to.getX()) * zoom,
-          Math.min(from.getY(), to.getY()) * zoom,
-          Math.abs(to.getX() - from.getX()) * zoom,
-          Math.abs(to.getY() - from.getY()) * zoom);
-      case ELLIPSE -> g.strokeOval(Math.min(from.getX(), to.getX()) * zoom,
-          Math.min(from.getY(), to.getY()) * zoom,
-          Math.abs(to.getX() - from.getX()) * zoom,
-          Math.abs(to.getY() - from.getY()) * zoom);
-      default -> { }
+    int w = (int) image.getWidth();
+    int h = (int) image.getHeight();
+    if (shapePixels == null || shapePixels.getWidth() != w || shapePixels.getHeight() != h) {
+      shapePixels = new WritableImage(w, h);
+    } else {
+      shapePixels.getPixelWriter().setPixels(0, 0, w, h,
+          javafx.scene.image.PixelFormat.getIntArgbInstance(), new int[w * h], 0, w);
     }
+    drawShape(shapePixels.getPixelWriter(), from, to);
+    drawBrushPreview();
   }
 
   private void redrawOverlay() {
@@ -1657,29 +2031,29 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     if (showFacingGuide && overlay.getWidth() >= 24 && overlay.getHeight() >= 16) {
       double y = image.getHeight() * zoom / 2;
       double x = image.getWidth() * zoom / 2;
-      double end = Math.min(overlay.getWidth() - 8, x + Math.max(16, 8 * zoom));
-      g.setStroke(Color.rgb(255, 125, 0, 0.9));
-      g.setLineWidth(2);
-      g.strokeLine(x, y, end, y);
-      g.strokeLine(end, y, end - 9, y - 6);
-      g.strokeLine(end, y, end - 9, y + 6);
+      double end = Math.min(overlay.getWidth() - 8, x + Math.max(28, 8 * zoom));
+      double[] headX = {end, end - 12, end - 12};
+      double[] headY = {y, y - 8, y + 8};
+      haloStroke(g, MARKER, 3, () -> {
+        g.strokeLine(x, y, end - 10, y);
+        g.strokePolygon(headX, headY, 3);
+      });
+      g.setFill(MARKER);
+      g.fillPolygon(headX, headY, 3);
     }
     g.setLineWidth(1);
-    if (tool == Tool.NINE_SLICE) {
+    if (tool == Tool.NINE_SLICE || showMarkers && nineSliceUsed) {
       clampSlice();
       int width = (int) image.getWidth();
       int height = (int) image.getHeight();
-      g.setStroke(Color.rgb(0, 120, 255, 0.9));
-      g.setLineWidth(2);
-      g.setLineDashes(6, 4);
-      g.strokeLine(0, nineSlice[0] * zoom, overlay.getWidth(), nineSlice[0] * zoom);
-      g.strokeLine((width - nineSlice[1]) * zoom, 0,
-          (width - nineSlice[1]) * zoom, overlay.getHeight());
-      g.strokeLine(0, (height - nineSlice[2]) * zoom,
-          overlay.getWidth(), (height - nineSlice[2]) * zoom);
-      g.strokeLine(nineSlice[3] * zoom, 0,
-          nineSlice[3] * zoom, overlay.getHeight());
-      g.setLineDashes();
+      double ow = overlay.getWidth();
+      double oh = overlay.getHeight();
+      haloStroke(g, SELECTED, 2, () -> {
+        g.strokeLine(0, nineSlice[0] * zoom, ow, nineSlice[0] * zoom);
+        g.strokeLine((width - nineSlice[1]) * zoom, 0, (width - nineSlice[1]) * zoom, oh);
+        g.strokeLine(0, (height - nineSlice[2]) * zoom, ow, (height - nineSlice[2]) * zoom);
+        g.strokeLine(nineSlice[3] * zoom, 0, nineSlice[3] * zoom, oh);
+      });
       g.setLineWidth(1);
     }
     if (floating != null) {
@@ -1701,24 +2075,88 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       g.setLineDashes();
       g.setFill(Color.web("#855cd6"));
       g.fillRect(x + w - 5, y + h - 5, 10, 10);
+      // the rotate handle: a round knob on a stalk above the middle
+      Point2D knob = rotateHandle();
+      double stalk = knob.getY() < y ? y : Math.min(knob.getY(), y + h);
+      haloStroke(g, Color.web("#855cd6"), 2,
+          () -> g.strokeLine(knob.getX(), stalk, knob.getX(), knob.getY()));
+
+      g.setFill(Color.rgb(0, 0, 0, 0.45));
+      g.fillOval(knob.getX() - 8, knob.getY() - 8, 16, 16);
+      g.setFill(Color.WHITE);
+      g.fillOval(knob.getX() - 7, knob.getY() - 7, 14, 14);
+      g.setFill(Color.web("#855cd6"));
+      g.fillOval(knob.getX() - 5, knob.getY() - 5, 10, 10);
     }
-    if (rotationCenter != null) {
-      g.setStroke(javafx.scene.paint.Color.RED);
-      g.strokeLine((rotationCenter.getX() - 6) * zoom, rotationCenter.getY() * zoom,
-          (rotationCenter.getX() + 6) * zoom, rotationCenter.getY() * zoom);
-      g.strokeLine(rotationCenter.getX() * zoom, (rotationCenter.getY() - 6) * zoom,
-          rotationCenter.getX() * zoom, (rotationCenter.getY() + 6) * zoom);
+    if (rotationCenter != null && (showMarkers || tool == Tool.CENTER)) {
+      // a target of screen size, whatever the zoom: a ring with a cross through it
+      double cx = rotationCenter.getX() * zoom;
+      double cy = rotationCenter.getY() * zoom;
+      haloStroke(g, Color.rgb(220, 30, 30), 2, () -> {
+        g.strokeOval(cx - 8, cy - 8, 16, 16);
+        g.strokeLine(cx - 14, cy, cx + 14, cy);
+        g.strokeLine(cx, cy - 14, cx, cy + 14);
+      });
     }
-    if (hitboxPoints.size() > 0) {
-      g.setStroke(javafx.scene.paint.Color.rgb(0, 120, 255));
-      double[] xs = new double[hitboxPoints.size()];
-      double[] ys = new double[hitboxPoints.size()];
-      for (int i = 0; i < hitboxPoints.size(); i++) {
+    if (hitboxPoints.size() > 0 && (showMarkers || tool == Tool.HITBOX)) {
+      // as the sprite editor's hitbox tab shows it: orange, its points as dots
+      int n = hitboxPoints.size();
+      double[] xs = new double[n];
+      double[] ys = new double[n];
+      for (int i = 0; i < n; i++) {
         xs[i] = hitboxPoints.get(i).getX() * zoom;
         ys[i] = hitboxPoints.get(i).getY() * zoom;
       }
-      g.strokePolygon(xs, ys, hitboxPoints.size());
+      if (n >= 3) {
+        g.setFill(Color.rgb(255, 120, 0, 0.16));
+        g.fillPolygon(xs, ys, n);
+      }
+      haloStroke(g, MARKER, 2, () -> g.strokePolygon(xs, ys, n));
+      for (int i = 0; i < n; i++) {
+        g.setFill(HALO);
+        g.fillOval(xs[i] - 8, ys[i] - 8, 16, 16);
+        g.setFill(Color.WHITE);
+        g.fillOval(xs[i] - 7, ys[i] - 7, 14, 14);
+        g.setFill(i == selectedHitboxPoint && tool == Tool.HITBOX ? SELECTED : MARKER);
+        g.fillOval(xs[i] - 5, ys[i] - 5, 10, 10);
+      }
     }
+    g.setLineWidth(1);
+  }
+
+  /**
+   * Strokes {@code path} in {@code color} over a white rim with a faint dark edge, so a
+   * marker shows on any pixels, dark or light.
+   */
+  private static void haloStroke(javafx.scene.canvas.GraphicsContext g, Color color,
+      double width, Runnable path) {
+    g.save();
+    g.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+    g.setLineJoin(javafx.scene.shape.StrokeLineJoin.ROUND);
+    g.setStroke(HALO);
+    g.setLineWidth(width + 5);
+    path.run();
+    g.setStroke(Color.WHITE);
+    g.setLineWidth(width + 3);
+    path.run();
+    g.setStroke(color);
+    g.setLineWidth(width);
+    path.run();
+    g.restore();
+  }
+
+  /** The hitbox point within a few screen pixels of picture point {@code p}; -1 for none. */
+  private int nearestHitboxPoint(Point2D p) {
+    int nearest = -1;
+    double best = 10;
+    for (int i = 0; i < hitboxPoints.size(); i++) {
+      double distance = hitboxPoints.get(i).distance(p) * zoom;
+      if (distance < best) {
+        best = distance;
+        nearest = i;
+      }
+    }
+    return nearest;
   }
 
   private int nearestSlice(Point2D point) {
@@ -1898,6 +2336,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private void undo() {
     if (floating != null) {
       floating = null;
+      forgetRotation();
       selection = null;
     }
     if (!history.canUndo()) {

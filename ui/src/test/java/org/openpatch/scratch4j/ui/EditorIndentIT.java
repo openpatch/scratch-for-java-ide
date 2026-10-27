@@ -47,11 +47,12 @@ class EditorIndentIT {
       area.moveTo(area.getLength());
 
       press(area, KeyCode.ENTER, "\r");
+      // "(" and "{" bring their partners, ")" steps over its one, Enter opens the block
       type(area, "if (x) {");
       press(area, KeyCode.ENTER, "\r");
       type(area, "move(1);");
-      press(area, KeyCode.ENTER, "\r");
-      type(area, "}");
+      assertThat(area.getText()).endsWith("    if (x) {\n      move(1);\n    }");
+      area.moveTo(area.getLength());
       press(area, KeyCode.ENTER, "\r");
       type(area, "}");
       assertThat(area.getText()).isEqualTo("public class Cat extends Sprite {\n"
@@ -77,6 +78,35 @@ class EditorIndentIT {
       area.moveTo(area.getLength());
       press(area, KeyCode.ENTER, "\r");
       assertThat(area.getText()).isEqualTo("class Cat {\n    void run() {\n        ");
+    });
+  }
+
+  @Test
+  void bracketsAndQuotesComeInPairs() throws Exception {
+    LayoutIT.startFx();
+    LayoutIT.onFx(() -> {
+      var apiIndex = org.openpatch.scratch4j.core.api.ApiIndex.load();
+      CodeEditor code = new CodeEditor(tmp.resolve("Cat.java"), "", apiIndex, () -> tmp);
+      var area = code.area();
+      type(area, "say(\"Hi\");");
+      assertThat(area.getText()).isEqualTo("say(\"Hi\");");
+      // Backspace on an empty pair takes both halves
+      area.replaceText("");
+      type(area, "move(");
+      assertThat(area.getText()).isEqualTo("move()");
+      press(area, KeyCode.BACK_SPACE, null);
+      assertThat(area.getText()).isEqualTo("move");
+      // a selection is wrapped and stays selected
+      area.replaceText("x = a + b;");
+      area.selectRange(4, 9);
+      type(area, "(");
+      assertThat(area.getText()).isEqualTo("x = (a + b);");
+      assertThat(area.getSelectedText()).isEqualTo("a + b");
+      // in a comment the keys type as usual
+      area.replaceText("// see ");
+      area.moveTo(area.getLength());
+      type(area, "(\"");
+      assertThat(area.getText()).isEqualTo("// see (\"");
     });
   }
 }

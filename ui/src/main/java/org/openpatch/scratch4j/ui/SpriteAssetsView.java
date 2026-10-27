@@ -740,6 +740,7 @@ final class SpriteAssetsView extends BorderPane {
         dragging = selectedPoint;
         hitboxChanged();
       }
+      if (dragging >= 0) hitboxCanvas.setCursor(javafx.scene.Cursor.CLOSED_HAND);
       refreshPoints();
       drawHitbox();
       hitboxCanvas.requestFocus();
@@ -761,8 +762,11 @@ final class SpriteAssetsView extends BorderPane {
     });
     hitboxCanvas.setOnMouseReleased(e -> {
       dragging = -1;
+      hitboxCanvas.setCursor(hitboxCursor(e.getX(), e.getY()));
       if (hitboxDirty) hitboxSave.playFromStart();
     });
+    // a hand over a point (drag it), a crosshair where a click adds one
+    hitboxCanvas.setOnMouseMoved(e -> hitboxCanvas.setCursor(hitboxCursor(e.getX(), e.getY())));
     hitboxCanvas.setOnKeyPressed(e -> {
       if (hitboxKey(e.getCode(), e.isShiftDown())) e.consume();
     });
@@ -835,8 +839,17 @@ final class SpriteAssetsView extends BorderPane {
     return new Point2D(Math.round(px), Math.round(py));
   }
 
+  /** The arrow where the hitbox can't change, else a hand over a point or a crosshair. */
+  private javafx.scene.Cursor hitboxCursor(double canvasX, double canvasY) {
+    if (hitboxReadOnly || hitboxImage == null) return javafx.scene.Cursor.DEFAULT;
+    Point2D point = toImage(canvasX, canvasY);
+    if (point == null) return javafx.scene.Cursor.DEFAULT;
+    return nearest(point) >= 0 ? javafx.scene.Cursor.OPEN_HAND : javafx.scene.Cursor.CROSSHAIR;
+  }
+
   private int nearest(Point2D point) {
-    for (int i = 0; i < vertices.size(); i++) {
+    for
+ (int i = 0; i < vertices.size(); i++) {
       if (vertices.get(i).distance(point) * imageScale < 10) return i;
     }
     return -1;

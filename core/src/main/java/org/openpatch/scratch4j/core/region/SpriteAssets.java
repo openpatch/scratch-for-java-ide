@@ -81,7 +81,13 @@ public final class SpriteAssets {
       "(?m)^[ \\t]*this\\.(addCostume|addSound|addAnimation)\\(\\s*\"([^\"\\r\\n]*)\""
           + "(?:\\s*,\\s*\"([^\"\\r\\n]*)\")?(?:\\s*,\\s*(\\d+))?\\s*\\);[ \\t]*$");
   private static final Pattern HITBOX = Pattern.compile(
-      "this\\.setHitbox\\(\\s*([^)]*)\\)");
+      "(?<![\\w.])(?:this\\.)?setHitbox\\(");
+  /** Scratch for Java 7: {@code setHitbox(new Polygon(new double[] {xs}, new double[] {ys}))}. */
+  private static final Pattern POLYGON_HITBOX = Pattern.compile(
+      "\\s*new\\s+(?:org\\.openpatch\\.scratch\\.)?Polygon\\(\\s*new\\s+double\\s*\\[\\s*]\\s*\\{([^}]*)}"
+          + "\\s*,\\s*new\\s+double\\s*\\[\\s*]\\s*\\{([^}]*)}\\s*\\)\\s*\\)");
+  /** Before 7: {@code setHitbox(x1, y1, x2, y2, ...)}; still read so the editor can rewrite it. */
+  private static final Pattern VARARGS_HITBOX = Pattern.compile("([^)]*)\\)");
   private static final Pattern ANY_HITBOX = Pattern.compile(
       "(?:this\\.)?setHitbox\\(");
 
@@ -363,19 +369,57 @@ public final class SpriteAssets {
     if (!matcher.find()) {
       return new double[0];
     }
-    String[] tokens = matcher.group(1).split(",");
-    if (tokens.length < 6 || tokens.length % 2 != 0) {
+    double[] points = literalHitbox(source, matcher.end());
+    if (points == null) {
       throw new IllegalArgumentException("The hitbox is not a literal polygon");
     }
-    double[] points = new double[tokens.length];
+    return points;
+  }
+
+  /**
+   * The x/y pairs of the first {@code setHitbox} call with a literal polygon in any
+   * class source, or null when there is none (no call, an ellipse, computed numbers).
+   */
+  public static double[] literalHitbox(String source) {
+    Matcher matcher = HITBOX.matcher(source);
+    return matcher.find() ? literalHitbox(source, matcher.end()) : null;
+  }
+
+  /** The polygon whose arguments start at {@code from} (just after {@code setHitbox(}). */
+  private static double[] literalHitbox(String source, int from) {
     try {
-      for (int i = 0; i < tokens.length; i++) {
-        points[i] = Double.parseDouble(tokens[i].trim());
+      Matcher polygon = POLYGON_HITBOX.matcher(source).region(from, source.length());
+      if (polygon.lookingAt()) {
+        double[] xs = numbers(polygon.group(1));
+        double[] ys = numbers(polygon.group(2));
+        if (xs.length < 3 || xs.length != ys.length) {
+          return null;
+        }
+        double[] points = new double[2 * xs.length];
+        for (int i = 0; i < xs.length; i++) {
+          points[2 * i] = xs[i];
+          points[2 * i + 1] = ys[i];
+        }
+        return points;
+      }
+      Matcher varargs = VARARGS_HITBOX.matcher(source).region(from, source.length());
+      if (varargs.lookingAt()) {
+        double[] points = numbers(varargs.group(1));
+        return points.length >= 6 && points.length % 2 == 0 ? points : null;
       }
     } catch (NumberFormatException e) {
-      throw new IllegalArgumentException("The hitbox is not a literal polygon", e);
+      // a computed coordinate
     }
-    return points;
+    return null;
+  }
+
+  private static double[] numbers(String list) {
+    String[] tokens = list.split(",");
+    double[] numbers = new double[tokens.length];
+    for (int i = 0; i < tokens.length; i++) {
+      numbers[i] = Double.parseDouble(tokens[i].trim());
+    }
+    return numbers;
   }
 
   public static boolean hasUnmanagedHitbox(String source) {

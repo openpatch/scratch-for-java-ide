@@ -101,7 +101,6 @@ final class StageRenderer {
       Pattern.compile("(?<![\\w.])(?:this\\.)?setHeight\\(\\s*(-?\\d+(?:\\.\\d+)?)\\s*\\)");
   private static final Pattern NINE_SLICE = Pattern.compile(
       "setNineSlice\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)");
-  private static final Pattern HITBOX = Pattern.compile("setHitbox\\(([^)]*)\\)");
   private static final Pattern ROTATION_CENTER = Pattern.compile(
       "setRotationCenter\\(\\s*(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)\\s*\\)");
 
@@ -783,17 +782,7 @@ final class StageRenderer {
         costumes.put(entries.group(1), entries.group(2) == null
             ? entries.group(1) : entries.group(2));
       }
-      Matcher hitboxCall = HITBOX.matcher(source);
-      if (hitboxCall.find()) {
-        String[] coordinates = hitboxCall.group(1).split(",");
-        if (coordinates.length >= 6 && coordinates.length % 2 == 0) {
-          double[] points = new double[coordinates.length];
-          for (int i = 0; i < coordinates.length; i++) {
-            points[i] = Double.parseDouble(coordinates[i].trim());
-          }
-          hitbox = points;
-        }
-      }
+      hitbox = org.openpatch.scratch4j.core.region.SpriteAssets.literalHitbox(source);
       Matcher w = WIDTH.matcher(source);
       if (w.find()) {
         width = Double.parseDouble(w.group(1));

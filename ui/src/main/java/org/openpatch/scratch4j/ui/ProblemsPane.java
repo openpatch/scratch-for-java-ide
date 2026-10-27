@@ -67,7 +67,8 @@ final class ProblemsPane extends BorderPane {
 
   ProblemsPane(Consumer<Problem> onOpen) {
     getStyleClass().add("problems-pane");
-    list.getStyleClass().add("problems");
+    // the card around the pane draws the border
+    list.getStyleClass().addAll("problems", "edge-to-edge");
     empty.getStyleClass().add("problems-empty");
     empty.setWrapText(true);
     empty.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);

@@ -84,7 +84,9 @@ final class StageSelectorView extends BorderPane {
     windowSettings.setOnAction(e -> showWindowSettings());
 
     setCenter(stages);
-    setBottom(new VBox(6, windowSettings, add));
+    VBox actions = new VBox(6, windowSettings, add);
+    actions.getStyleClass().add("stage-actions");
+    setBottom(actions);
     refresh();
   }
 

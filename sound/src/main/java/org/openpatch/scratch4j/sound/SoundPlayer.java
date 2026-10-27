@@ -28,10 +28,17 @@ public final class SoundPlayer {
   private static final class Playback {
     final AtomicBoolean running = new AtomicBoolean(true);
     final SourceDataLine line;
+    final SoundEffects.Selection range;
+    final boolean loop;
+    /** Samples into the range where playback started. */
+    final int offset;
     Thread worker;
 
-    Playback(SourceDataLine line) {
+    Playback(SourceDataLine line, SoundEffects.Selection range, boolean loop, int offset) {
       this.line = line;
+      this.range = range;
+      this.loop = loop;
+      this.offset = offset;
     }
   }
 
@@ -52,8 +59,17 @@ public final class SoundPlayer {
   }
 
   /** Plays a selection repeatedly when {@code loop} is true, until stopped. */
+  public boolean play(SoundClip clip, SoundEffects.Selection selection, boolean loop,
+      Runnable done) {
+    return play(clip, selection, loop, -1, done);
+  }
+
+  /**
+   * Plays from sample {@code from} (to resume after a pause); from the start of
+   * the range when it lies outside it.
+   */
   public synchronized boolean play(SoundClip clip, SoundEffects.Selection selection,
-                                   boolean loop, Runnable done) {
+                                   boolean loop, int from, Runnable done) {
     stop();
     if (clip.sampleCount() == 0) {
       return false;
@@ -70,12 +86,13 @@ public final class SoundPlayer {
       SourceDataLine line = lineFactory.line(format);
       line.open(format);
       line.start();
-      Playback playback = new Playback(line);
+      int offset = from >= range.start() && from <= range.end() ? from - range.start() : 0;
+      Playback playback = new Playback(line, range, loop, offset);
       current = playback;
       playback.worker = new Thread(() -> {
         try {
           byte[] buffer = new byte[2048 * clip.channelCount() * 2];
-          int frame = range.start();
+          int frame = range.start() + playback.offset;
           while (playback.running.get()) {
             int bytes = 0;
             while (bytes < buffer.length && playback.running.get()) {
@@ -137,6 +154,21 @@ public final class SoundPlayer {
       playback.line.close();
       playback.worker.interrupt();
     }
+  }
+
+  /**
+   * The sample being heard right now (what the speaker plays, not what was
+   * last handed to the device), or -1 when nothing is playing.
+   */
+  public synchronized int position() {
+    Playback playback = current;
+    if (playback == null || !playback.running.get()) {
+      return -1;
+    }
+    long played = playback.offset + playback.line.getLongFramePosition();
+    int length = playback.range.length();
+    long offset = playback.loop ? played % length : Math.min(played, length - 1);
+    return playback.range.start() + (int) offset;
   }
 
   public synchronized boolean isPlaying() {

@@ -181,10 +181,86 @@ public final class SoundEffects {
   }
 
   /**
-   * Faster/slower without changing the pitch perception of a resample: plays
-   * the samples at a different rate (factor 2 = twice as fast = half as long).
+   * Faster/slower at the same pitch (factor 2 = twice as fast = half as
+   * long): WSOLA time stretching. Short overlapping pieces of the sound are
+   * laid out closer together or further apart; each piece is shifted a little
+   * so its waveform lines up with the one before, which avoids the warble of
+   * plain overlap-add. {@link #resample} changes speed and pitch together.
    */
   public static SoundClip speed(SoundClip clip, double factor) {
+    if (factor <= 0) {
+      throw new IllegalArgumentException("factor must be positive");
+    }
+    int count = clip.sampleCount();
+    int newCount = Math.max(1, (int) Math.round(count / factor));
+    int frame = Math.max(4, (int) Math.round(clip.sampleRate() * 0.04) & ~1);
+    int hop = frame / 2;
+    int tolerance = Math.max(1, (int) Math.round(clip.sampleRate() * 0.01));
+    if (count < frame + 2 * tolerance) {
+      return resample(clip, factor); // too short to stretch: no audible pitch anyway
+    }
+    float[] mono = new float[count];
+    for (int ch = 0; ch < clip.channelCount(); ch++) {
+      for (int i = 0; i < count; i++) {
+        mono[i] += clip.sample(ch, i);
+      }
+    }
+    float[] window = new float[frame];
+    for (int i = 0; i < frame; i++) {
+      window[i] = (float) (0.5 - 0.5 * Math.cos(2 * Math.PI * i / frame));
+    }
+    float[][] out = new float[clip.channelCount()][newCount + frame];
+    float[] weight = new float[newCount + frame];
+    int previous = 0; // where the last piece was taken from
+    for (int at = 0; at < newCount; at += hop) {
+      int nominal = (int) Math.round(at * factor);
+      int start = nominal;
+      if (at > 0) {
+        // the piece whose start best continues the previous piece's waveform
+        int natural = previous + hop;
+        double best = Double.NEGATIVE_INFINITY;
+        for (int offset = -tolerance; offset <= tolerance; offset++) {
+          int candidate = nominal + offset;
+          if (candidate < 0 || candidate + hop > count || natural + hop > count) {
+            continue;
+          }
+          double score = 0;
+          for (int i = 0; i < hop; i += 2) {
+            score += mono[candidate + i] * mono[natural + i];
+          }
+          if (score > best) {
+            best = score;
+            start = candidate;
+          }
+        }
+      }
+      for (int i = 0; i < frame && at + i < weight.length; i++) {
+        int source = start + i;
+        weight[at + i] += window[i];
+        if (source < 0 || source >= count) {
+          continue;
+        }
+        for (int ch = 0; ch < out.length; ch++) {
+          out[ch][at + i] += clip.sample(ch, source) * window[i];
+        }
+      }
+      previous = start;
+    }
+    float[][] trimmed = new float[out.length][newCount];
+    for (int ch = 0; ch < out.length; ch++) {
+      for (int i = 0; i < newCount; i++) {
+        // the windows overlap to a constant sum except at the very start
+        trimmed[ch][i] = clamp(weight[i] > 0.1f ? out[ch][i] / weight[i] : out[ch][i]);
+      }
+    }
+    return new SoundClip(trimmed, clip.sampleRate());
+  }
+
+  /**
+   * Plays the samples at a different rate: faster is higher and shorter,
+   * slower is lower and longer (factor 2 = twice as fast, an octave up).
+   */
+  public static SoundClip resample(SoundClip clip, double factor) {
     if (factor <= 0) {
       throw new IllegalArgumentException("factor must be positive");
     }

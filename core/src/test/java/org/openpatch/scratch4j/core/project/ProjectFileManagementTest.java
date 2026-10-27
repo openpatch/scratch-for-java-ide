@@ -114,4 +114,47 @@ class ProjectFileManagementTest {
     assertThatThrownBy(() -> ProjectFileManagement.rename(project, renamed, "../x.md"))
         .isInstanceOf(IOException.class);
   }
+
+  @Test
+  void pasteCopiesFilesAndFoldersUnderAFreeName() throws IOException {
+    Path images = Files.createDirectories(root.resolve("assets/images"));
+    Path cat = Files.writeString(images.resolve("cat.png"), "cat");
+    Files.writeString(Files.createDirectories(images.resolve("pack")).resolve("dog.png"), "dog");
+    Path outside = Files.writeString(Files.createTempDirectory("outside").resolve("cat.png"), "x");
+    ScratchProject project = ScratchProject.open(root);
+
+    assertThat(ProjectFileManagement.copyInto(project, cat, images).getFileName())
+        .hasToString("cat-2.png");
+    assertThat(ProjectFileManagement.copyInto(project, outside, root).getFileName())
+        .hasToString("cat.png");
+    Path pack = ProjectFileManagement.copyInto(project, images.resolve("pack"), root);
+    assertThat(Files.readString(pack.resolve("dog.png"))).isEqualTo("dog");
+    assertThatThrownBy(() -> ProjectFileManagement.copyInto(project, images, images.resolve("pack")))
+        .isInstanceOf(IOException.class);
+  }
+
+  @Test
+  void pastedClassesStayInTheProjectFolder() throws IOException {
+    Path player = Files.writeString(root.resolve("Player.java"), "class Player {}");
+    Path folder = Files.createDirectories(root.resolve("notes"));
+    ScratchProject project = ScratchProject.open(root);
+    assertThatThrownBy(() -> ProjectFileManagement.copyInto(project, player, folder))
+        .isInstanceOf(IOException.class).hasMessageContaining("project folder");
+    Files.writeString(folder.resolve("Helper.java"), "class Helper {}");
+    assertThatThrownBy(() -> ProjectFileManagement.copyInto(project, folder, root))
+        .isInstanceOf(IOException.class).hasMessageContaining("Java");
+  }
+
+  @Test
+  void restoreUndoesADelete() throws IOException {
+    Path notes = Files.writeString(Files.createDirectories(root.resolve("docs"))
+        .resolve("notes.txt"), "keep");
+    ScratchProject project = ScratchProject.open(root);
+    Path trashed = ProjectFileManagement.delete(project, notes);
+    Files.delete(root.resolve("docs"));
+    ProjectFileManagement.restore(project, trashed, notes);
+    assertThat(Files.readString(notes)).isEqualTo("keep");
+    assertThatThrownBy(() -> ProjectFileManagement.restore(project, notes, root.resolve("x.txt")))
+        .isInstanceOf(IOException.class);
+  }
 }

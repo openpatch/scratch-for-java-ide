@@ -247,6 +247,99 @@ class CompletionIT {
     }
   }
 
+  /** Held Backspace deletes on: it neither opens the suggestions nor asks javac. */
+  @Test
+  void backspaceDeletesWithoutSuggestions() throws Exception {
+    String text = """
+        class Player {
+          void run() {
+            moveSteps
+          }
+        }
+        """;
+    int end = text.indexOf("moveSteps") + "moveSteps".length();
+    Opened opened = openEditor(text, editor -> editor);
+    CodeEditor code = opened.code();
+    java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
+    try {
+      LayoutIT.onFx(() -> {
+        code.setSemanticCompleter((source, content, offset) -> {
+          runs.incrementAndGet();
+          return new Completions.Result(offset, "", false, List.of(new Completions.Item(
+              "move", Completions.Kind.METHOD, "move()", "void", "Player", false, List.of())));
+        });
+        code.area().requestFocus();
+        code.area().moveTo(end);
+        // as JavaFX sends it: the key, then "\b" as the typed character
+        for (int i = 0; i < 7; i++) {
+          code.area().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+              "", "", KeyCode.BACK_SPACE, false, false, false, false));
+          code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+              "\b", "", KeyCode.UNDEFINED, false, false, false, false));
+        }
+      });
+      Thread.sleep(300);
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.content()).contains("    mo\n");
+        assertThat(code.completionShowing()).isFalse();
+      });
+      assertThat(runs.get()).isZero();
+    } finally {
+      LayoutIT.onFx(opened.window()::hide);
+    }
+  }
+
+  /** javac is asked at the first letter, so the second one opens the list at once. */
+  @Test
+  void theFirstLetterAsksJavacAndTheSecondShowsTheAnswer() throws Exception {
+    String text = """
+        class Player {
+          void run() {
+           \s
+          }
+        }
+        """;
+    int caret = text.indexOf("   \n") + 3;
+    Opened opened = openEditor(text, editor -> editor);
+    CodeEditor code = opened.code();
+    java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
+    try {
+      LayoutIT.onFx(() -> {
+        code.setSemanticCompleter((source, content, offset) -> {
+          runs.incrementAndGet();
+          return new Completions.Result(offset, "", false, List.of(
+              new Completions.Item("getX", Completions.Kind.METHOD, "getX()", "double",
+                  "org.openpatch.scratch.Sprite", false, List.of()),
+              new Completions.Item("goToRandomPosition", Completions.Kind.METHOD,
+                  "goToRandomPosition()", "void", "org.openpatch.scratch.Sprite", false,
+                  List.of())));
+        });
+        code.area().requestFocus();
+        code.area().moveTo(caret);
+        code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+            "g", "", KeyCode.UNDEFINED, false, false, false, false));
+      });
+      Thread.sleep(300);
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(runs.get()).isOne();
+        assertThat(code.completionShowing()).as("one letter does not open the list").isFalse();
+        code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+            "X", "", KeyCode.UNDEFINED, false, false, false, false));
+      });
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionShowing()).isTrue();
+        // gX: the starts of getX's words, not goToRandomPosition's
+        assertThat(code.completionCandidates()).containsExactly("getX");
+      });
+      assertThat(runs.get()).isOne();
+    } finally {
+      LayoutIT.onFx(opened.window()::hide);
+    }
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"held", "Random", ""})
   void suggestionsWaitForTheReceiverAndScope(String receiver) throws Exception {
