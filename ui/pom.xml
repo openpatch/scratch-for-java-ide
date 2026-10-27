@@ -61,6 +61,10 @@
       <artifactId>ikonli-feather-pack</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.kordamp.ikonli</groupId>
+      <artifactId>ikonli-materialdesign2-pack</artifactId>
+    </dependency>
+    <dependency>
       <groupId>tools.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>3.2.3</version>

@@ -99,8 +99,8 @@ The six Maven modules are `core` (projects and editing logic), `runner`
 
 The IDE is [MIT licensed](LICENSE). Bundled Scratch for Java artwork and sounds
 come from [Kenney](https://kenney.nl) under CC0. OGG and MP3 support uses
-replaceable LGPL libraries; RichTextFX, AtlantaFX, Ikonli, and Feather icons
-retain their respective licenses.
+replaceable LGPL libraries; RichTextFX, AtlantaFX, Ikonli, Feather icons, and Material Design
+Icons retain their respective licenses.
 
 
 ## Continue between browser and desktop

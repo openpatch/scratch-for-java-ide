@@ -796,6 +796,11 @@ class UiSmokeIT {
             tmp.resolve("uismoke"));
         ImageEditorView imageEditor = new ImageEditorView(project, png);
         assertThat(imageEditor.file()).isEqualTo(png);
+        javafx.scene.Scene imageScene = new javafx.scene.Scene(imageEditor, 1300, 600);
+        Theme.apply(imageScene);
+        imageEditor.applyCss();
+        imageEditor.layout();
+        snapshot(imageEditor, Path.of("target/image-editor.png"));
       } catch (Throwable t) {
         failure.set(t);
       } finally {

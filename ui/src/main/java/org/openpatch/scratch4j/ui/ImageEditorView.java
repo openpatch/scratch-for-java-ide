@@ -652,9 +652,9 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         Icons.button("fth-corner-up-left", I18n.t("imageeditor.undo"), this::undo),
         Icons.button("fth-corner-up-right", I18n.t("imageeditor.redo"), this::redo),
         new Separator(javafx.geometry.Orientation.VERTICAL),
-        Icons.button("fth-columns", I18n.t("imageeditor.flipH"),
+        Icons.button("mdi2f-flip-horizontal", I18n.t("imageeditor.flipH"),
             () -> transform(ImageEditorView::flipHorizontal)),
-        Icons.button("fth-server", I18n.t("imageeditor.flipV"),
+        Icons.button("mdi2f-flip-vertical", I18n.t("imageeditor.flipV"),
             () -> transform(ImageEditorView::flipVertical)),
         Icons.button("fth-rotate-cw", I18n.t("imageeditor.rotate"),
             () -> transform(ImageEditorView::rotate90)),
@@ -689,8 +689,8 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     applyToSprite.setText(center ? I18n.t("imageeditor.center.apply")
         : hitbox ? I18n.t("imageeditor.hitbox.apply")
         : I18n.t("imageeditor.nineslice.apply"));
-    applyToSprite.setGraphic(Icons.of(center ? "fth-crosshair"
-        : hitbox ? "fth-hexagon" : "fth-columns"));
+    applyToSprite.setGraphic(Icons.of(toolIcon(center ? Tool.CENTER
+        : hitbox ? Tool.HITBOX : Tool.NINE_SLICE)));
     if (select) {
       status.setText(I18n.t("imageeditor.select.help"));
     } else if (slice) {
@@ -711,18 +711,18 @@ final class ImageEditorView extends BorderPane implements SavableTool {
 
   private static String toolIcon(Tool tool) {
     return switch (tool) {
-      case SELECT -> "fth-maximize-2";
-      case PENCIL -> "fth-edit-2";
-      case ERASER -> "fth-delete";
-      case FILL -> "fth-droplet";
-      case LINE -> "fth-minus";
-      case RECT -> "fth-square";
-      case ELLIPSE -> "fth-circle";
-      case TEXT -> "fth-type";
-      case PICKER -> "fth-eye";
-      case CENTER -> "fth-crosshair";
-      case HITBOX -> "fth-hexagon";
-      case NINE_SLICE -> "fth-columns";
+      case SELECT -> "mdi2s-selection";
+      case PENCIL -> "mdi2p-pencil";
+      case ERASER -> "mdi2e-eraser";
+      case FILL -> "mdi2f-format-color-fill";
+      case LINE -> "mdi2v-vector-line";
+      case RECT -> "mdi2s-square-outline";
+      case ELLIPSE -> "mdi2c-circle-outline";
+      case TEXT -> "mdi2f-format-text";
+      case PICKER -> "mdi2e-eyedropper";
+      case CENTER -> "mdi2c-crosshairs";
+      case HITBOX -> "mdi2v-vector-polygon";
+      case NINE_SLICE -> "mdi2b-border-all";
     };
   }
 

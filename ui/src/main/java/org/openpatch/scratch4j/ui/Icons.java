@@ -4,13 +4,17 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Tooltip;
 import org.kordamp.ikonli.javafx.FontIcon;
 
-/** Feather icons (Ikonli) and small factories for icon buttons. */
+/**
+ * Feather icons (Ikonli) and small factories for icon buttons. The paint
+ * tools use Material Design Icons ({@code mdi2...}), which has the familiar
+ * paint bucket, eyedropper and eraser that Feather lacks.
+ */
 final class Icons {
 
   private Icons() {}
 
   /**
-   * A Feather icon by its Ikonli literal, e.g. {@code fth-play}. An unknown
+   * An icon by its Ikonli literal, e.g. {@code fth-play}. An unknown
    * name falls back to a dot instead of failing (IconsTest keeps every
    * literal in the sources valid).
    */
