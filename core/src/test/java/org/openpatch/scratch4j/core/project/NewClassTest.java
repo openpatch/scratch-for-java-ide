@@ -31,7 +31,8 @@ class NewClassTest {
 
   @Test
   void generatedClassesCompileAgainstTheScratchJar() throws IOException {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     var compiler = new CompilerService();
     for (NewClass.Kind kind : NewClass.Kind.values()) {
       String name = "Gen" + kind.name();

@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * End-to-end OpenGL smoke test: a real Scratch for Java stage opens a window

@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.zip.DeflaterOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * Maps the editor saves, and maps from Tiled 1.10 after "make it work",

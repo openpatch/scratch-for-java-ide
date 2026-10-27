@@ -4,7 +4,7 @@ import org.openpatch.scratch4j.core.compile.CompileResult;
 import org.openpatch.scratch4j.core.compile.CompilerService;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.runner.LauncherSource;
-import org.openpatch.scratch4j.runner.LibraryJarSource;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

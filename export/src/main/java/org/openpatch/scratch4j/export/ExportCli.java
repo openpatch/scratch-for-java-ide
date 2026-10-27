@@ -2,7 +2,7 @@ package org.openpatch.scratch4j.export;
 
 import org.openpatch.scratch4j.core.project.BundledTemplates;
 import org.openpatch.scratch4j.core.project.ScratchProject;
-import org.openpatch.scratch4j.runner.LibraryJarSource;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

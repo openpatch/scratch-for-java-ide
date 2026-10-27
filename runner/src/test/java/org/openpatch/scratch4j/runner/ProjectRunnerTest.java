@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 class ProjectRunnerTest {
 
@@ -23,7 +24,8 @@ class ProjectRunnerTest {
   private final ProjectRunner runner = new ProjectRunner();
 
   private Path scratchJar() throws IOException {
-    return NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    return LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
   }
 
   /** A minimal project: one class whose constructor prints, jar in +libs. */

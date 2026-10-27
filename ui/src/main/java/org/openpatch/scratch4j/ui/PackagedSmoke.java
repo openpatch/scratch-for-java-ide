@@ -8,6 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.openpatch.scratch4j.core.project.*;
 import org.openpatch.scratch4j.core.io.AtomicFiles;
 import org.openpatch.scratch4j.runner.*;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Starts from the installed native launcher; every project and report is disposable. */
 final class PackagedSmoke {

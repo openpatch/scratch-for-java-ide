@@ -5,9 +5,8 @@ import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
-import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ScratchProject;
-import org.openpatch.scratch4j.runner.LibraryJarSource;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,14 +24,16 @@ class CrossPlatformExportTest {
   private static final String FEATURE = String.valueOf(Runtime.version().feature());
 
   private ScratchProject catDemo() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     return ScratchProject.open(BundledTemplates.create("demo-cat", tmp, "cat", jar));
   }
 
   @Test
   void cliNamesDemoExportsWithoutTheTemplateIdPrefix() throws Exception {
     Path cache = Files.createDirectories(tmp.resolve("cache"));
-    Files.copy(NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class),
+    Files.copy(LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")),
         cache.resolve("scratch-" + LibraryJarSource.SCRATCH_VERSION + "-all.jar"));
     seedWindowsJre(cache);
 

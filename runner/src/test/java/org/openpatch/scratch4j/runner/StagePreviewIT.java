@@ -13,6 +13,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
 import org.openpatch.scratch4j.core.project.ScratchProject;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * The designer's preview is the program's first frame: the tiled demo shows

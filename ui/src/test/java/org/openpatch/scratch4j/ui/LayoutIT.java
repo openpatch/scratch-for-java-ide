@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * The whole IDE window at its smallest size (900x600) with the tiled demo's
@@ -90,8 +91,8 @@ class LayoutIT {
   void smallWindowKeepsHeaderAndStagePreviewInside() throws Exception {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
     Path tiled = BundledTemplates.create("demo-tiled", tmp, "tiled",
-        org.openpatch.scratch4j.core.project.NewProject.classpathJar(
-            org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     startFx();
     AtomicReference<StudioApp> app = new AtomicReference<>();
     AtomicReference<javafx.stage.Stage> window = new AtomicReference<>();

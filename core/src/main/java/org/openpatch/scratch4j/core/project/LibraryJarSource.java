@@ -1,4 +1,4 @@
-package org.openpatch.scratch4j.runner;
+package org.openpatch.scratch4j.core.project;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,9 +42,9 @@ public final class LibraryJarSource {
    * ({@code scratch-<v>-nrw-all.jar}, same release) whose collections are the
    * Abiturklassen {@code List}. Override the NRW jar with {@code SCRATCH4J_NRW_ALL_JAR}.
    */
-  public static Path jar(org.openpatch.scratch4j.core.project.LibraryFlavour flavour,
+  public static Path jar(LibraryFlavour flavour,
       Path cacheDir) throws IOException {
-    if (flavour != org.openpatch.scratch4j.core.project.LibraryFlavour.NRW) {
+    if (flavour != LibraryFlavour.NRW) {
       return allJar(cacheDir);
     }
     String override = System.getenv("SCRATCH4J_NRW_ALL_JAR");

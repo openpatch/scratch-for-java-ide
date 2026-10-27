@@ -33,6 +33,7 @@ import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.openpatch.scratch4j.ui.LayoutIT.onFx;
 import static org.openpatch.scratch4j.ui.LayoutIT.settle;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Real mouse clicks on owned move/delete dialogs, including on Hyprland/XWayland. */
 @EnabledIfSystemProperty(named = "scratch4j.uismoke", matches = "true")
@@ -47,7 +48,8 @@ class FileActionsIT {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
     I18n.set(I18n.Language.DE);
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "project",
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     Path root = tmp.resolve("project");
     Path image = root.resolve("assets/images/hero.png");
     Path spare = root.resolve("assets/images/spare.png");

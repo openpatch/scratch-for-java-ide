@@ -12,6 +12,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** A real program under the JDI debugger: breakpoint, variables, step, continue. */
 class DebuggerTest {
@@ -49,8 +50,8 @@ class DebuggerTest {
         }
         """);
     Files.createDirectories(root.resolve("+libs"));
-    Path jar = org.openpatch.scratch4j.core.project.NewProject.classpathJar(
-        org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     Files.copy(jar, root.resolve("+libs").resolve(jar.getFileName()));
     ScratchProject project = ScratchProject.open(root);
     LinkedBlockingQueue<Debugger.Pause> pauses = new LinkedBlockingQueue<>();

@@ -25,12 +25,5 @@
       <artifactId>jackson-databind</artifactId>
       <version>3.2.3</version>
     </dependency>
-    <!-- Only for the integration-test launcher; the runner itself generates a
-         launcher that references the student project's +libs jar. -->
-    <dependency>
-      <groupId>org.openpatch</groupId>
-      <artifactId>scratch-all</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 </project>

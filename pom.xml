@@ -25,7 +25,7 @@
   <properties>
     <maven.compiler.release>25</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <scratch.version>7.0.0-SNAPSHOT</scratch.version>
+    <scratch.version>7.0.0</scratch.version>
     <javafx.version>25</javafx.version>
     <junit.version>5.11.4</junit.version>
     <assertj.version>3.27.3</assertj.version>
@@ -53,11 +53,31 @@
         <artifactId>scratch</artifactId>
         <version>${scratch.version}</version>
       </dependency>
-      <!-- Scratch for Java 7: the fat jar (core, every extension, LWJGL with natives) -
-           what a project carries in +libs, so Studio compiles projects against it -->
+      <!-- Scratch for Java 7's extensions are jars of their own on Maven Central; the fat jar
+           projects carry in +libs comes from the library's GitHub release (LibraryJarSource) -->
       <dependency>
         <groupId>org.openpatch</groupId>
-        <artifactId>scratch-all</artifactId>
+        <artifactId>scratch-tiled</artifactId>
+        <version>${scratch.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.openpatch</groupId>
+        <artifactId>scratch-save</artifactId>
+        <version>${scratch.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.openpatch</groupId>
+        <artifactId>scratch-recorder</artifactId>
+        <version>${scratch.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.openpatch</groupId>
+        <artifactId>scratch-drawing</artifactId>
+        <version>${scratch.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.openpatch</groupId>
+        <artifactId>scratch-gamepad</artifactId>
         <version>${scratch.version}</version>
       </dependency>
       <!-- UI: code editor (RichTextFX; 0.11.7 fixes the OpenJFX 25 break of

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Native FILES payloads, as supplied by Windows Explorer (needs a display). */
 @EnabledIfSystemProperty(named = "scratch4j.uismoke", matches = "true")
@@ -34,7 +35,8 @@ class FileTreeDropIT {
   void fileManagerDropsImportAssetsWhileTreeDragsStillMove() throws Exception {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "project",
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     Path project = tmp.resolve("project");
     Files.createDirectory(project.resolve("notes"));
     Path image = Files.write(tmp.resolve("new picture.PNG"), new byte[] {0, 1, 2, -1});

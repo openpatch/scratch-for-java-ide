@@ -14,6 +14,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** A running stage's run() gets new code from a save, frame by frame, without a restart. */
 @EnabledIfSystemProperty(named = "scratch4j.gltest", matches = "true")

@@ -93,7 +93,7 @@ public final class ProjectFormats {
     Path source = project.sourceOf(settings.startStage);
     if (source != null) settings.startFile = project.root().relativize(source).toString().replace('\\', '/');
     if (settings.libraryVersion.isBlank()) settings.libraryVersion = settings.libraryPin.isBlank()
-        ? org.openpatch.scratch4j.runner.LibraryJarSource.SCRATCH_VERSION : settings.libraryPin.replaceFirst("-nrw$", "");
+        ? org.openpatch.scratch4j.core.project.LibraryJarSource.SCRATCH_VERSION : settings.libraryPin.replaceFirst("-nrw$", "");
     settings.sourceEnvironment = "studio";
     if ("nrw".equals(settings.flavour)) {
       java.util.Set<String> courseClasses = org.openpatch.scratch4j.core.project.Abiturklassen.present(project);

@@ -18,7 +18,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.openpatch.scratch4j.core.api.ApiIndex;
 import org.openpatch.scratch4j.core.compile.Completions;
-import org.openpatch.scratch4j.core.project.NewProject;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,6 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Completion labels and insertion (needs xvfb-run and -Dscratch4j.uismoke=true). */
 @EnabledIfSystemProperty(named = "scratch4j.uismoke", matches = "true")
@@ -63,7 +63,8 @@ class CompletionIT {
     Files.writeString(file, text);
     int caret = text.indexOf(receiver) + receiver.length();
     var result = Completions.complete(file, text, caret, List.of(file),
-        List.of(NewProject.classpathJar(org.openpatch.scratch.Sprite.class)));
+        List.of(LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"))));
     LayoutIT.startFx();
     LayoutIT.onFx(() -> {
       CodeEditor code = new CodeEditor(file, text, ApiIndex.load(), () -> tmp);
@@ -275,7 +276,8 @@ class CompletionIT {
             throw new java.io.IOException(e);
           }
           var result = Completions.complete(source, content, offset, List.of(source),
-              List.of(NewProject.classpathJar(org.openpatch.scratch.Sprite.class)));
+              List.of(LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"))));
           analyzed.countDown();
           return result;
         });

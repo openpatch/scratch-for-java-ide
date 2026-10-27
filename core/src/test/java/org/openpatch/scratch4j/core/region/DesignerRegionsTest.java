@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.compile.CompilerService;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
-import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 
 import java.nio.file.Files;
@@ -12,6 +11,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 class DesignerRegionsTest {
 
@@ -163,7 +163,8 @@ class DesignerRegionsTest {
 
   @Test
   void everyBundledTemplateGetsRegionsAndStillCompiles() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     for (var template : BundledTemplates.list()) {
       // Region generation and Java compilation also cover examples requiring newer artwork.
       // Runtime asset availability is checked separately by BundledTemplatesTest.

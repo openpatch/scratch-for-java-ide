@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * Runtime smoke test of the shell's building blocks (needs a display —
@@ -28,7 +29,8 @@ class UiSmokeIT {
   @Test
   void editorTreeAndWizardFilesBuildAndEditOnTheFxThread() throws Exception {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "uismoke",
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     Path stage = tmp.resolve("uismoke/MyStage.java");
     // the Files tree hides empty asset folders: give images something to show
     java.nio.file.Files.writeString(tmp.resolve("uismoke/assets/images/cat.png"), "");
@@ -617,7 +619,7 @@ class UiSmokeIT {
         // sprites the stage's code adds (loops over ground tiles and coins) come from the
         // program's own first frame: the designer's preview
         Path coins = org.openpatch.scratch4j.core.project.BundledTemplates.create(
-            "demo-coinCollector", tmp, "coins", org.openpatch.scratch4j.runner.LibraryJarSource
+            "demo-coinCollector", tmp, "coins", org.openpatch.scratch4j.core.project.LibraryJarSource
                 .allJar(Path.of(System.getProperty("user.dir"), "target", "bundled")));
         var coinProject = org.openpatch.scratch4j.core.project.ScratchProject.open(coins);
         StageDesignerView coinDesigner = new StageDesignerView(coinProject, "CoinCollector",

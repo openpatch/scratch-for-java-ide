@@ -24,10 +24,5 @@
       <artifactId>runner</artifactId>
       <version>${project.version}</version>
     </dependency>
-    <dependency>
-      <groupId>org.openpatch</groupId>
-      <artifactId>scratch-all</artifactId>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 </project>

@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * A project opens behind a loading card; a starting program shows a bar
@@ -26,8 +27,8 @@ class LoadingProgressIT {
   void openingAndStartingShowTheirProgress() throws Exception {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
     Path project = BundledTemplates.create("demo-tiled", tmp, "tiled",
-        org.openpatch.scratch4j.core.project.NewProject.classpathJar(
-            org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     LayoutIT.startFx();
     AtomicReference<StudioApp> app = new AtomicReference<>();
     AtomicReference<javafx.stage.Stage> window = new AtomicReference<>();

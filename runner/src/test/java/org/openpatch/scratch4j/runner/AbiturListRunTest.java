@@ -3,7 +3,6 @@ package org.openpatch.scratch4j.runner;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.io.TempDir;
-import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 
 import java.nio.file.Files;
@@ -13,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Exercises the generated monitor against both collection APIs without opening a window. */
 class AbiturListRunTest {
@@ -23,7 +23,8 @@ class AbiturListRunTest {
   @ValueSource(booleans = {false, true})
   void reportsEmptyAndPopulatedSpriteLists(boolean nrw) throws Exception {
     Files.createDirectories(root.resolve("+libs"));
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     Files.copy(jar, root.resolve("+libs/scratch.jar"));
     Path library = Files.createDirectories(root.resolve("org/openpatch/scratch"));
     Files.writeString(library.resolve("Window.java"), """

@@ -15,8 +15,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.openpatch.scratch4j.core.lint.DiagnosticsExplanations;
 import org.openpatch.scratch4j.core.lint.ProjectCheck;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
-import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ScratchProject;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * Every bundled lesson, played like a student on its real template: each
@@ -137,7 +137,8 @@ class BundledLessonsTest {
       assertThat(step.text(Locale.GERMAN)).isNotEqualTo(step.text(Locale.ENGLISH));
     }
     Path root = BundledTemplates.create(lesson.template(), tmp, id,
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     assertThat(compiles(root)).as("the template compiles").isTrue();
     Lesson.install(root, id);
     LessonProgress progress = LessonProgress.load(Lesson.load(root), root);

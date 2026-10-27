@@ -6,7 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ProjectTemplate;
 import org.openpatch.scratch4j.core.project.ScratchProject;
-import org.openpatch.scratch4j.runner.LibraryJarSource;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 import java.io.IOException;
 import java.nio.file.Files;

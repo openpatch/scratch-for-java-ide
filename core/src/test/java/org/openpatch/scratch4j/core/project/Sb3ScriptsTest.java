@@ -154,7 +154,8 @@ class Sb3ScriptsTest {
 
   @Test
   void scriptsBecomeEventMethodsRunAndTimersAndCompile() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     var result = Sb3Importer.importProject(sb3(), tmp, "game", jar, null);
     Path root = result.root();
     String cat = Files.readString(root.resolve("Cat.java"));

@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * Runtime check: a stage the designer model describes is

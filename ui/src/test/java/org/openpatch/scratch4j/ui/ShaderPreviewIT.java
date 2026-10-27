@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
-import org.openpatch.scratch4j.runner.LibraryJarSource;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Shader previews in the gutter and beside a .frag (OpenGL: xvfb-run, -Dscratch4j.gltest). */
 @EnabledIfSystemProperty(named = "scratch4j.gltest", matches = "true")

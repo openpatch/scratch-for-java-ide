@@ -39,7 +39,8 @@ class CompactSourceTest {
 
   @Test
   void snippetBecomesProjectClassesThatCompileAndRun() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     var imported = CompactSource.importSnippet(SNIPPET, tmp);
     assertThat(imported.startClass()).isEqualTo("Main");
     assertThat(imported.files()).extracting(p -> p.getFileName().toString())
@@ -57,7 +58,8 @@ class CompactSourceTest {
 
   @Test
   void projectBecomesOneCompactFileThatCompiles() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "p", jar);
     ScratchProject project = ScratchProject.open(tmp.resolve("p"));
     String compact = CompactSource.export(project, "MyStage");

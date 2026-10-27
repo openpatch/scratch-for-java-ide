@@ -21,7 +21,7 @@ class ProjectFormatsTest {
   private ScratchProject project() throws IOException {
     // the all-jar: student projects carry the self-contained library
     // (the Central jar is slim - processing is not inside)
-    Path jar = org.openpatch.scratch4j.runner.LibraryJarSource.allJar(
+    Path jar = org.openpatch.scratch4j.core.project.LibraryJarSource.allJar(
         tmp.resolve("bundled"));
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "game", jar);
     return ScratchProject.open(tmp.resolve("game"));

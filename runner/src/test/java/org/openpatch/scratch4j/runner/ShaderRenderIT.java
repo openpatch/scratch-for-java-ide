@@ -10,6 +10,7 @@ import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Shader previews render off-screen; needs a display ({@code xvfb-run}) and -Dscratch4j.gltest. */
 @EnabledIfSystemProperty(named = "scratch4j.gltest", matches = "true")

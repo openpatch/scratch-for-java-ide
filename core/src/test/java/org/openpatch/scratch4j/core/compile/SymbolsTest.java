@@ -1,7 +1,6 @@
 package org.openpatch.scratch4j.core.compile;
 
 import org.junit.jupiter.api.Test;
-import org.openpatch.scratch4j.core.project.NewProject;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -9,6 +8,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 class SymbolsTest {
 
@@ -68,7 +68,8 @@ class SymbolsTest {
   }
 
   private static List<Path> classpath() throws Exception {
-    return List.of(NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+    return List.of(LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
   }
 
   private static int at(String text, String marker, int delta) {

@@ -56,7 +56,8 @@ class AbiturklassenTest {
 
   private ScratchProject project() throws IOException {
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "abi",
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     return ScratchProject.open(tmp.resolve("abi"));
   }
 

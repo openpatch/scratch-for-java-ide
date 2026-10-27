@@ -24,7 +24,7 @@
     </dependency>
     <dependency>
       <groupId>org.openpatch</groupId>
-      <artifactId>scratch-all</artifactId>
+      <artifactId>scratch</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

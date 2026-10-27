@@ -27,7 +27,7 @@ class CodeCostumesIT {
     System.setProperty("scratch4j.settingsDir", tmp.resolve("settings").toString());
     I18n.set(I18n.Language.EN);
     Path race = BundledTemplates.create("red-light-green-light-100", tmp, "race",
-        org.openpatch.scratch4j.runner.LibraryJarSource.allJar(
+        org.openpatch.scratch4j.core.project.LibraryJarSource.allJar(
             Path.of(System.getProperty("user.dir"), "target", "bundled")));
     startFx();
     AtomicReference<StudioApp> app = new AtomicReference<>();

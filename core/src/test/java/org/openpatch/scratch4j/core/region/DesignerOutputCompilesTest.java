@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** Designer-generated Text and UISprite lines compile against the library. */
 class DesignerOutputCompilesTest {
@@ -21,7 +22,8 @@ class DesignerOutputCompilesTest {
 
   @Test
   void textAndUiSpriteInstancesCompile() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "p", jar);
     Path root = tmp.resolve("p");
     Files.writeString(root.resolve("Button.java"), """
@@ -65,7 +67,8 @@ class DesignerOutputCompilesTest {
 
   @Test
   void sheetAndAnimationLinesCompile() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "q", jar);
     Path root = tmp.resolve("q");
     String hero = """
@@ -91,7 +94,8 @@ class DesignerOutputCompilesTest {
 
   @Test
   void windowSettingsCompile() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "w", jar);
     Path root = tmp.resolve("w");
     var all = new WindowDocument.Settings(640, 480, "MyStage", true, true,

@@ -14,8 +14,8 @@ import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.lint.DiagnosticsExplanations;
 import org.openpatch.scratch4j.core.lint.ProjectCheck;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
-import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ScratchProject;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 class LessonTest {
 
@@ -63,7 +63,8 @@ class LessonTest {
       assertThat(step.text(Locale.GERMAN)).isNotBlank().isNotEqualTo(step.text(Locale.ENGLISH));
     }
     BundledTemplates.create(lesson.template(), tmp, "lesson",
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     root = tmp.resolve("lesson");
     Lesson.install(root, lesson.id());
     assertThat(Lesson.load(root)).isEqualTo(lesson);

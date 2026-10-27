@@ -15,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** A crash inside a running stage is explained at the student's line. */
 @EnabledIfSystemProperty(named = "scratch4j.gltest", matches = "true")

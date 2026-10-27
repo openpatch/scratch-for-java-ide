@@ -34,10 +34,31 @@
       <version>1.11.4</version>
     </dependency>
     <!-- Pinned library: asset registries (internal package, guarded by a
-         contract test) and the runtime model of student projects. -->
+         contract test) and the runtime model of student projects; the core and
+         every first-party extension, as the fat jar in +libs holds them. -->
     <dependency>
       <groupId>org.openpatch</groupId>
-      <artifactId>scratch-all</artifactId>
+      <artifactId>scratch</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-tiled</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-save</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-recorder</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-drawing</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-gamepad</artifactId>
     </dependency>
     <!-- Studio's own JSON (settings, lessons, reports). Scratch for Java 6 brought Jackson along;
          7's core has none (only its save and tiled extensions use it). Same versions as the library. -->
@@ -51,11 +72,46 @@
       <artifactId>jackson-annotations</artifactId>
       <version>2.22</version>
     </dependency>
-    <!-- The library's sources jar drives the API index generation
-         (ApiIndexGenerator + parity test). -->
+    <!-- The library's sources jars (core and every extension) drive the API index
+         generation (ApiIndexGenerator + parity test). -->
     <dependency>
       <groupId>org.openpatch</groupId>
-      <artifactId>scratch-all</artifactId>
+      <artifactId>scratch</artifactId>
+      <version>${scratch.version}</version>
+      <classifier>sources</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-tiled</artifactId>
+      <version>${scratch.version}</version>
+      <classifier>sources</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-save</artifactId>
+      <version>${scratch.version}</version>
+      <classifier>sources</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-recorder</artifactId>
+      <version>${scratch.version}</version>
+      <classifier>sources</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-drawing</artifactId>
+      <version>${scratch.version}</version>
+      <classifier>sources</classifier>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openpatch</groupId>
+      <artifactId>scratch-gamepad</artifactId>
       <version>${scratch.version}</version>
       <classifier>sources</classifier>
       <scope>test</scope>

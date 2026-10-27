@@ -16,7 +16,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * Generates the API index from the library's sources jar: every public method
+ * Generates the API index from the library's sources jars (the core and every
+ * first-party extension): every public method
  * of {@code org.openpatch.scratch.*} with its signature, Javadoc summary, full
  * description, parameter and return docs and {@code @scratchblock} tag, as JSON.
  *
@@ -46,9 +47,24 @@ public final class ApiIndexGenerator {
 
   private ApiIndexGenerator() {}
 
-  /** Generates the index from a sources jar and writes it as pretty JSON. */
+  /** Generates the index from one sources jar. */
   public static List<ApiMethod> generate(Path sourcesJar) throws IOException {
+    return generate(List.of(sourcesJar));
+  }
+
+  /** Generates the index from sources jars (the core's and the extensions'). */
+  public static List<ApiMethod> generate(List<Path> sourcesJars) throws IOException {
     List<ApiMethod> methods = new ArrayList<>();
+    for (Path sourcesJar : sourcesJars) {
+      read(sourcesJar, methods);
+    }
+    methods.sort(java.util.Comparator
+        .comparing(ApiMethod::className)
+        .thenComparing(ApiMethod::methodName));
+    return methods;
+  }
+
+  private static void read(Path sourcesJar, List<ApiMethod> methods) throws IOException {
     try (ZipFile zip = new ZipFile(sourcesJar.toFile(), ZipFile.OPEN_READ)) {
       Enumeration<? extends ZipEntry> entries = zip.entries();
       while (entries.hasMoreElements()) {
@@ -68,10 +84,6 @@ public final class ApiIndexGenerator {
         methods.addAll(parseFile(className, source));
       }
     }
-    methods.sort(java.util.Comparator
-        .comparing(ApiMethod::className)
-        .thenComparing(ApiMethod::methodName));
-    return methods;
   }
 
   private static List<ApiMethod> parseFile(String className, String source) {
@@ -241,12 +253,16 @@ public final class ApiIndexGenerator {
   }
 
   public static void main(String[] args) throws IOException {
-    if (args.length != 2) {
-      System.err.println("Usage: ApiIndexGenerator <scratch-sources.jar> <output.json>");
+    if (args.length < 2) {
+      System.err.println("Usage: ApiIndexGenerator <sources.jar>... <output.json>");
       System.exit(2);
     }
-    List<ApiMethod> methods = generate(Path.of(args[0]));
-    Path out = Path.of(args[1]);
+    List<Path> jars = new ArrayList<>();
+    for (int i = 0; i < args.length - 1; i++) {
+      jars.add(Path.of(args[i]));
+    }
+    List<ApiMethod> methods = generate(jars);
+    Path out = Path.of(args[args.length - 1]);
     if (out.getParent() != null) {
       Files.createDirectories(out.getParent());
     }

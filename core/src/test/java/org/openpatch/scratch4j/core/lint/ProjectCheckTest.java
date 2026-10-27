@@ -11,6 +11,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 class ProjectCheckTest {
 
@@ -223,6 +224,7 @@ class ProjectCheckTest {
   }
 
   private Path libraryJar() throws IOException {
-    return NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    return LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
   }
 }

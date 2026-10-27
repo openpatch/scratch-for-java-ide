@@ -56,7 +56,7 @@ import org.openpatch.scratch4j.core.project.ProjectFileManagement;
 import org.openpatch.scratch4j.core.project.ProjectFolderManagement;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.project.StageManagement;
-import org.openpatch.scratch4j.runner.LibraryJarSource;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 import org.openpatch.scratch4j.runner.ProjectRunner;
 import org.openpatch.scratch4j.runner.RunConfig;
 import org.openpatch.scratch4j.runner.RunHandle;

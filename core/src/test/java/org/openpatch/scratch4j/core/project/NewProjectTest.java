@@ -17,7 +17,8 @@ class NewProjectTest {
   Path tmp;
 
   private Path scratchJar() throws IOException {
-    return NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    return LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
   }
 
   @Test

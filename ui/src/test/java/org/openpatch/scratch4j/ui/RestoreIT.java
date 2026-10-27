@@ -19,6 +19,7 @@ import org.openpatch.scratch4j.core.io.ProjectSnapshots;
 import org.openpatch.scratch4j.core.lint.RuntimeErrors;
 import org.openpatch.scratch4j.core.project.NewProject;
 import org.openpatch.scratch4j.core.project.ProjectTemplate;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * Back to the last version that worked: the problems of the code that was
@@ -37,7 +38,8 @@ class RestoreIT {
     Prefs.language(I18n.Language.EN); // StudioApp restores the saved language on startup
     I18n.set(I18n.Language.EN);
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "restore",
-        NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     Path root = tmp.resolve("restore");
     Path player = root.resolve("Player.java");
     // the code ran, then the student broke it

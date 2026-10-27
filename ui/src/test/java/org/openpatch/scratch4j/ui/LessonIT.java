@@ -13,6 +13,7 @@ import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpatch.scratch4j.core.lesson.Lesson;
 import org.openpatch.scratch4j.core.project.BundledTemplates;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /** A lesson project opens on its Lesson tab and ticks steps off after the IDE's checks. */
 @EnabledIfSystemProperty(named = "scratch4j.uismoke", matches = "true")
@@ -27,8 +28,8 @@ class LessonIT {
     I18n.set(I18n.Language.EN);
     Lesson lesson = Lesson.bundled("first-steps");
     Path root = BundledTemplates.create(lesson.template(), tmp, "lesson",
-        org.openpatch.scratch4j.core.project.NewProject.classpathJar(
-            org.openpatch.scratch.internal.BuiltinAssets.class));
+        LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled")));
     Lesson.install(root, lesson.id());
     // the first run is done already (a run needs a graphics driver)
     Files.writeString(root.resolve(".scratch4j/lesson-progress.json"),

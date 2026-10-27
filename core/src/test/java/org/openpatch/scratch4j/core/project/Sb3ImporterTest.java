@@ -86,7 +86,8 @@ class Sb3ImporterTest {
 
   @Test
   void importsSpritesBackdropsSoundsAndPlacementsAsDesignerRegions() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     var result = Sb3Importer.importProject(sb3(), tmp, "game", jar, mp3 -> {
       Path wav = mp3.resolveSibling(mp3.getFileName().toString().replace(".mp3", ".wav"));
       try {

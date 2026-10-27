@@ -34,7 +34,8 @@ class BundledTemplatesTest {
 
   @Test
   void everyTemplateCreatesACompilingProjectWithItsStartClass() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     for (BundledTemplates.Template template : BundledTemplates.list()) {
       boolean available;
       try (var archive = new java.util.zip.ZipFile(jar.toFile())) {

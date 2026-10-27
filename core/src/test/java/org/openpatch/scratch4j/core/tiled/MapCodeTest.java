@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 class MapCodeTest {
 
@@ -22,7 +23,8 @@ class MapCodeTest {
 
   @Test
   void mapGoesAfterTheSetupRegionWithItsImportAndCompiles() throws Exception {
-    Path jar = NewProject.classpathJar(org.openpatch.scratch.internal.BuiltinAssets.class);
+    Path jar = LibraryJarSource.allJar(
+        Path.of(System.getProperty("user.dir"), "target", "bundled"));
     NewProject.create(ProjectTemplate.CLASSES_FIRST, tmp, "p", jar);
     Path stage = tmp.resolve("p/MyStage.java");
     String updated = MapCode.insert(Files.readString(stage), "assets/maps/level.tmx",

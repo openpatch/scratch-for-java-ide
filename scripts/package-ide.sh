@@ -35,14 +35,14 @@ mvn ${MVN_ARGS:-} --batch-mode --no-transfer-progress -DskipTests package
 
 # the library jar students' projects carry in +libs
 ALL_JAR="${2:-${SCRATCH4J_ALL_JAR:-}}"
-V="$(grep -o 'SCRATCH_VERSION = "[^" ]*"' runner/src/main/java/org/openpatch/scratch4j/runner/LibraryJarSource.java | cut -d'"' -f2)"
+V="$(grep -o 'SCRATCH_VERSION = "[^" ]*"' core/src/main/java/org/openpatch/scratch4j/core/project/LibraryJarSource.java | cut -d'"' -f2)"
 if [ -z "$ALL_JAR" ]; then
   if [ -f "runner/target/bundled/scratch-$V-all.jar" ]; then
     ALL_JAR="runner/target/bundled/scratch-$V-all.jar"
   fi
 fi
 if [ -z "$ALL_JAR" ]; then
-  V="$(grep -o 'SCRATCH_VERSION = "[^"]*"' runner/src/main/java/org/openpatch/scratch4j/runner/LibraryJarSource.java | cut -d'"' -f2)"
+  V="$(grep -o 'SCRATCH_VERSION = "[^"]*"' core/src/main/java/org/openpatch/scratch4j/core/project/LibraryJarSource.java | cut -d'"' -f2)"
   ALL_JAR="$OUT/scratch-$V-all.jar"
   curl -fsSL -o "$ALL_JAR" "https://github.com/openpatch/scratch-for-java/releases/download/v$V/scratch-$V-all.jar"
 fi
