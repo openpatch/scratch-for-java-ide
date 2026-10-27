@@ -106,8 +106,8 @@ public final class AssetLinter {
       String name = methodName(call);
       if (name != null) {
         switch (name) {
-          case "addCostume", "addBackdrop" -> lintLastString(call, Kind.IMAGE);
-          case "addSound" -> lintLastString(call, Kind.SOUND);
+          case "addCostume", "addBackdrop" -> lintAssetArgument(call, Kind.IMAGE);
+          case "addSound" -> lintAssetArgument(call, Kind.SOUND);
           case "addAnimation" -> lintAnimationPattern(call);
           default -> { }
         }
@@ -115,14 +115,20 @@ public final class AssetLinter {
       return super.visitMethodInvocation(call, p);
     }
 
-    /** addCostume("sit"), addCostume("sit", "assets/cat.png"), addBackdrop(name[, path[, stretch]]), addSound(name[, path]). */
-    private void lintLastString(MethodInvocationTree call, Kind kind) {
-      List<LiteralTree> literals = stringLiterals(call);
-      if (literals.isEmpty()) {
+    /**
+     * addCostume("sit"), addCostume("sit", "assets/cat.png"[, x, y, w, h]), addBackdrop(name[, path[, stretch]]),
+     * addSound(name[, path]): the asset is the second argument, or the only one. A computed path
+     * ({@code "assets/" + weapon + ".png"}) cannot be checked, so it is skipped.
+     */
+    private void lintAssetArgument(MethodInvocationTree call, Kind kind) {
+      List<? extends ExpressionTree> args = call.getArguments();
+      if (args.isEmpty()) {
         return;
       }
-      LiteralTree ref = literals.get(literals.size() - 1);
-      checkAsset(kind, (String) ref.getValue(), lineOf(ref));
+      ExpressionTree arg = args.get(args.size() == 1 ? 0 : 1);
+      if (arg instanceof LiteralTree ref && ref.getValue() instanceof String value) {
+        checkAsset(kind, value, lineOf(ref));
+      }
     }
 
     /** addAnimation(name, pattern, frames[, width, height[, row]]): a {@code %d} pattern over built-ins, or a file sheet. */

@@ -167,6 +167,14 @@ class AssetLinterTest {
           }
         }
         """)).isEmpty();
+    // the label is a literal, but the computed path is what names the asset
+    assertThat(lint("""
+        public class Player extends Sprite {
+          public Player(String weapon) {
+            this.addCostume("blade", "assets/items/" + weapon + "/sprite.png");
+          }
+        }
+        """)).isEmpty();
   }
 
   @Test
