@@ -1363,6 +1363,11 @@
   -fx-border-color: transparent -color-border-default transparent transparent;
 }
 
+.tool-rail-scroll,
+.tool-rail-scroll > .viewport {
+  -fx-background-color: -color-bg-default;
+}
+
 .tool-button {
   -fx-min-width: 40;
   -fx-min-height: 40;
@@ -1506,6 +1511,27 @@
 }
 .palette-swatch-small:selected {
   -fx-border-color: -color-accent-emphasis;
+}
+/* image editor: the frames of a numbered sequence */
+.frame-strip {
+  -fx-border-color: -color-border-default;
+  -fx-border-width: 1 0 0 0;
+}
+.frame-thumb, .frame-preview {
+  -fx-background-color: -color-bg-subtle;
+  -fx-background-radius: 6;
+  -fx-border-radius: 6;
+  -fx-border-width: 2;
+  -fx-border-color: transparent;
+}
+.frame-thumb.selected {
+  -fx-border-color: -color-accent-emphasis;
+}
+.onion-before {
+  -fx-text-fill: #e5484d;
+}
+.onion-after {
+  -fx-text-fill: #3e7bf0;
 }
 .palette-details {
   -fx-border-color: -color-border-default;

@@ -1367,6 +1367,20 @@ public class StudioApp extends javafx.application.Application {
             openByType(palette);
           });
           paint.setOnPaletteWritten(this::afterPaletteWritten);
+          paint.setOnFrameShown((from, to) ->
+              editor.retargetTool("image:" + from, "image:" + to));
+          paint.setOnFramesChanged(fileTree::reload);
+          // a frame open in another tab: that tab closes, unless it has edits
+          paint.setMayShowFrame(to -> {
+            if (editor.tool("image:" + to) instanceof ImageEditorView other && other != paint) {
+              if (other.dirtyProperty().get()) {
+                alert(I18n.t("frames.open.elsewhere", to.getFileName()));
+                return false;
+              }
+              editor.closeForFile(to);
+            }
+            return true;
+          });
           return paint;
         } catch (IOException e) {
           alert(I18n.t("error.openfile", e.getMessage()), e);

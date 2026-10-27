@@ -35,6 +35,7 @@ import javafx.scene.Node;
 import org.openpatch.scratch4j.core.io.EditorHistory;
 import org.openpatch.scratch4j.core.io.LocalHistory;
 import org.openpatch.scratch4j.core.project.ScratchProject;
+import org.openpatch.scratch4j.core.assets.FrameSequence;
 import org.openpatch.scratch4j.core.region.SpriteRegionWriter;
 
 import javax.imageio.ImageIO;
@@ -57,7 +58,15 @@ import java.util.List;
 final class ImageEditorView extends BorderPane implements SavableTool {
 
   private final ScratchProject project;
-  private final Path file;
+  /** The picture shown; the frame strip switches it among a sequence's frames. */
+  private Path file;
+  private final javafx.beans.property.StringProperty fileName =
+      new javafx.beans.property.SimpleStringProperty();
+  /** The frames of the numbered sequence {@code file} belongs to, or null. */
+  private FrameStrip frameStrip;
+  private java.util.function.Predicate<Path> mayShowFrame = frame -> true;
+  private java.util.function.BiConsumer<Path, Path> onFrameShown = (from, to) -> { };
+  private Runnable onFramesChanged = () -> { };
   private WritableImage image;
   /** One view per layer, bottom first; the overlay sits on top. */
   // layers are painted on a canvas: an ImageView of a WritableImage smooths
@@ -106,9 +115,19 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   // edits since the last save: the tab shows a marker
   private final javafx.beans.property.BooleanProperty dirty =
       new javafx.beans.property.SimpleBooleanProperty();
-  /** The previous frame of a numbered sequence (walk2.png -> walk1.png), drawn faintly. */
-  private Image onionSkin;
+  /**
+   * The onion skin: frames before the one shown (tinted red) and after it
+   * (tinted blue), nearest first, drawn faintly over the picture.
+   */
+  private List<Image> onionBefore = List.of();
+  private List<Image> onionAfter = List.of();
+  private int onionBeforeCount = 1;
+  private int onionAfterCount = 1;
   private boolean showOnionSkin;
+  private ToggleButton onionToggle;
+  private static final double ONION_ALPHA = 0.35;
+  private static final Color BEFORE_TINT = Color.rgb(230, 60, 60);
+  private static final Color AFTER_TINT = Color.rgb(60, 120, 240);
 
   /** Undo entries hold every layer (strokes and layer edits undo alike). */
   private record Snapshot(List<WritableImage> layers, List<Boolean> visible, int active) {}
@@ -129,6 +148,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   ImageEditorView(ScratchProject project, Path file) throws IOException {
     this.project = project;
     this.file = file;
+    this.fileName.set(file.getFileName().toString());
     this.colorPicker = new ScratchColorPicker(Color.BLACK, project == null ? null : project.root());
     getStyleClass().add("paint-editor");
     Image loaded = loadImage(file);
@@ -163,6 +183,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       } else {
         release(toPixel(e.getX(), e.getY()));
       }
+      updateFrameThumb();
     });
     stack.setFocusTraversable(true);
     stack.setCursor(javafx.scene.Cursor.CROSSHAIR);
@@ -200,7 +221,14 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     HBox.setHgrow(spacer, Priority.ALWAYS);
     HBox bottom = new HBox(8, status, spacer, credits);
     bottom.getStyleClass().add("editor-status");
-    setBottom(bottom);
+    FrameSequence sequence = project == null ? null : sequenceOf(project.root(), file);
+    if (sequence != null) {
+      frameStrip = new FrameStrip(sequence, frameHost());
+      setBottom(new VBox(frameStrip, bottom));
+    } else {
+      setBottom(bottom);
+    }
+    updateOnionToggle();
     // the usual shortcuts anywhere in the editor (Ctrl is Cmd on macOS)
     addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
       if (EditorKeys.isEditorKey(e)
@@ -272,9 +300,237 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     return file;
   }
 
+  /** The name of the picture shown (the tab's title follows it between frames). */
+  javafx.beans.property.ReadOnlyStringProperty fileNameProperty() {
+    return fileName;
+  }
+
+  FrameStrip frameStrip() {
+    return frameStrip;
+  }
+
+  /** Asked before the frame strip shows {@code frame} (e.g. it is open in another tab). */
+  void setMayShowFrame(java.util.function.Predicate<Path> check) {
+    mayShowFrame = check;
+  }
+
+  /** Called with the old and new file after the frame strip switched frames. */
+  void setOnFrameShown(java.util.function.BiConsumer<Path, Path> action) {
+    onFrameShown = action;
+  }
+
+  /** Called after the frame strip added, removed or renamed frame files. */
+  void setOnFramesChanged(Runnable action) {
+    onFramesChanged = action;
+  }
+
+  /**
+   * The numbered sequence {@code file} is a frame of ({@code walk2.png} in
+   * {@code walk1.png, walk2.png, ...}, numbered from 1), or null.
+   */
+  static FrameSequence sequenceOf(Path root, Path file) {
+    java.util.regex.Matcher m = java.util.regex.Pattern
+        .compile("(.*?)(\\d+)(\\.[A-Za-z]+)$").matcher(file.getFileName().toString());
+    Path folder = file.toAbsolutePath().normalize().getParent();
+    Path base = root.toAbsolutePath().normalize();
+    if (!m.matches() || m.group(1).contains("%") || m.group(2).startsWith("0")
+        || folder == null || !folder.startsWith(base)) {
+      return null;
+    }
+    String dir = base.relativize(folder).toString().replace('\\', '/');
+    FrameSequence sequence = new FrameSequence(base,
+        (dir.isEmpty() ? "" : dir + "/") + m.group(1) + "%d" + m.group(3));
+    Path self = file.toAbsolutePath().normalize();
+    return sequence.frames().stream().anyMatch(f -> f.toAbsolutePath().normalize().equals(self))
+        ? sequence : null;
+  }
+
+  private FrameStrip.Host frameHost() {
+    return new FrameStrip.Host() {
+      @Override
+      public Path file() {
+        return file;
+      }
+
+      @Override
+      public boolean saveFrame() {
+        commitFloating();
+        if (dirty.get()) {
+          save();
+        }
+        return !dirty.get();
+      }
+
+      @Override
+      public boolean showFrame(Path frame) {
+        return ImageEditorView.this.showFrame(frame);
+      }
+
+      @Override
+      public WritableImage picture() {
+        return layers.size() == 1 ? image : flattened();
+      }
+
+      @Override
+      public void onionChanged(int before, int after) {
+        onionBeforeCount = before;
+        onionAfterCount = after;
+        loadOnion();
+        redrawOverlay();
+      }
+
+      @Override
+      public void framesChanged() {
+        onFramesChanged.run();
+      }
+    };
+  }
+
+  /**
+   * Shows {@code frame} in this editor, read from disk with its own undo
+   * history; the frame shown before must be saved already (the strip does).
+   */
+  boolean showFrame(Path frame) {
+    if (!mayShowFrame.test(frame)) {
+      return false;
+    }
+    Image loaded;
+    try {
+      loaded = loadImage(frame);
+    } catch (IOException e) {
+      alert(I18n.t("error.openfile", e.getMessage()));
+      return false;
+    }
+    Path previous = file;
+    file = frame;
+    fileName.set(frame.getFileName().toString());
+    selection = null;
+    floating = null;
+    selectDrag = SelectDrag.NONE;
+    image = new WritableImage(loaded.getPixelReader(),
+        (int) Math.max(1, loaded.getWidth()), (int) Math.max(1, loaded.getHeight()));
+    layers.clear();
+    layerVisible.clear();
+    layers.add(image);
+    layerVisible.add(true);
+    activeLayer = 0;
+    undoStack.clear();
+    redoStack.clear();
+    encoded.clear();
+    loadHistory();
+    dirty.set(false);
+    loadOnion();
+    refreshLayerList();
+    applyZoom();
+    updateApplyButton();
+    updateStatus();
+    redrawOverlay();
+    if (frameStrip != null) {
+      frameStrip.refresh();
+    }
+    onFrameShown.accept(previous, frame);
+    return true;
+  }
+
+  private void updateFrameThumb() {
+    if (frameStrip != null) {
+      frameStrip.updateShown();
+    }
+  }
+
+  /** The onion skin button shows when there are frames around this one. */
+  private void updateOnionToggle() {
+    boolean frames = frameStrip != null || previousFrame(file) != null;
+    onionToggle.setVisible(frames);
+    onionToggle.setManaged(frames);
+  }
+
+  /** The frames around the one shown, as the onion skin draws them (tinted). */
+  private void loadOnion() {
+    onionBefore = List.of();
+    onionAfter = List.of();
+    if (!showOnionSkin) {
+      return;
+    }
+    List<Path> frames;
+    if (frameStrip != null) {
+      frames = frameStrip.frames();
+    } else {
+      Path previous = previousFrame(file);
+      frames = previous == null ? List.of() : List.of(previous.toAbsolutePath().normalize(),
+          file.toAbsolutePath().normalize());
+    }
+    int at = frames.indexOf(file.toAbsolutePath().normalize());
+    if (at < 0) {
+      return;
+    }
+    onionBefore = tintedFrames(frames, at, -1, onionBeforeCount, BEFORE_TINT);
+    onionAfter = tintedFrames(frames, at, 1, onionAfterCount, AFTER_TINT);
+  }
+
+  private static List<Image> tintedFrames(List<Path> frames, int at, int step, int count,
+      Color tint) {
+    List<Image> tinted = new ArrayList<>();
+    for (int i = at + step; tinted.size() < count && i >= 0 && i < frames.size(); i += step) {
+      try {
+        tinted.add(tint(loadImage(frames.get(i)), tint));
+      } catch (IOException e) {
+        break;
+      }
+    }
+    return tinted;
+  }
+
+  /** {@code source} with its colours mixed half-way to {@code tint}, alpha kept. */
+  static WritableImage tint(Image source, Color tint) {
+    int w = (int) source.getWidth();
+    int h = (int) source.getHeight();
+    WritableImage tinted = new WritableImage(Math.max(1, w), Math.max(1, h));
+    PixelReader reader = source.getPixelReader();
+    var writer = tinted.getPixelWriter();
+    int tr = (int) Math.round(tint.getRed() * 255);
+    int tg = (int) Math.round(tint.getGreen() * 255);
+    int tb = (int) Math.round(tint.getBlue() * 255);
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        int argb = reader.getArgb(x, y);
+        int r = ((argb >> 16 & 0xff) + tr) / 2;
+        int g = ((argb >> 8 & 0xff) + tg) / 2;
+        int b = ((argb & 0xff) + tb) / 2;
+        writer.setArgb(x, y, argb & 0xff000000 | r << 16 | g << 8 | b);
+      }
+    }
+    return tinted;
+  }
+
+  /** The farthest frame first and faintest, the nearest last. */
+  private void drawOnion(javafx.scene.canvas.GraphicsContext g, List<Image> frames) {
+    for (int i = frames.size() - 1; i >= 0; i--) {
+      Image frame = frames.get(i);
+      g.setGlobalAlpha(ONION_ALPHA / (i + 1));
+      g.drawImage(frame, 0, 0, frame.getWidth() * zoom, frame.getHeight() * zoom);
+    }
+  }
+
   /** The pixels being edited (tests read them). */
   WritableImage image() {
     return image;
+  }
+
+  /** Paints one pixel of the active layer as one stroke (tests). */
+  void paintPixelForTest(int x, int y, Color color) {
+    pushUndo();
+    image.getPixelWriter().setColor(x, y, color);
+    redrawOverlay();
+    updateFrameThumb();
+  }
+
+  /** Turns the onion skin on or off (tests; the toolbar button does this for users). */
+  void setOnionForTest(boolean on) {
+    onionToggle.setSelected(on);
+    showOnionSkin = on;
+    loadOnion();
+    redrawOverlay();
   }
 
   /** Switches to the select tool (tests; the rail does this for users). */
@@ -462,7 +718,14 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         old.setSelected(true);
       }
     });
-    return rail;
+    // a short window scrolls the tools instead of pushing the frame strip off
+    ScrollPane railScroll = new ScrollPane(rail);
+    railScroll.setFitToWidth(true);
+    railScroll.setFitToHeight(true);
+    railScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+    railScroll.setMinHeight(0);
+    railScroll.getStyleClass().addAll("edge-to-edge", "tool-rail-scroll");
+    return railScroll;
   }
 
   private void chooseTool(Tool t) {
@@ -677,21 +940,13 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       applyZoom();
       redrawOverlay();
     });
-    ToggleButton onion = new ToggleButton(null, Icons.of("fth-copy"));
+    ToggleButton onion = new ToggleButton(null, Icons.of("mdi2l-layers-outline"));
+    onionToggle = onion;
     onion.getStyleClass().addAll("button-icon", "flat");
     onion.setTooltip(new javafx.scene.control.Tooltip(I18n.t("imageeditor.onion.tooltip")));
-    Path previous = previousFrame(file);
-    onion.setVisible(previous != null);
-    onion.setManaged(previous != null);
     onion.setOnAction(e -> {
       showOnionSkin = onion.isSelected();
-      if (showOnionSkin && onionSkin == null && previous != null) {
-        try {
-          onionSkin = loadImage(previous);
-        } catch (IOException ex) {
-          showOnionSkin = false;
-        }
-      }
+      loadOnion();
       redrawOverlay();
     });
     Button slice = Icons.button("fth-grid", I18n.t("slicer.title"), this::sliceSheet);
@@ -1218,10 +1473,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     paintLayers();
     var g = overlay.getGraphicsContext2D();
     g.clearRect(0, 0, overlay.getWidth(), overlay.getHeight());
-    if (showOnionSkin && onionSkin != null) {
-      g.setGlobalAlpha(0.3);
+    if (showOnionSkin) {
       g.setImageSmoothing(smooth);
-      g.drawImage(onionSkin, 0, 0, onionSkin.getWidth() * zoom, onionSkin.getHeight() * zoom);
+      drawOnion(g, onionBefore);
+      drawOnion(g, onionAfter);
       g.setGlobalAlpha(1);
     }
     if (showPixelGrid && zoom >= 6 && image.getWidth() <= 1024
@@ -1493,6 +1748,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     dirty.set(true);
     redoStack.push(snapshot());
     restore(previous);
+    updateFrameThumb();
   }
 
   private void redo() {
@@ -1503,6 +1759,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     dirty.set(true);
     undoStack.push(snapshot());
     restore(next);
+    updateFrameThumb();
   }
 
   // --- layers ----------------------------------------------------------------
@@ -1510,6 +1767,8 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   /** The layer panel: visibility, add, duplicate, delete, reorder, merge down. */
   private Node layerPanel() {
     layerList.setPrefWidth(170);
+    // shrinks before the palette and the frame strip do
+    layerList.setMinHeight(60);
     layerList.setCellFactory(v -> new javafx.scene.control.ListCell<>() {
       @Override
       protected void updateItem(Integer index, boolean empty) {

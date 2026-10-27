@@ -265,13 +265,16 @@ final class EditorTabs extends TabPane {
           if (!assets.confirmClose()) e.consume();
         });
       } else if (content instanceof SavableTool savable) {
-        tab.textProperty().bind(Bindings.when(savable.dirtyProperty())
-            .then(title + "  ●").otherwise(title));
+        // an image editor's frame strip switches files: the title follows
+        javafx.beans.value.ObservableStringValue name = content instanceof ImageEditorView image
+            ? image.fileNameProperty() : new javafx.beans.property.SimpleStringProperty(title);
+        tab.textProperty().bind(Bindings.concat(name,
+            Bindings.when(savable.dirtyProperty()).then("  ●").otherwise("")));
         tab.setOnCloseRequest(e -> {
           if (!savable.confirmClose()) e.consume();
         });
       }
-      tab.setOnClosed(e -> toolTabs.remove(key, created));
+      tab.setOnClosed(e -> toolTabs.values().remove(created));
       tab.setContextMenu(tabMenu(tab));
       toolTabs.put(key, tab);
       getTabs().add(tab);
@@ -324,6 +327,14 @@ final class EditorTabs extends TabPane {
   }
 
   /** Content of an open tool tab, if any. */
+  /** The tool tab under {@code oldKey} now goes by {@code newKey} (it shows another file). */
+  void retargetTool(String oldKey, String newKey) {
+    Tab tab = toolTabs.remove(oldKey);
+    if (tab != null) {
+      toolTabs.put(newKey, tab);
+    }
+  }
+
   Node tool(String key) {
     Tab tab = toolTabs.get(key);
     if (tab != null) return tab.getContent();
