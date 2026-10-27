@@ -79,6 +79,18 @@ class GimpPaletteTest {
   }
 
   @Test
+  void collectsAnImagesColoursMostFrequentFirstWithoutTheBackground() {
+    var image = new java.awt.image.BufferedImage(3, 2, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    image.setRGB(0, 0, 0xff0000ff);
+    image.setRGB(1, 0, 0xff00ff00);
+    image.setRGB(2, 0, 0x8000ff00); // half opaque: still paint
+    image.setRGB(0, 1, 0x7fff0000); // mostly transparent: background
+    assertThat(GimpPalette.colorsOf(image)).containsExactly(
+        new GimpPalette.Entry(0, 255, 0, ""),
+        new GimpPalette.Entry(0, 0, 255, ""));
+  }
+
+  @Test
   void rejectsTextWithoutTheHeader() {
     assertThatThrownBy(() -> GimpPalette.parse("0 0 0 black"))
         .isInstanceOf(IllegalArgumentException.class)

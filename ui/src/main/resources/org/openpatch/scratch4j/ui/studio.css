@@ -1483,6 +1483,26 @@
   -fx-background-color: transparent;
 }
 
+/* palette editor: the selected swatch and the second one (gradient end) */
+.palette-swatch {
+  -fx-padding: 3;
+  -fx-background-radius: 8;
+  -fx-border-radius: 8;
+  -fx-border-width: 2;
+  -fx-border-color: transparent;
+}
+.palette-swatch.selected {
+  -fx-border-color: -color-accent-emphasis;
+}
+.palette-swatch.other {
+  -fx-border-color: -color-accent-emphasis;
+  -fx-border-style: segments(4, 3);
+}
+.palette-details {
+  -fx-border-color: -color-border-default;
+  -fx-border-width: 0 0 0 1;
+}
+
 .facing-warning {
   -fx-background-color: #fff4d6;
   -fx-border-color: #ffab19;

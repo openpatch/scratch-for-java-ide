@@ -902,7 +902,8 @@ public class StudioApp extends javafx.application.Application {
     Path file = content instanceof CodeEditor code ? code.file()
         : content instanceof StageDesignerView designer ? designer.file()
         : content instanceof ImageEditorView image ? image.file()
-        : content instanceof SoundEditorView sound ? sound.file() : null;
+        : content instanceof SoundEditorView sound ? sound.file()
+        : content instanceof PaletteEditorView palette ? palette.file() : null;
     if (file == null) {
       alert(I18n.t("history.open.first"));
       return;
@@ -1403,6 +1404,21 @@ public class StudioApp extends javafx.application.Application {
           return null;
         }
       });
+    } else if (name.endsWith(".gpl")) {
+      editor.openTool("palette:" + file, file.getFileName().toString(),
+          "mdi2p-palette-outline", () -> {
+            try {
+              return new PaletteEditorView(project.get().root(), file, saved -> {
+                fileTree.reload();
+                scheduleCheck();
+              });
+            } catch (IOException e) {
+              alert(I18n.t("error.openfile", e.getMessage()), e);
+              // an unreadable palette still opens as text
+              editor.open(file);
+              return null;
+            }
+          });
     } else if (name.endsWith(".tmx")) {
       editor.openTool("map:" + file, file.getFileName().toString(), "fth-map", () -> {
         try {
@@ -2023,6 +2039,7 @@ public class StudioApp extends javafx.application.Application {
         case FOLDER -> createFolder(fileTree.folderForCreation());
         case SHADER -> createShader();
         case MAP -> createMap();
+        case PALETTE -> createAsset(ProjectAssetCreator.Kind.PALETTE);
       }
     });
   }
@@ -2077,6 +2094,7 @@ public class StudioApp extends javafx.application.Application {
       case IMAGE -> "asset.new.image";
       case SOUND -> "asset.new.sound";
       case FRAGMENT_SHADER -> "asset.new.shader";
+      case PALETTE -> "asset.new.palette";
     }));
     dialog.setHeaderText(null);
     Theme.style(dialog);
@@ -3783,7 +3801,8 @@ public class StudioApp extends javafx.application.Application {
       if (open == null) continue;
       if (java.nio.file.Files.exists(open)) {
         if (tab.getContent() instanceof ImageEditorView || tab.getContent() instanceof SoundEditorView
-            || tab.getContent() instanceof MapEditorView || tab.getContent() instanceof FontPreviewView) {
+            || tab.getContent() instanceof MapEditorView || tab.getContent() instanceof FontPreviewView
+            || tab.getContent() instanceof PaletteEditorView) {
           editor.closeForFile(open);
           openByType(open);
         } else {

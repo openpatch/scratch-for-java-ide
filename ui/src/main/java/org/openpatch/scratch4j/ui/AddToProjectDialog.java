@@ -16,16 +16,17 @@ import java.util.Optional;
 /**
  * File > Add to project: one dialog with a card per thing a project can get
  * (a class, an image, a sound, a folder, something from the asset library),
- * each with a sentence saying when you would want it. Shaders and maps sit
+ * each with a sentence saying when you would want it. Shaders, maps and
+ * colour palettes sit
  * in a smaller row below, so the common choices stay in front.
  */
 final class AddToProjectDialog {
 
-  enum Choice { CLASS, IMAGE, SOUND, LIBRARY, FOLDER, SHADER, MAP }
+  enum Choice { CLASS, IMAGE, SOUND, LIBRARY, FOLDER, SHADER, MAP, PALETTE }
 
   private static final List<Choice> MAIN = List.of(Choice.CLASS, Choice.IMAGE, Choice.SOUND,
       Choice.LIBRARY, Choice.FOLDER);
-  private static final List<Choice> MORE = List.of(Choice.SHADER, Choice.MAP);
+  private static final List<Choice> MORE = List.of(Choice.SHADER, Choice.MAP, Choice.PALETTE);
 
   private AddToProjectDialog() {}
 
@@ -96,6 +97,7 @@ final class AddToProjectDialog {
       case FOLDER -> "fth-folder-plus";
       case SHADER -> "fth-zap";
       case MAP -> "fth-map";
+      case PALETTE -> "mdi2p-palette-outline";
     };
   }
 }

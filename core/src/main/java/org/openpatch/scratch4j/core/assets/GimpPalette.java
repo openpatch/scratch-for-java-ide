@@ -1,12 +1,15 @@
 package org.openpatch.scratch4j.core.assets;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -140,6 +143,29 @@ public record GimpPalette(String name, int columns, List<Entry> entries) {
       out.append('\n');
     }
     return out.toString();
+  }
+
+  /**
+   * The distinct colours of {@code image}, most frequent first. Pixels that
+   * are less than half opaque are left out (they are background, not paint);
+   * the others count with their alpha dropped.
+   */
+  public static List<Entry> colorsOf(BufferedImage image) {
+    Map<Integer, Integer> counts = new HashMap<>();
+    for (int y = 0; y < image.getHeight(); y++) {
+      for (int x = 0; x < image.getWidth(); x++) {
+        int argb = image.getRGB(x, y);
+        if (argb >>> 24 >= 128) {
+          counts.merge(argb & 0xffffff, 1, Integer::sum);
+        }
+      }
+    }
+    return counts.entrySet().stream()
+        .sorted(Map.Entry.<Integer, Integer>comparingByValue().reversed()
+            .thenComparing(Map.Entry.comparingByKey()))
+        .map(e -> new Entry(e.getKey() >> 16 & 0xff, e.getKey() >> 8 & 0xff,
+            e.getKey() & 0xff, ""))
+        .toList();
   }
 
   /** Writes {@link #format()} to {@code file} (UTF-8), creating its folder. */

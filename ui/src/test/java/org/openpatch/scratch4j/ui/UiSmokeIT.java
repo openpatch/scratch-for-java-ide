@@ -815,6 +815,44 @@ class UiSmokeIT {
         pickerContent.layout();
         assertThat(pickerContent.lookupAll(".swatch-button")).hasSize(17 + 1);
         snapshot(pickerScene.getRoot(), Path.of("target/color-picker.png"));
+
+        // palette editor: a new palette, a colour, a gradient, undo/redo, save
+        Path gpl = ProjectAssetCreator.create(project.root(), ProjectAssetCreator.Kind.PALETTE,
+            "Forest", 1, 1);
+        java.util.List<Path> savedPalettes = new java.util.ArrayList<>();
+        PaletteEditorView paletteEditor = new PaletteEditorView(project.root(), gpl,
+            savedPalettes::add);
+        assertThat(paletteEditor.palette().entries()).hasSize(2);
+        paletteEditor.select(0);
+        paletteEditor.addColour(javafx.scene.paint.Color.rgb(20, 100, 40));
+        assertThat(paletteEditor.selectedIndex()).isEqualTo(1);
+        paletteEditor.selectOther(0);
+        paletteEditor.gradient(3);
+        assertThat(paletteEditor.palette().entries()).hasSize(6);
+        assertThat(paletteEditor.palette().entries().get(2))
+            .isEqualTo(new org.openpatch.scratch4j.core.assets.GimpPalette.Entry(15, 75, 30, ""));
+        paletteEditor.undo();
+        assertThat(paletteEditor.palette().entries()).hasSize(3);
+        paletteEditor.redo();
+        paletteEditor.select(5);
+        paletteEditor.move(5, 0);
+        assertThat(paletteEditor.palette().entries().getFirst().name()).isEqualTo("white");
+        assertThat(paletteEditor.dirtyProperty().get()).isTrue();
+        paletteEditor.save();
+        assertThat(paletteEditor.dirtyProperty().get()).isFalse();
+        assertThat(savedPalettes).containsExactly(gpl);
+        var savedPalette = org.openpatch.scratch4j.core.assets.GimpPalette.read(gpl);
+        assertThat(savedPalette.name()).isEqualTo("Forest");
+        assertThat(savedPalette.entries()).hasSize(6);
+        Path bunnyColours = png;
+        paletteEditor.addColoursOf(bunnyColours);
+        assertThat(paletteEditor.palette().entries().size()).isGreaterThan(6);
+        paletteEditor.undo();
+        javafx.scene.Scene paletteScene = new javafx.scene.Scene(paletteEditor, 900, 420);
+        Theme.apply(paletteScene);
+        paletteEditor.applyCss();
+        paletteEditor.layout();
+        snapshot(paletteEditor, Path.of("target/palette-editor.png"));
       } catch (Throwable t) {
         failure.set(t);
       } finally {

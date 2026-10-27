@@ -610,7 +610,8 @@ final class EditorTabs extends TabPane {
         : content instanceof ImageEditorView image ? image.file()
         : content instanceof SoundEditorView sound ? sound.file()
         : content instanceof MapEditorView map ? map.file()
-        : content instanceof FontPreviewView font ? font.file() : null;
+        : content instanceof FontPreviewView font ? font.file()
+        : content instanceof PaletteEditorView palette ? palette.file() : null;
   }
 
   /** Close all code/designer tabs backed by a source file after a stage move. */
@@ -636,7 +637,8 @@ final class EditorTabs extends TabPane {
           : content instanceof ImageEditorView image ? image.file()
           : content instanceof SoundEditorView sound ? sound.file()
           : content instanceof MapEditorView map ? map.file()
-          : content instanceof FontPreviewView font ? font.file() : null;
+          : content instanceof FontPreviewView font ? font.file()
+          : content instanceof PaletteEditorView palette ? palette.file() : null;
       if (tabFile != null && tabFile.startsWith(folder)) {
         getTabs().remove(tab);
         if (tab.getOnClosed() != null) tab.getOnClosed().handle(null);

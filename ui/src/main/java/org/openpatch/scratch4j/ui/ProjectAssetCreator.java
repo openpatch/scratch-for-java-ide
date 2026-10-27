@@ -1,5 +1,6 @@
 package org.openpatch.scratch4j.ui;
 
+import org.openpatch.scratch4j.core.assets.GimpPalette;
 import org.openpatch.scratch4j.core.io.AtomicFiles;
 import org.openpatch.scratch4j.sound.SoundClip;
 import org.openpatch.scratch4j.sound.SoundIO;
@@ -9,12 +10,13 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /** Creates editable project assets without depending on the JavaFX toolkit. */
 final class ProjectAssetCreator {
 
   /** Scratch for Java 7 shaders are fragment shaders only. */
-  enum Kind { IMAGE, SOUND, FRAGMENT_SHADER }
+  enum Kind { IMAGE, SOUND, FRAGMENT_SHADER, PALETTE }
 
   private ProjectAssetCreator() {}
 
@@ -30,11 +32,13 @@ final class ProjectAssetCreator {
       case IMAGE -> "assets/images";
       case SOUND -> "assets/sounds";
       case FRAGMENT_SHADER -> "assets/shaders";
+      case PALETTE -> Palettes.FOLDER;
     };
     String extension = switch (kind) {
       case IMAGE -> ".png";
       case SOUND -> ".wav";
       case FRAGMENT_SHADER -> ".frag";
+      case PALETTE -> GimpPalette.EXTENSION;
     };
     Path dir = root.resolve(folder);
     Path target = dir.resolve(name + extension);
@@ -44,6 +48,13 @@ final class ProjectAssetCreator {
     Files.createDirectories(dir);
     if (kind == Kind.FRAGMENT_SHADER) {
       AtomicFiles.writeString(target, FRAGMENT_TEMPLATE);
+      return target;
+    }
+    if (kind == Kind.PALETTE) {
+      // black and white to start from; the palette editor adds the rest
+      AtomicFiles.writeString(target, new GimpPalette(name, 8, List.of(
+          new GimpPalette.Entry(0, 0, 0, "black"),
+          new GimpPalette.Entry(255, 255, 255, "white"))).format());
       return target;
     }
     Path temp = Files.createTempFile(dir, ".new-asset", extension);

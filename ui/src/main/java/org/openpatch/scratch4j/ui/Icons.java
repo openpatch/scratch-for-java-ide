@@ -47,6 +47,9 @@ final class Icons {
     if (name.matches(".*\\.(wav|ogg|mp3|aif|aiff|au)$")) {
       return of("fth-music");
     }
+    if (name.endsWith(".gpl")) {
+      return of("mdi2p-palette-outline");
+    }
     if (name.endsWith(".jar")) {
       return of("fth-package");
     }
