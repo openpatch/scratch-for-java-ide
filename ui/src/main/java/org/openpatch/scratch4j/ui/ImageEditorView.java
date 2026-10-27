@@ -1025,7 +1025,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       loadOnion();
       redrawOverlay();
     });
-    Button slice = Icons.button("fth-grid", I18n.t("slicer.title"), this::sliceSheet);
+    Button slice = Icons.button("mdi2c-content-cut", I18n.t("slicer.title"), this::sliceSheet);
     sheetToggle = new ToggleButton(null, Icons.of("mdi2f-filmstrip"));
     sheetToggle.getStyleClass().addAll("button-icon", "flat");
     sheetToggle.setTooltip(new javafx.scene.control.Tooltip(I18n.t("sheetanim.tooltip")));
@@ -1045,7 +1045,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
             () -> transform(ImageEditorView::flipVertical)),
         Icons.button("fth-rotate-cw", I18n.t("imageeditor.rotate"),
             () -> transform(ImageEditorView::rotate90)),
-        Icons.button("fth-crop", I18n.t("imageeditor.resize"), this::resize),
+        Icons.button("mdi2r-resize", I18n.t("imageeditor.resize"), this::resize),
         new Separator(javafx.geometry.Orientation.VERTICAL),
         Icons.button("fth-zoom-out", I18n.t("designer.zoomout"), () -> setZoom(zoom / 1.5)),
         zoomLabel,
