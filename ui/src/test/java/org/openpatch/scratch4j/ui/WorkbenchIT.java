@@ -26,8 +26,8 @@ import static org.openpatch.scratch4j.ui.LayoutIT.settle;
 
 /**
  * The workbench: the bottom panel collapses to its tab row (button, a click
- * on the shown tab, Ctrl+J) and opens again, and Ctrl+P finds and opens a
- * file (needs a display and {@code -Dscratch4j.uismoke=true}).
+ * on the shown tab, Ctrl+J) and opens again, the sidebar collapses to a rail
+ * (Ctrl+B), and Ctrl+P finds and opens a file (needs a display and {@code -Dscratch4j.uismoke=true}).
  */
 @EnabledIfSystemProperty(named = "scratch4j.uismoke", matches = "true")
 class WorkbenchIT {
@@ -128,6 +128,33 @@ class WorkbenchIT {
             javafx.scene.input.ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0, null));
         assertThat(image.zoomForTest()).isCloseTo(before,
             org.assertj.core.data.Offset.offset(0.001));
+      });
+      // Ctrl+B collapses the sidebar to a rail of its tabs; a tab's icon opens it there
+      AtomicReference<Double> sidebarWidth = new AtomicReference<>();
+      onFx(() -> {
+        TabPane sidebar = (TabPane) window.get().getScene().lookup(".sidebar-tabs");
+        sidebarWidth.set(sidebar.getWidth());
+        sidebar.getSelectionModel().select(0);
+        press(window.get().getScene().getRoot(), KeyCode.B, true);
+        assertThat(app.get().sidebarCollapsed()).isTrue();
+      });
+      settle();
+      onFx(() -> {
+        Node rail = window.get().getScene().lookup(".sidebar-rail");
+        assertThat(rail.getBoundsInParent().getWidth()).isLessThan(60);
+        assertThat(window.get().getScene().lookup(".sidebar-tabs")).isNull();
+        // the expand button, then Stages, Files and the Reference
+        var buttons = ((javafx.scene.layout.VBox) rail).getChildren();
+        assertThat(buttons).hasSize(4);
+        ((javafx.scene.control.Button) buttons.get(2)).fire();
+        assertThat(app.get().sidebarCollapsed()).isFalse();
+      });
+      settle();
+      onFx(() -> {
+        TabPane sidebar = (TabPane) window.get().getScene().lookup(".sidebar-tabs");
+        assertThat(sidebar.getSelectionModel().getSelectedIndex()).isEqualTo(1);
+        assertThat(sidebar.getWidth()).isCloseTo(sidebarWidth.get(),
+            org.assertj.core.data.Offset.offset(4.0));
       });
     } finally {
       onFx(() -> window.get().hide());

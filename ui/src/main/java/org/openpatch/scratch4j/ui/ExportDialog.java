@@ -22,7 +22,8 @@ import java.util.Optional;
  * folder for this computer, a runnable JAR, BlueJ or VS Code zips), each with
  * a sentence saying what you get; an app for another operating system below.
  * The result is the format id {@code StudioApp.export} understands, or
- * {@link #APP_INFO} to edit the version and icon first.
+ * {@link #APP_INFO} to edit the version and icon first. The beginner interface
+ * offers the app for this computer only.
  */
 final class ExportDialog {
 
@@ -42,7 +43,7 @@ final class ExportDialog {
 
   private ExportDialog() {}
 
-  static Optional<String> show(Window owner) {
+  static Optional<String> show(Window owner, boolean beginner) {
     Dialog<String> dialog = new Dialog<>();
     dialog.initOwner(owner);
     dialog.setTitle(I18n.t("menu.export"));
@@ -56,7 +57,7 @@ final class ExportDialog {
     GridPane cards = new GridPane();
     cards.setHgap(10);
     cards.setVgap(10);
-    List<String> formats = List.of("app", "jar", "bluej", "vscode");
+    List<String> formats = beginner ? List.of("app") : List.of("app", "jar", "bluej", "vscode");
     for (int i = 0; i < formats.size(); i++) {
       cards.add(card(formats.get(i), dialog), i % 2, i / 2);
     }
@@ -95,7 +96,8 @@ final class ExportDialog {
       dialog.close();
     });
 
-    VBox content = new VBox(10, hint, cards, other, appInfo);
+    VBox content = beginner ? new VBox(10, hint, cards, appInfo)
+        : new VBox(10, hint, cards, other, appInfo);
     VBox.setMargin(other, new javafx.geometry.Insets(8, 0, 0, 0));
     dialog.getDialogPane().setContent(content);
     return dialog.showAndWait();

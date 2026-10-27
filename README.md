@@ -11,23 +11,36 @@ project format may change while we test it with students and teachers.
 
 ## Features
 
-- Create a project from a starter, tutorial, or demo; open an existing project
-  folder or import a Scratch `.sb3` project.
+- Create a project from a guided lesson, a starter, tutorial, or demo; open an
+  existing project folder or import a Scratch `.sb3` project. The start page
+  offers to continue an unfinished lesson, and Help → Show me around tours the
+  window (once by itself on the first project).
 - Edit Java with completion, live diagnostics, beginner-friendly explanations
-  in English and German, a Scratch block palette, and API help.
+  in English and German, a Scratch block palette, and a searchable Reference
+  in the sidebar (F1 looks up the word at the caret), all without a browser.
 - Arrange stages and sprites in visual editors. Managed Java regions keep the
   visual editors and source code in sync while leaving other code editable.
 - A class's tab reads left to right as in Scratch: the blocks, the code, the
   stage or sprite editor. The switch at the end of the tab strip shows the
   code, both side by side, or the visual editor alone.
-- Edit images, sounds, sprite sheets, hitboxes, shaders, and Tiled maps.
+- Edit images, sounds, sprite sheets, hitboxes, shaders, and Tiled maps. Image
+  and sound pickers can draw a new image or record a new sound right away.
 - Drag images (PNG, JPG, GIF) and sounds (WAV, OGG, MP3, AIFF, AU) from your
   file manager onto the Files pane to copy them into the project. Existing
   files keep their contents; matching names get a number.
 - Run programs in a separate JVM, use the console and debugger, and export a
   runnable JAR, a portable app folder, or a BlueJ/VS Code project ZIP.
-- Save milestones and return to earlier work through Project → Versions. Versions use
+- Save milestones and return to earlier work through Project → History. Versions use
   embedded Git, so no Git installation or setup is needed.
+- Project → Hand in writes the project as `Name_Project_date.zip` into the
+  folder a teacher set (Help → For teachers → Hand-in folder, or the
+  `SCRATCH4J_HANDIN_DIR` environment variable); otherwise the student picks one.
+- View → Settings holds the theme, text and code sizes, high contrast, language
+  and compatibility graphics.
+- Help → For teachers → Beginner interface (stored in the project) hides the
+  debugger, diagrams, refactoring, project-wide search, quick open, file
+  history, the step/speed/record controls and all export targets except the app
+  for this computer. Projects use the full interface unless a teacher turns it on.
 
 Student programs use the Scratch for Java library. The IDE does not replace or
 modify that library.
@@ -41,9 +54,10 @@ Automatic run versions keep Java files, maps, tilesets, and shaders after the
 program runs without crashing for a few seconds. Before restoring a version,
 the current project is saved so you can undo the restore. These versions have
 an `[AUTO]` prefix, and the newest 40 automatic versions are retained. Select
-Hide automatic versions in the Versions dialog to see only your milestones.
+Hide automatic versions in the History dialog to see only your milestones.
 The dialog can restore one file or the saved version's files, including binary
-assets. Edit → Local history also keeps individual file revisions.
+assets. Its Earlier saves of the open file button shows the local history of
+individual file revisions.
 
 New repositories default to `main`. Versions live in the project's `.git` under `refs/scratch4j/versions/`, separate
 from normal Git branches and the staging area. Old folder-based versions in

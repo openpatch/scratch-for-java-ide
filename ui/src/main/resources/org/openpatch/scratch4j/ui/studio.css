@@ -243,6 +243,12 @@
   -fx-padding: 5;
 }
 
+/* any other split pane: a thin line; the work area's gaps below override it */
+.split-pane > .split-pane-divider {
+  -fx-padding: 0 1 0 1;
+  -fx-background-color: -color-border-default;
+}
+
 /* the work area: panels as cards on the window's background; the gaps are the dividers */
 .work-split {
   -fx-background-color: -s-canvas;
@@ -256,11 +262,8 @@
 
 .work-split > .split-pane-divider {
   -fx-background-color: transparent;
+  /* left and right make the gap in both directions: the skin turns them for a vertical split */
   -fx-padding: 0 3 0 3;
-}
-
-.work-split:vertical > .split-pane-divider {
-  -fx-padding: 3 0 3 0;
 }
 
 /* the grip shows where the gap is grabbed */
@@ -273,11 +276,6 @@
 .work-split > .split-pane-divider:hover > .vertical-grabber,
 .work-split > .split-pane-divider:hover > .horizontal-grabber {
   -fx-background-color: -color-accent-muted;
-}
-
-.split-pane > .split-pane-divider {
-  -fx-padding: 0 1 0 1;
-  -fx-background-color: -color-border-default;
 }
 
 .surface {
@@ -326,6 +324,15 @@
 .bottom-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label .ikonli-font-icon,
 .editor-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label .ikonli-font-icon {
   -fx-icon-color: -color-accent-fg;
+}
+
+/* the sidebar is narrow: only the tab shown spells out its name, the others are icons */
+.sidebar-tabs > .tab-header-area > .headers-region > .tab > .tab-container > .tab-label {
+  -fx-content-display: graphic-only;
+}
+
+.sidebar-tabs > .tab-header-area > .headers-region > .tab:selected > .tab-container > .tab-label {
+  -fx-content-display: left;
 }
 
 /* ---------- view switch: code / both / visual, at the end of the tab strip ---------- */
@@ -712,7 +719,7 @@
   -rtfx-underline-width: 1;
 }
 
-/* ---------- versions (Project > Versions) ---------- */
+/* ---------- versions (Project > History) ---------- */
 
 .version-diff {
   -fx-background-color: -s-code-bg;
@@ -826,6 +833,19 @@
   -fx-border-color: -color-accent-emphasis;
   -fx-border-width: 1;
 }
+
+.file-tree .tree-cell:problem-error { -fx-text-fill: -s-error; }
+.file-tree .tree-cell:problem-warning { -fx-text-fill: -s-warning; }
+.file-tree .tree-cell:cut { -fx-opacity: 0.5; }
+
+.tree-query {
+  -fx-padding: 2 8;
+  -fx-background-color: -color-bg-default;
+  -fx-border-color: -color-accent-emphasis;
+  -fx-background-radius: 4;
+  -fx-border-radius: 4;
+}
+.tree-query:problem-error { -fx-border-color: -s-error; -fx-text-fill: -s-error; }
 
 /* ---------- block pane (left of a class's code) ---------- */
 
@@ -1147,6 +1167,10 @@
   -fx-padding: 8;
 }
 
+.stage-actions {
+  -fx-padding: 6 8 8 8;
+}
+
 /* ---------- designer ---------- */
 
 .designer {
@@ -1333,9 +1357,38 @@
   -fx-font-weight: bold;
 }
 
-.guide-text {
-  -fx-font-size: 14px;
-  -fx-line-spacing: 4;
+.reference-details {
+  -fx-background-color: transparent;
+  -fx-border-color: -color-border-muted transparent transparent transparent;
+}
+
+.reference-heading {
+  -fx-font-weight: bold;
+  -fx-text-fill: -color-fg-muted;
+}
+
+/* ---------- tour (Help > Show me around) ---------- */
+
+/* the card lives in a popup: AtlantaFX tokens only, they follow the theme there too */
+.tour-card {
+  -fx-background-color: -color-bg-default;
+  -fx-background-radius: 10;
+  -fx-border-color: -color-accent-emphasis;
+  -fx-border-width: 2;
+  -fx-border-radius: 10;
+  -fx-padding: 14;
+  -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 18, 0, 0, 4);
+}
+
+.tour-title {
+  -fx-font-size: 16px;
+  -fx-font-weight: bold;
+}
+
+.tour-target {
+  -fx-border-color: -color-accent-emphasis;
+  -fx-border-width: 3;
+  -fx-border-radius: 8;
 }
 
 .tree-icon {
@@ -1349,6 +1402,8 @@
 .asset-create-bar {
   -fx-padding: 6;
   -fx-background-color: -s-panel-bg;
+  -fx-border-color: -color-border-default;
+  -fx-border-width: 0 0 1 0;
 }
 
 /* ---------- paint & sound editors, asset library ---------- */
@@ -1403,10 +1458,74 @@
   -fx-alignment: center-left;
 }
 
-.effects-row {
-  -fx-padding: 8 10 8 10;
+.transport-button {
+  -fx-font-weight: bold;
+  -fx-min-height: 32;
+  -fx-padding: 4 14 4 12;
+}
+
+/* Stop (playing) and Stop recording: solid red, so the way out is easy to find */
+.transport-button.transport-active {
+  -fx-background-color: #e5534b;
+  -fx-text-fill: white;
+  -fx-border-color: #c93c37;
+}
+
+.transport-button.transport-active .ikonli-font-icon {
+  -fx-icon-color: white;
+}
+
+.transport-button.transport-active:hover {
+  -fx-background-color: #d9443d;
+}
+
+.effects-panel {
+  -fx-padding: 8 12 10 12;
   -fx-background-color: -color-bg-default;
-  -fx-border-color: transparent transparent -color-border-default transparent;
+  -fx-border-color: -color-border-default transparent transparent transparent;
+}
+
+.effect-scope {
+  -fx-font-size: 12px;
+  -fx-text-fill: -color-fg-muted;
+  -fx-padding: 2 8 2 8;
+  -fx-background-radius: 10;
+  -fx-background-color: -color-bg-subtle;
+}
+
+.effect-scope.selected {
+  -fx-text-fill: -color-accent-fg;
+  -fx-background-color: -color-accent-subtle;
+}
+
+.effect-group {
+  -fx-padding: 6 6 4 6;
+  -fx-border-color: -s-card-border;
+  -fx-border-radius: 10;
+  -fx-background-radius: 10;
+}
+
+.effect-group-title {
+  -fx-text-fill: -color-fg-muted;
+  -fx-font-size: 11px;
+  -fx-font-weight: bold;
+  -fx-padding: 0 0 0 4;
+}
+
+.effect-tile {
+  -fx-min-width: 58;
+  -fx-padding: 6 6 4 6;
+  -fx-graphic-text-gap: 4;
+  -fx-font-size: 11px;
+  -fx-background-radius: 8;
+}
+
+.effect-tile .ikonli-font-icon {
+  -fx-icon-color: -color-accent-fg;
+}
+
+.effect-tile:disabled .ikonli-font-icon {
+  -fx-icon-color: -color-fg-muted;
 }
 
 .wave-box {
@@ -1858,4 +1977,26 @@
 /* the bottom panel's collapse button sits at the end of its tab row */
 .panel-toggle {
   -fx-padding: 4;
+}
+
+/* room for the collapse button at the end of the sidebar's tab strip */
+.sidebar-tabs > .tab-header-area {
+  -fx-padding: 0 34 0 0;
+}
+
+/* the icon-only sidebar tabs (not the one shown) take less room */
+.sidebar-tabs > .tab-header-area > .headers-region > .tab {
+  -fx-padding: 4 4 4 4;
+}
+
+.sidebar-tabs > .tab-header-area > .headers-region > .tab:selected {
+  -fx-padding: 4 10 4 10;
+}
+
+.sidebar-rail {
+  -fx-padding: 4 2 4 2;
+}
+
+.sidebar-rail .rail-selected .ikonli-font-icon {
+  -fx-icon-color: -color-accent-fg;
 }

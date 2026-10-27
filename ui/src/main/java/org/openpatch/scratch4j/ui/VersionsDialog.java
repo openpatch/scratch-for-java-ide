@@ -30,8 +30,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Named project milestones and automatic checkpoints. Versions can be filtered,
- * compared with the current files, and restored as a whole or file by file.
+ * Project > History: named project milestones and automatic checkpoints.
+ * Versions can be filtered, compared with the current files, and restored as a
+ * whole or file by file; the open file's earlier saves are one button away.
  */
 final class VersionsDialog {
 
@@ -62,16 +63,24 @@ final class VersionsDialog {
     }
   }
 
-  /** Shows the dialog; {@code onRestored} runs after files changed on disk. */
-  static void show(Path root, Runnable onRestored, SaveFiles saveFiles) {
-    build(root, onRestored, saveFiles).showAndWait();
+  /**
+   * Shows the dialog; {@code onRestored} runs after files changed on disk.
+   * {@code fileHistory} shows the open file's earlier saves (null: no button).
+   */
+  static void show(Path root, Runnable onRestored, SaveFiles saveFiles, Runnable fileHistory) {
+    build(root, onRestored, saveFiles, fileHistory).showAndWait();
   }
 
   static Dialog<ButtonType> build(Path root, Runnable onRestored) {
-    return build(root, onRestored, () -> { });
+    return build(root, onRestored, () -> { }, null);
   }
 
   static Dialog<ButtonType> build(Path root, Runnable onRestored, SaveFiles saveFiles) {
+    return build(root, onRestored, saveFiles, null);
+  }
+
+  static Dialog<ButtonType> build(Path root, Runnable onRestored, SaveFiles saveFiles,
+      Runnable fileHistory) {
     List<ProjectSnapshots.Version> versions;
     try {
       versions = ProjectSnapshots.list(root);
@@ -259,6 +268,13 @@ final class VersionsDialog {
     });
     VBox left = new VBox(8, save, hideAuto, list);
     VBox.setVgrow(list, Priority.ALWAYS);
+    if (fileHistory != null) {
+      Button earlier = new Button(I18n.t("history.file.button"), Icons.of("fth-file-text"));
+      earlier.setId("versions-file-history");
+      earlier.setMaxWidth(Double.MAX_VALUE);
+      earlier.setOnAction(e -> fileHistory.run());
+      left.getChildren().add(earlier);
+    }
     SplitPane split = new SplitPane(left, right);
     split.setDividerPositions(0.3);
     BorderPane content = new BorderPane(split);

@@ -48,6 +48,11 @@ public final class ProjectSettings {
   /** Teacher flags, carried by the project rather than per-machine preferences. */
   public boolean hintsOnly;
   public boolean researchLog;
+  /**
+   * The teacher chose the beginner interface: debugger, diagrams, refactoring,
+   * project-wide search and the extra export targets are hidden.
+   */
+  public boolean beginnerMode;
   /** Project-relative image path used as the launch splash; empty = library default. */
   public String splashLogo = "";
   /**

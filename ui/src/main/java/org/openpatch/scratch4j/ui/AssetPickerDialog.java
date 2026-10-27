@@ -2,6 +2,7 @@ package org.openpatch.scratch4j.ui;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
@@ -38,7 +39,44 @@ final class AssetPickerDialog {
 
   private static final int MAX_TILES = 300;
 
+  /** Opens an asset the picker just created in its editor (set by the IDE). */
+  private static java.util.function.Consumer<Path> onCreated = file -> { };
+
   private AssetPickerDialog() {}
+
+  static void setOnCreated(java.util.function.Consumer<Path> action) {
+    onCreated = action;
+  }
+
+  /**
+   * "Draw a new image" / "Record a new sound": an empty asset with the next
+   * free name, chosen and opened in its editor, so a student needs no other
+   * program and no web search.
+   */
+  private static Button createButton(Path projectRoot, ProjectAssetCreator.Kind kind,
+      Dialog<String> dialog) {
+    boolean image = kind == ProjectAssetCreator.Kind.IMAGE;
+    Button create = new Button(I18n.t(image ? "picker.draw" : "picker.record"),
+        Icons.of(image ? "fth-edit-2" : "fth-mic"));
+    create.setId(image ? "picker-draw" : "picker-record");
+    create.setDisable(projectRoot == null);
+    create.setOnAction(e -> {
+      String base = image ? "costume" : "sound";
+      String folder = image ? "assets/images/" : "assets/sounds/";
+      String extension = image ? ".png" : ".wav";
+      int n = 1;
+      while (Files.exists(projectRoot.resolve(folder + base + n + extension))) n++;
+      try {
+        Path file = ProjectAssetCreator.create(projectRoot, kind, base + n, 64, 64);
+        dialog.setResult(projectRoot.relativize(file).toString().replace('\\', '/'));
+        dialog.close();
+        onCreated.accept(file);
+      } catch (IOException error) {
+        create.setText(error.getMessage());
+      }
+    });
+    return create;
+  }
 
   static Optional<String> pickSound(Path projectRoot, String title) {
     Dialog<String> dialog = new Dialog<>();
@@ -65,7 +103,10 @@ final class AssetPickerDialog {
     });
     dialog.getDialogPane().lookupButton(I18n.ok()).disableProperty().bind(
         list.getSelectionModel().selectedItemProperty().isNull());
-    dialog.getDialogPane().setContent(new VBox(8, search, list));
+    HBox top = new HBox(8, search, createButton(projectRoot, ProjectAssetCreator.Kind.SOUND,
+        dialog));
+    HBox.setHgrow(search, Priority.ALWAYS);
+    dialog.getDialogPane().setContent(new VBox(8, top, list));
     dialog.setResultConverter(button -> button == I18n.ok()
         ? list.getSelectionModel().getSelectedItem() : null);
     return dialog.showAndWait();
@@ -125,7 +166,8 @@ final class AssetPickerDialog {
     scroll.setPrefSize(720, 460);
     Label credits = new Label(I18n.t("library.credits"));
     credits.getStyleClass().add("text-muted");
-    HBox top = new HBox(8, search, sheets);
+    HBox top = new HBox(8, search, sheets,
+        createButton(projectRoot, ProjectAssetCreator.Kind.IMAGE, dialog));
     top.setAlignment(Pos.CENTER_LEFT);
     VBox content = new VBox(8, top, scroll, credits);
     dialog.getDialogPane().setContent(content);

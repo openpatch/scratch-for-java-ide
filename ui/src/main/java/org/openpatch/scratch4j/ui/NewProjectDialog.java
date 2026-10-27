@@ -123,7 +123,12 @@ final class NewProjectDialog {
     };
     lessons.setOnAction(e -> nameAfterLesson.run());
     lessonCard.setOnAction(e -> nameAfterLesson.run());
+    // the BlueJ and VS Code starters are for moving on, folded away below
+    GridPane moreCards = new GridPane();
+    moreCards.setHgap(10);
+    moreCards.setVgap(10);
     int i = 0;
+    int more = 0;
     for (ProjectTemplate template : ProjectTemplate.values()) {
       String key = "template." + template.name().toLowerCase(Locale.ROOT);
       Label title = new Label(I18n.t(key));
@@ -139,9 +144,18 @@ final class NewProjectDialog {
       card.setUserData(template);
       card.setPrefSize(250, 118);
       card.setMaxWidth(Double.MAX_VALUE);
-      cards.add(card, i % 2, i / 2 + 1);
-      i++;
+      if (template == ProjectTemplate.BLUEJ_STARTER || template == ProjectTemplate.VSCODE_STARTER) {
+        moreCards.add(card, more++, 0);
+      } else {
+        cards.add(card, i % 2, i / 2 + 1);
+        i++;
+      }
     }
+    javafx.scene.control.TitledPane moreStarters =
+        new javafx.scene.control.TitledPane(I18n.t("wizard.more"), moreCards);
+    moreStarters.setId("more-starters");
+    moreStarters.setExpanded(false);
+    moreStarters.setAnimated(false);
     // the fifth card: a finished tutorial project or a library demo (bundled, offline)
     ComboBox<BundledTemplates.Template> examples = new ComboBox<>();
     examples.getItems().setAll(BundledTemplates.list());
@@ -227,7 +241,7 @@ final class NewProjectDialog {
     validate.run();
 
     VBox form = new VBox(8,
-        sectionLabel(I18n.t("wizard.template")), cards,
+        sectionLabel(I18n.t("wizard.template")), cards, moreStarters,
         sectionLabel(I18n.t("wizard.name")), nameField,
         sectionLabel(I18n.t("wizard.folder")), new HBox(8, folderField, choose),
         error);

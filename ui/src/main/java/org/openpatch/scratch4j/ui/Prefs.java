@@ -194,6 +194,15 @@ final class Prefs {
     NODE.put("projects.lastDir", folder);
   }
 
+  /** The sound editor's recording device ("" for the default microphone). */
+  static String soundInputDevice() {
+    return NODE.get("sound.inputDevice", "");
+  }
+
+  static void soundInputDevice(String device) {
+    NODE.put("sound.inputDevice", device);
+  }
+
   static int editorFontSize() {
     return NODE.getInt("editor.fontSize", 14);
   }
@@ -202,7 +211,38 @@ final class Prefs {
     NODE.putInt("editor.fontSize", size);
   }
 
-  /** Recently opened project folders that still exist, most recent first. */
+  /**
+   * Where Project > Hand in puts the ZIP: {@code SCRATCH4J_HANDIN_DIR} (school
+   * admins), else the folder a teacher chose here; "" lets the student pick.
+   */
+  static String handInFolder() {
+    String override = System.getenv("SCRATCH4J_HANDIN_DIR");
+    return override != null && !override.isBlank() ? override : NODE.get("handin.folder", "");
+  }
+
+  static void handInFolder(String folder) {
+    NODE.put("handin.folder", folder);
+  }
+
+  /** The name a hand-in ZIP starts with, asked once. */
+  static String studentName() {
+    return NODE.get("handin.name", "");
+  }
+
+  static void studentName(String name) {
+    NODE.put("handin.name", name);
+  }
+
+  /** The first-run tour was shown (or skipped). */
+  static boolean tourShown() {
+    return NODE.getBoolean("tour.shown", false);
+  }
+
+  static void tourShown(boolean shown) {
+    NODE.putBoolean("tour.shown", shown);
+  }
+
+    /** Recently opened project folders that still exist, most recent first. */
   static List<Path> recentProjects() {
     List<Path> recent = new ArrayList<>();
     for (String entry : NODE.get("recent", "").split("\n")) {

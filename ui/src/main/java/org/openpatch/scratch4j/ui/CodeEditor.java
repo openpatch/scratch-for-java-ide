@@ -99,8 +99,15 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
    */
   private static final java.util.concurrent.atomic.AtomicReference<Runnable> NEXT_COMPLETION =
       new java.util.concurrent.atomic.AtomicReference<>();
-  /** How long typing must pause before javac is asked (Ctrl+Space asks at once). */
-  private static final javafx.util.Duration SEMANTIC_DELAY = javafx.util.Duration.millis(150);
+  /**
+   * How long typing must pause before javac is asked (Ctrl+Space asks at
+   * once). Short: one answer covers the whole identifier, and it is asked for
+   * at its first letter, so the list is ready when the second one opens it.
+   */
+  private static final javafx.util.Duration SEMANTIC_DELAY = javafx.util.Duration.millis(60);
+  /** Whether javac ran once in this session (its first run is several times slower). */
+  private static final java.util.concurrent.atomic.AtomicBoolean SEMANTIC_WARM =
+      new java.util.concurrent.atomic.AtomicBoolean();
 
   private static final String INDENT = "  ";
   private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*$");
@@ -128,6 +135,12 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   static {
     FONT_SIZE.addListener((o, old, size) -> Prefs.editorFontSize(size.intValue()));
   }
+
+  /**
+   * The project uses the beginner interface: no refactoring, breakpoints or
+   * project-wide search (the teacher's choice, see {@code ProjectSettings}).
+   */
+  static final BooleanProperty BEGINNER = new SimpleBooleanProperty(false);
 
   private final Path file;
   private final ApiIndex apiIndex;
@@ -486,7 +499,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     List<javafx.scene.control.MenuItem> items = new ArrayList<>();
     int caret = area.getCaretPosition();
     int[] word = wordAt(caret);
-    if (word != null && !SyntaxHighlighter.isKeyword(area.getText(word[0], word[1]))) {
+    if (!BEGINNER.get() && word != null
+        && !SyntaxHighlighter.isKeyword(area.getText(word[0], word[1]))) {
       String name = area.getText(word[0], word[1]);
       javafx.scene.control.MenuItem go = new javafx.scene.control.MenuItem(
           I18n.t("editor.menu.definition", name), Icons.of("fth-corner-down-right"));
@@ -1221,6 +1235,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       box.getStyleClass().add("gutter");
       box.setCursor(javafx.scene.Cursor.HAND);
       box.setOnMouseClicked(e -> {
+        if (BEGINNER.get()) return;
         if (!breakpoints.remove(line + 1)) {
           breakpoints.add(line + 1);
         }
@@ -1273,7 +1288,11 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       // AltGr arrives as Ctrl+Alt: on a German keyboard AltGr+0 types "}" and AltGr++ "~",
       // which must not reset or change the zoom
       boolean shortcut = e.isShortcutDown() && !e.isAltDown();
-      if (shortcut && e.getCode() == KeyCode.SPACE) {
+      if (e.getCode() == KeyCode.BACK_SPACE && !e.isShortcutDown() && !e.isAltDown()
+          && area.getSelection().getLength() == 0 && applyPair(
+              AutoPairs.backspace(area.getText(), area.getCaretPosition()))) {
+        e.consume();
+      } else if (shortcut && e.getCode() == KeyCode.SPACE) {
         showCompletion(true);
         e.consume();
       } else if (e.getCode() == KeyCode.ENTER && !shortcut) {
@@ -1303,6 +1322,9 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         e.consume();
       } else if (shortcut && (e.getCode() == KeyCode.DIGIT0 || e.getCode() == KeyCode.NUMPAD0)) {
         FONT_SIZE.set(14);
+        e.consume();
+      } else if (BEGINNER.get() && (e.getCode() == KeyCode.F12 || e.getCode() == KeyCode.F2
+          || shortcut && e.isShiftDown() && e.getCode() == KeyCode.H)) {
         e.consume();
       } else if (e.getCode() == KeyCode.F12 && e.isShiftDown()) {
         onFindUsages.accept(area.getCaretPosition());
@@ -1342,22 +1364,25 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     });
     area.addEventFilter(KeyEvent.KEY_TYPED, e -> {
       String ch = e.getCharacter();
-      if (ch.length() == 1 && AutoIndent.isCloser(ch.charAt(0))) {
+      if (ch.length() != 1) {
+        return;
+      }
+      if (AutoIndent.isCloser(ch.charAt(0))) {
         alignCloser();
+      }
+      // as the area types: not with Ctrl alone (AltGr, which is Ctrl+Alt, types brackets)
+      if (e.isControlDown() && !e.isAltDown() || e.isMetaDown()) {
+        return;
+      }
+      if (applyPair(AutoPairs.typed(area.getText(), area.getSelection().getStart(),
+          area.getSelection().getEnd(), ch.charAt(0)))) {
+        e.consume();
+        afterTyped(ch);
       }
     });
     area.addEventHandler(KeyEvent.KEY_TYPED, e -> {
-      String ch = e.getCharacter();
-      if (ch.isEmpty() || e.isShortcutDown()) {
-        return;
-      }
-      if (completionPopup.isShowing()) {
-        Platform.runLater(() -> showCompletion(false));
-      } else if (".".equals(ch) || "\"".equals(ch) && insideAssetString()) {
-        Platform.runLater(() -> showCompletion(false));
-      } else if (Character.isJavaIdentifierPart(ch.charAt(0)) && typingWord()) {
-        // suggestions while typing a word (2+ letters), not in comments or plain strings
-        Platform.runLater(() -> showCompletion(false));
+      if (!e.isShortcutDown()) {
+        afterTyped(e.getCharacter());
       }
     });
     area.addEventFilter(ScrollEvent.SCROLL, e -> {
@@ -1366,6 +1391,49 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         e.consume();
       }
     });
+  }
+
+  /** Opens, narrows or prepares the suggestions for the character just typed. */
+  private void afterTyped(String ch) {
+    if (ch.isEmpty()) {
+      return;
+    }
+    // Backspace and Delete arrive as "\b" and "\u007f", which Java counts as identifier
+    // parts: deleting narrows open suggestions (until the word is gone) but never opens
+    // them or asks javac, so a held key runs through the line
+    if (Character.isISOControl(ch.charAt(0))) {
+      if (completionPopup.isShowing()) {
+        Platform.runLater(() -> showCompletion(false));
+      }
+      return;
+    }
+    if (completionPopup.isShowing()) {
+      Platform.runLater(() -> showCompletion(false));
+    } else if (".".equals(ch) || "\"".equals(ch) && insideAssetString()) {
+      Platform.runLater(() -> showCompletion(false));
+    } else if (Character.isJavaIdentifierPart(ch.charAt(0)) && typingWord(2)) {
+      // suggestions while typing a word (2+ letters), not in comments or plain strings
+      Platform.runLater(() -> showCompletion(false));
+    } else if (Character.isJavaIdentifierStart(ch.charAt(0)) && typingWord(1)) {
+      // the first letter asks javac already; the second one shows the answer
+      Platform.runLater(() -> {
+        completionStart = area.getCaretPosition() - wordBeforeCaret().length();
+        requestSemantic(false);
+      });
+    }
+  }
+
+  /** Applies a bracket completion; false when there is none (the key does its usual job). */
+  private boolean applyPair(AutoPairs.Edit edit) {
+    if (edit == null) {
+      return false;
+    }
+    if (edit.start() != edit.end() || !edit.text().isEmpty()) {
+      area.replaceText(edit.start(), edit.end(), edit.text());
+    }
+    area.selectRange(edit.anchor(), edit.caret());
+    area.requestFollowCaret();
+    return true;
   }
 
   private static void zoom(int delta) {
@@ -2358,10 +2426,10 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return before.substring(i);
   }
 
-  /** At least two letters of a word, outside comments and strings (asset strings aside). */
-  private boolean typingWord() {
+  /** At least {@code letters} letters of a word, outside comments and strings. */
+  private boolean typingWord(int letters) {
     String before = textBeforeCaretOnLine();
-    if (wordBeforeCaret().length() < 2 || Character.isDigit(wordBeforeCaret().charAt(0))) {
+    if (wordBeforeCaret().length() < letters || Character.isDigit(wordBeforeCaret().charAt(0))) {
       return false;
     }
     boolean inString = false;
@@ -2433,24 +2501,27 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return identifierCompletions(prefix, afterDot);
   }
 
-  /** Cached semantic items narrowed to the typed prefix (keywords added outside member access). */
+  /**
+   * Cached semantic items narrowed to what was typed ({@link CompletionMatch}:
+   * prefixes, then word starts such as gX for getX), keywords added outside
+   * member access.
+   */
   private List<Completion> filterSemantic(String prefix) {
-    String lower = prefix.toLowerCase(Locale.ROOT);
     List<Completion> result = new ArrayList<>();
     for (Completion item : semanticItems) {
-      if (item.text().toLowerCase(Locale.ROOT).startsWith(lower)) {
+      if (CompletionMatch.rank(item.text(), prefix) != CompletionMatch.NONE) {
         result.add(item);
       }
     }
     if (!semanticMemberAccess && !prefix.isEmpty()) {
+      String lower = prefix.toLowerCase(Locale.ROOT);
       for (String k : JAVA_KEYWORDS) {
         if (k.startsWith(lower) && !k.equals(prefix)) {
           result.add(new Completion(k, "Java", Completion.Kind.KEYWORD));
         }
       }
     }
-    result.sort((a, b) -> Boolean.compare(!a.text().startsWith(prefix),
-        !b.text().startsWith(prefix)));
+    result.sort(CompletionMatch.order(prefix, Completion::text));
     return result.size() > 200 ? result.subList(0, 200) : result;
   }
 
@@ -2469,6 +2540,26 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
   void setSemanticCompleter(SemanticCompleter completer) {
     this.semanticCompleter = completer;
+  }
+
+  /**
+   * Runs javac once in the background, so the first suggestions of the
+   * session come as fast as the later ones (the first run loads the compiler).
+   */
+  void warmUpSemantic() {
+    SemanticCompleter completer = semanticCompleter;
+    if (completer == null || !SEMANTIC_WARM.compareAndSet(false, true)) {
+      return;
+    }
+    String text = area.getText();
+    int offset = Math.max(0, text.lastIndexOf('}'));
+    COMPLETION_WORKER.submit(() -> {
+      try {
+        completer.complete(file, text, offset);
+      } catch (java.io.IOException | RuntimeException ignored) {
+        // only a warm-up
+      }
+    });
   }
 
   void setBrowse(java.util.function.Consumer<String> browse) {
@@ -2497,16 +2588,16 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     }
     semanticPending = start;
     long request = ++semanticRequest;
-    semanticDelay.setOnFinished(e -> submitSemantic(start, request));
+    semanticDelay.setOnFinished(e -> submitSemantic(start, request, explicit));
     if (explicit) {
       semanticDelay.stop();
-      submitSemantic(start, request);
+      submitSemantic(start, request, true);
     } else {
       semanticDelay.playFromStart();
     }
   }
 
-  private void submitSemantic(int start, long request) {
+  private void submitSemantic(int start, long request, boolean explicit) {
     if (request != semanticRequest) {
       return;
     }
@@ -2532,7 +2623,11 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
           semanticItems = items;
           semanticStart = result.start();
           semanticMemberAccess = result.memberAccess();
-          showCompletion(false);
+          // asked for at the first letter: kept until the second one opens the list
+          if (explicit || completionPopup.isShowing() || result.memberAccess()
+              || wordBeforeCaret().length() >= 2) {
+            showCompletion(false);
+          }
         });
       } catch (java.io.IOException | RuntimeException e) {
         // Leave suggestions closed when the type lookup fails.
@@ -2627,7 +2722,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     Map<String, Completion> found = new LinkedHashMap<>();
     for (ApiMethod m : apiIndex.methods()) {
       if ("constructor".equals(m.methodName())
-          || !m.methodName().toLowerCase(Locale.ROOT).startsWith(lower)) {
+          || CompletionMatch.rank(m.methodName(), prefix) == CompletionMatch.NONE) {
         continue;
       }
       found.putIfAbsent(m.methodName(), new Completion(m.methodName(), detailOf(m),
@@ -2644,7 +2739,8 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     Set<String> seen = new HashSet<>();
     while (words.find()) {
       String w = words.group();
-      if (!w.equals(prefix) && w.toLowerCase(Locale.ROOT).startsWith(lower) && seen.add(w)) {
+      if (!w.equals(prefix) && CompletionMatch.rank(w, prefix) != CompletionMatch.NONE
+          && seen.add(w)) {
         found.putIfAbsent(w, new Completion(w, "", Completion.Kind.WORD));
       }
     }
@@ -2652,15 +2748,9 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       return List.of();
     }
     List<Completion> sorted = new ArrayList<>(found.values());
-    sorted.sort((a, b) -> {
-      boolean aCase = a.text().startsWith(prefix);
-      boolean bCase = b.text().startsWith(prefix);
-      if (aCase != bCase) {
-        return aCase ? -1 : 1;
-      }
-      return a.kind() != b.kind() ? a.kind().compareTo(b.kind())
-          : a.text().compareToIgnoreCase(b.text());
-    });
+    sorted.sort(CompletionMatch.order(prefix, Completion::text)
+        .thenComparing(Completion::kind)
+        .thenComparing(Completion::text, String.CASE_INSENSITIVE_ORDER));
     return sorted.size() > 200 ? sorted.subList(0, 200) : sorted;
   }
 
@@ -2806,6 +2896,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     }
     int caret = area.getCaretPosition();
     String text = selected.text();
+    CompletionMatch.used(text);
     boolean method = selected.kind() == Completion.Kind.METHOD;
     boolean followedByParen = caret < area.getLength()
         && area.getText(caret, caret + 1).equals("(");
