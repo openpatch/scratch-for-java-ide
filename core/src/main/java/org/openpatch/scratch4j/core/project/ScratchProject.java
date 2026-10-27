@@ -236,6 +236,30 @@ public final class ScratchProject {
   }
 
   /**
+   * The window class the settings dialog edits: the managed one
+   * ({@link #windowClass()}), otherwise a {@code Window} subclass the regions can
+   * be added to, the start class first. Null when there is none.
+   */
+  public String settingsWindowClass() throws IOException {
+    String managed = windowClass();
+    if (managed != null) {
+      return managed;
+    }
+    List<String> candidates = new ArrayList<>(windowClasses());
+    if (candidates.remove(settings.startStage)) {
+      candidates.add(0, settings.startStage);
+    }
+    for (String name : candidates) {
+      Path file = sourceOf(name);
+      if (file != null && org.openpatch.scratch4j.core.region.WindowDocument.canManage(
+          Files.readString(file, StandardCharsets.UTF_8))) {
+        return name;
+      }
+    }
+    return null;
+  }
+
+  /**
    * The source whose {@code main} makes the program's window
    * ({@code Window myWindow = new Window(600, 400);}, see
    * {@link org.openpatch.scratch4j.core.region.MainWindow}): the start class's,

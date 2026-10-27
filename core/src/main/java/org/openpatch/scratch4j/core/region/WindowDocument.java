@@ -66,6 +66,14 @@ public final class WindowDocument {
     return RegionParser.has(source, SETUP) && RegionParser.has(source, OPTIONS);
   }
 
+  /**
+   * Whether a window class is managed once its regions are added
+   * ({@link DesignerRegions}): it needs a {@code main} to hold the options.
+   */
+  public static boolean canManage(String source) {
+    return isManaged(DesignerRegions.ensure(source, "Window"));
+  }
+
   /** Reads the settings; throws when a region holds statements outside the subset. */
   public static Settings read(String source) {
     int width = 480;

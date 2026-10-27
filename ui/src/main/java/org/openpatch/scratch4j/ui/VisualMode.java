@@ -15,10 +15,16 @@ final class VisualMode {
     return paletteContext(file) == PaletteContext.STAGE;
   }
 
-  /** A window class with the managed settings regions (its "visual editor" is the settings dialog). */
+  /**
+   * A window class the settings dialog manages, or can once it adds the regions
+   * (its "visual editor" is the settings dialog).
+   */
   static boolean isWindowSource(Path file) {
-    return className(file) != null
-        && org.openpatch.scratch4j.core.region.WindowDocument.isManaged(read(file));
+    if (className(file) == null) return false;
+    String source = read(file);
+    return org.openpatch.scratch4j.core.region.WindowDocument.isManaged(source)
+        || ("Window".equals(libraryBase(file))
+            && org.openpatch.scratch4j.core.region.WindowDocument.canManage(source));
   }
 
   /** A sprite class: Sprite, AnimatedSprite or UISprite, also through project superclasses. */
@@ -72,7 +78,7 @@ final class VisualMode {
   /**
    * The library class a Java file's class comes from through the project's own
    * classes ({@code Sprite}, {@code AnimatedSprite}, {@code UISprite},
-   * {@code Stage}), or null.
+   * {@code Stage}, {@code Window}), or null.
    */
   private static String libraryBase(Path file) {
     String name = className(file);
@@ -90,7 +96,7 @@ final class VisualMode {
       }
       if (parent == null) return null;
       switch (parent) {
-        case "Sprite", "AnimatedSprite", "UISprite", "Stage" -> {
+        case "Sprite", "AnimatedSprite", "UISprite", "Stage", "Window" -> {
           return parent;
         }
         default -> name = Files.isRegularFile(dir.resolve(parent + ".java")) ? parent : null;

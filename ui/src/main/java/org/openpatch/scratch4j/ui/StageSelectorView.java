@@ -18,6 +18,7 @@ import javafx.scene.layout.VBox;
 import org.openpatch.scratch4j.core.project.NewClass;
 import org.openpatch.scratch4j.core.project.ScratchProject;
 import org.openpatch.scratch4j.core.project.ProjectSettings;
+import org.openpatch.scratch4j.core.region.DesignerRegions;
 import org.openpatch.scratch4j.core.region.MainWindow;
 import org.openpatch.scratch4j.core.region.WindowDocument;
 import org.openpatch.scratch4j.core.io.LocalHistory;
@@ -283,10 +284,11 @@ final class StageSelectorView extends BorderPane {
     Path windowFile = null;
     Path mainFile = null;
     try {
-      windowClass = project.windowClass();
+      // any Window subclass; its regions are added when the settings are saved
+      windowClass = project.settingsWindowClass();
       if (windowClass != null) {
         windowFile = project.sourceOf(windowClass);
-        code = WindowDocument.read(Files.readString(windowFile));
+        code = WindowDocument.read(DesignerRegions.ensure(Files.readString(windowFile), "Window"));
       }
     } catch (IOException | RuntimeException e) {
       showError(new IOException(I18n.t("stages.window.handwritten"), e));
@@ -374,6 +376,8 @@ final class StageSelectorView extends BorderPane {
     String existingWindow = windowClass;
     Path existingFile = windowFile;
     Path existingMain = mainFile;
+    // a window class keeps its own first stage (the start star changes that)
+    String codeStart = windowClass != null ? code.startStage() : null;
     dialog.showAndWait().ifPresent(button -> {
       if (button != I18n.ok()) {
         return;
@@ -399,7 +403,8 @@ final class StageSelectorView extends BorderPane {
       }
       try {
         if (existingWindow != null || existingMain != null || createWindow.isSelected()) {
-          WindowDocument.Settings next = new WindowDocument.Settings(w, h, startStage(),
+          WindowDocument.Settings next = new WindowDocument.Settings(w, h,
+              existingWindow != null ? codeStart : startStage(),
               fullScreen.isSelected(), pixelArt.isSelected(), pathText, debug.isSelected());
           if (existingMain != null) {
             // in place, in main; the start star keeps its setStage line
@@ -411,7 +416,7 @@ final class StageSelectorView extends BorderPane {
           } else if (existingWindow != null) {
             String source = Files.readString(existingFile);
             LocalHistory.writeString(project.root(), existingFile,
-                WindowDocument.write(source, next));
+                WindowDocument.write(DesignerRegions.ensure(source, "Window"), next));
           } else {
             // never overwrite an existing (hand-written) class
             String name = "MyWindow";
