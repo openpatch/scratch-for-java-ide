@@ -45,9 +45,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,8 +86,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
   private final TableView<String[]> properties = new TableView<>();
   private final ToggleButton gridToggle = new ToggleButton(null, Icons.of("fth-grid"));
   private final Map<Path, Image> images = new HashMap<>();
-  private final Deque<TmxDocument.State> undo = new ArrayDeque<>();
-  private final Deque<TmxDocument.State> redo = new ArrayDeque<>();
+  private final UndoHistory<TmxDocument.State> history = new UndoHistory<>(60);
   /** The undo steps as kept in the editor history, so a save writes only new ones. */
   private final java.util.Map<TmxDocument.State, byte[]> xmlOfState =
       new java.util.IdentityHashMap<>();
@@ -149,12 +146,7 @@ final class MapEditorView extends BorderPane implements SavableTool {
     scroll.getStyleClass().add("paint-scroll");
     scroll.setPannable(false);
     // Ctrl + wheel zooms around the mouse, the middle button (or Space + drag) pans
-    scroll.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
-      if (e.isShortcutDown() && e.getDeltaY() != 0) {
-        zoomAt(e.getDeltaY() > 0 ? zoom * 1.25 : zoom / 1.25, e.getX(), e.getY());
-        e.consume();
-      }
-    });
+    ScrollZoom.install(scroll, canvas, 1.25, () -> zoom, this::setZoom);
     scroll.hvalueProperty().addListener((o, a, b) -> drawMinimap());
     scroll.vvalueProperty().addListener((o, a, b) -> drawMinimap());
     scroll.viewportBoundsProperty().addListener((o, a, b) -> drawMinimap());
@@ -671,20 +663,6 @@ final class MapEditorView extends BorderPane implements SavableTool {
     redraw();
   }
 
-  /** Zooms keeping the map point under the mouse (viewport x/y) where it is. */
-  private void zoomAt(double next, double viewportX, double viewportY) {
-    var viewport = scroll.getViewportBounds();
-    double extraW = Math.max(0, canvas.getWidth() - viewport.getWidth());
-    double extraH = Math.max(0, canvas.getHeight() - viewport.getHeight());
-    double mapX = (scroll.getHvalue() * extraW + viewportX) / zoom;
-    double mapY = (scroll.getVvalue() * extraH + viewportY) / zoom;
-    setZoom(next);
-    scroll.layout();
-    double newExtraW = Math.max(0, canvas.getWidth() - viewport.getWidth());
-    double newExtraH = Math.max(0, canvas.getHeight() - viewport.getHeight());
-    if (newExtraW > 0) scroll.setHvalue(clamp((mapX * zoom - viewportX) / newExtraW));
-    if (newExtraH > 0) scroll.setVvalue(clamp((mapY * zoom - viewportY) / newExtraH));
-  }
 
   private static double clamp(double v) {
     return Math.max(0, Math.min(1, v));
@@ -1737,11 +1715,13 @@ final class MapEditorView extends BorderPane implements SavableTool {
   private void loadHistory() {
     var steps = EditorHistory.read(project.root(), file, HISTORY);
     try {
-      for (byte[] step : steps.undo()) undo.addLast(stateOf(step));
-      for (byte[] step : steps.redo()) redo.addLast(stateOf(step));
+      List<TmxDocument.State> undo = new ArrayList<>();
+      List<TmxDocument.State> redo = new ArrayList<>();
+      for (byte[] step : steps.undo()) undo.add(stateOf(step));
+      for (byte[] step : steps.redo()) redo.add(stateOf(step));
+      history.load(undo, redo);
     } catch (IOException | RuntimeException e) {
-      undo.clear(); // steps from a map the editor can't read: none
-      redo.clear();
+      history.clear(); // steps from a map the editor can't read: none
     }
   }
 
@@ -1760,8 +1740,12 @@ final class MapEditorView extends BorderPane implements SavableTool {
       java.util.Map<TmxDocument.State, byte[]> known = new java.util.IdentityHashMap<>();
       List<byte[]> undoSteps = new ArrayList<>();
       List<byte[]> redoSteps = new ArrayList<>();
-      for (TmxDocument.State state : undo) undoSteps.add(xmlOf(scratch, state, known));
-      for (TmxDocument.State state : redo) redoSteps.add(xmlOf(scratch, state, known));
+      for (TmxDocument.State state : history.undoSteps()) {
+        undoSteps.add(xmlOf(scratch, state, known));
+      }
+      for (TmxDocument.State state : history.redoSteps()) {
+        redoSteps.add(xmlOf(scratch, state, known));
+      }
       xmlOfState.clear();
       xmlOfState.putAll(known);
       EditorHistory.write(project.root(), file, HISTORY,
@@ -1783,26 +1767,23 @@ final class MapEditorView extends BorderPane implements SavableTool {
   }
 
   private void record() {
-    undo.push(doc.snapshot());
-    if (undo.size() > 60) undo.removeLast();
-    redo.clear();
+    history.record(doc.snapshot());
   }
 
   void undo() {
-    if (undo.isEmpty()) return;
+    if (!history.canUndo()) return;
     int at = doc.layers.indexOf(active);
-    redo.push(doc.snapshot());
-    doc.restore(undo.pop());
+    doc.restore(history.undo(doc.snapshot()));
     afterRestore(at);
   }
 
   void redo() {
-    if (redo.isEmpty()) return;
+    if (!history.canRedo()) return;
     int at = doc.layers.indexOf(active);
-    undo.push(doc.snapshot());
-    doc.restore(redo.pop());
+    doc.restore(history.redo(doc.snapshot()));
     afterRestore(at);
   }
+
 
   /** The snapshot has new layer objects: keep the active layer by its position. */
   private void afterRestore(int activeIndex) {

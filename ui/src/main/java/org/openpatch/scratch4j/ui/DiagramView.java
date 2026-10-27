@@ -69,6 +69,11 @@ final class DiagramView extends BorderPane {
   /** Where the classes were dragged (kept in the project) and the objects (this session). */
   private Map<String, double[]> classPositions;
   private Map<String, double[]> objectPositions = new HashMap<>();
+  /** Moving boxes undoes: the positions before each drag or arrangement, per diagram. */
+  private final UndoHistory<Map<String, double[]>> classHistory = new UndoHistory<>(60);
+  private final UndoHistory<Map<String, double[]>> objectHistory = new UndoHistory<>(60);
+  private final Button undoButton;
+  private final Button redoButton;
   private Set<String> abiturPresent = Set.of();
   private boolean reading;
 
@@ -112,10 +117,14 @@ final class DiagramView extends BorderPane {
     Region spacer = new Region();
     HBox.setHgrow(spacer, Priority.ALWAYS);
     Button export = Icons.labeled("fth-image", I18n.t("diagram.export"), this::exportPng);
+    undoButton = Icons.button("fth-corner-up-left", I18n.t("designer.undo"), this::undo);
+    redoButton = Icons.button("fth-corner-up-right", I18n.t("designer.redo"), this::redo);
     HBox bar = new HBox(6, classesMode, objectsMode, new Separator(
         javafx.geometry.Orientation.VERTICAL), attributes, methods, library, abitur, snapshot,
         live,
         spacer,
+        undoButton,
+        redoButton,
         arrange,
         Icons.button("fth-zoom-out", I18n.t("designer.zoomout"),
             () -> canvas.setZoom(canvas.zoom() / 1.25)),
@@ -133,12 +142,8 @@ final class DiagramView extends BorderPane {
     scroll.setPannable(true);
     scroll.viewportBoundsProperty().addListener((o, old, bounds) ->
         canvas.setWrapWidth(bounds.getWidth()));
-    scroll.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
-      if (e.isShortcutDown() && e.getDeltaY() != 0) {
-        canvas.setZoom(canvas.zoom() * (e.getDeltaY() > 0 ? 1.15 : 1 / 1.15));
-        e.consume();
-      }
-    });
+    // Ctrl + wheel (or a pinch) zooms around the mouse
+    ScrollZoom.install(scroll, canvas, 1.15, canvas::zoom, canvas::setZoom);
     message.setWrapText(true);
     message.getStyleClass().add("diagram-message");
     message.setMaxWidth(520);
@@ -150,6 +155,19 @@ final class DiagramView extends BorderPane {
     hint.getStyleClass().add("editor-status");
     setBottom(hint);
     canvas.setOnOpen(this::open);
+    addEventHandler(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+      if (!EditorKeys.isEditorKey(e) || !e.isShortcutDown()) return;
+      switch (e.getCode()) {
+        case Z -> {
+          if (e.isShiftDown()) redo(); else undo();
+        }
+        case Y -> redo();
+        default -> {
+          return;
+        }
+      }
+      e.consume();
+    });
     refresh();
   }
 
@@ -184,6 +202,24 @@ final class DiagramView extends BorderPane {
 
   /** After a drag (all positions) or after arranging automatically (none). */
   private void arranged(Map<String, double[]> positions) {
+    Map<String, double[]> before = positions();
+    if (!same(before, positions)) {
+      history().record(copy(before));
+    }
+    keep(positions);
+    showArrange();
+  }
+
+  /** Where the boxes of the diagram shown were moved; empty when it arranges itself. */
+  private Map<String, double[]> positions() {
+    return objectsMode.isSelected() ? objectPositions : classPositions;
+  }
+
+  private UndoHistory<Map<String, double[]>> history() {
+    return objectsMode.isSelected() ? objectHistory : classHistory;
+  }
+
+  private void keep(Map<String, double[]> positions) {
     if (objectsMode.isSelected()) {
       objectPositions = new HashMap<>(positions);
     } else {
@@ -194,13 +230,45 @@ final class DiagramView extends BorderPane {
         // the arrangement lasts until the IDE closes
       }
     }
+  }
+
+  void undo() {
+    restore(history().undo(copy(positions())));
+  }
+
+  void redo() {
+    restore(history().redo(copy(positions())));
+  }
+
+  private void restore(Map<String, double[]> positions) {
+    if (positions == null) return;
+    keep(positions);
+    canvas.place(positions);
     showArrange();
   }
 
+  private static Map<String, double[]> copy(Map<String, double[]> positions) {
+    Map<String, double[]> copy = new HashMap<>();
+    positions.forEach((id, at) -> copy.put(id, at.clone()));
+    return copy;
+  }
+
+  private static boolean same(Map<String, double[]> a, Map<String, double[]> b) {
+    if (!a.keySet().equals(b.keySet())) return false;
+    for (var entry : a.entrySet()) {
+      if (!java.util.Arrays.equals(entry.getValue(), b.get(entry.getKey()))) return false;
+    }
+    return true;
+  }
+
+  /** The Arrange button once boxes were moved; undo and redo while there are steps. */
   private void showArrange() {
     arrange.setVisible(canvas.arrangedByHand());
     arrange.setManaged(arrange.isVisible());
+    undoButton.setDisable(!history().canUndo());
+    redoButton.setDisable(!history().canRedo());
   }
+
 
   private void open(String id) {
     String className = objectsMode.isSelected() ? classOfObject.get(id) : id;

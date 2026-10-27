@@ -29,8 +29,6 @@ import org.openpatch.scratch4j.core.io.LocalHistory;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
-import java.util.Deque;
 
 /**
  * The sound editor: waveform view, play/loop selection, cut/copy/paste/
@@ -53,8 +51,7 @@ final class SoundEditorView extends BorderPane implements SavableTool {
   private final ToggleButton loopPlayback = new ToggleButton(I18n.t("soundeditor.loop"));
   private final MicrophoneRecorder recorder = new MicrophoneRecorder();
 
-  private final Deque<SoundClip> undoStack = new ArrayDeque<>();
-  private final Deque<SoundClip> redoStack = new ArrayDeque<>();
+  private final UndoHistory<SoundClip> history = new UndoHistory<>(40);
   // edits since the last save: the tab shows a marker
   private final javafx.beans.property.BooleanProperty dirty =
       new javafx.beans.property.SimpleBooleanProperty();
@@ -356,11 +353,7 @@ final class SoundEditorView extends BorderPane implements SavableTool {
     player.stop();
     if (pushUndo) {
       dirty.set(true);
-      undoStack.push(clip);
-      if (undoStack.size() > 40) {
-        undoStack.removeLast();
-      }
-      redoStack.clear();
+      history.record(clip);
     }
     clip = next;
     selection = null;
@@ -368,25 +361,23 @@ final class SoundEditorView extends BorderPane implements SavableTool {
   }
 
   private void undo() {
-    if (undoStack.isEmpty()) {
+    if (!history.canUndo()) {
       return;
     }
     player.stop();
     dirty.set(true);
-    redoStack.push(clip);
-    clip = undoStack.pop();
+    clip = history.undo(clip);
     selection = null;
     redraw();
   }
 
   private void redo() {
-    if (redoStack.isEmpty()) {
+    if (!history.canRedo()) {
       return;
     }
     player.stop();
     dirty.set(true);
-    undoStack.push(clip);
-    clip = redoStack.pop();
+    clip = history.redo(clip);
     selection = null;
     redraw();
   }
@@ -432,11 +423,13 @@ final class SoundEditorView extends BorderPane implements SavableTool {
   private void loadHistory() {
     var steps = EditorHistory.read(projectRoot, file, HISTORY);
     try {
-      for (byte[] step : steps.undo()) undoStack.addLast(clipOf(step));
-      for (byte[] step : steps.redo()) redoStack.addLast(clipOf(step));
+      List<SoundClip> undo = new ArrayList<>();
+      List<SoundClip> redo = new ArrayList<>();
+      for (byte[] step : steps.undo()) undo.add(clipOf(step));
+      for (byte[] step : steps.redo()) redo.add(clipOf(step));
+      history.load(undo, redo);
     } catch (IOException | RuntimeException e) {
-      undoStack.clear();
-      redoStack.clear();
+      history.clear();
     }
   }
 
@@ -445,8 +438,9 @@ final class SoundEditorView extends BorderPane implements SavableTool {
       java.util.Map<SoundClip, byte[]> known = new java.util.IdentityHashMap<>();
       List<byte[]> undo = new ArrayList<>();
       List<byte[]> redo = new ArrayList<>();
-      for (SoundClip step : undoStack) undo.add(bytesOf(step, known));
-      for (SoundClip step : redoStack) redo.add(bytesOf(step, known));
+      for (SoundClip step : history.undoSteps()) undo.add(bytesOf(step, known));
+      for (SoundClip step : history.redoSteps()) redo.add(bytesOf(step, known));
+
       encoded.clear();
       encoded.putAll(known);
       EditorHistory.write(projectRoot, target, HISTORY, new EditorHistory.Steps(undo, redo, null));

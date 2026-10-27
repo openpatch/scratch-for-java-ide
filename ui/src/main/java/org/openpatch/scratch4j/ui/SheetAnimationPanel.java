@@ -27,9 +27,7 @@ import org.openpatch.scratch4j.core.region.SpriteAssets;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -80,8 +78,7 @@ final class SheetAnimationPanel extends HBox {
   private final javafx.scene.control.TextArea code = new javafx.scene.control.TextArea();
   private final Label message = new Label();
   private final Timeline player = new Timeline();
-  private final Deque<List<Integer>> undoStack = new ArrayDeque<>();
-  private final Deque<List<Integer>> redoStack = new ArrayDeque<>();
+  private final UndoHistory<List<Integer>> history = new UndoHistory<>(UNDO_LIMIT);
   private List<Integer> frames = new ArrayList<>();
   private int previewFrame;
   private boolean updating;
@@ -318,27 +315,22 @@ final class SheetAnimationPanel extends HBox {
     if (next.equals(frames)) {
       return;
     }
-    undoStack.push(List.copyOf(frames));
-    if (undoStack.size() > UNDO_LIMIT) {
-      undoStack.removeLast();
-    }
-    redoStack.clear();
+    history.record(List.copyOf(frames));
     frames = new ArrayList<>(next);
     framesChanged(true);
   }
 
   void undo() {
-    if (!undoStack.isEmpty()) {
-      redoStack.push(List.copyOf(frames));
-      frames = new ArrayList<>(undoStack.pop());
+    if (history.canUndo()) {
+      frames = new ArrayList<>(history.undo(List.copyOf(frames)));
       framesChanged(true);
     }
   }
 
   void redo() {
-    if (!redoStack.isEmpty()) {
-      undoStack.push(List.copyOf(frames));
-      frames = new ArrayList<>(redoStack.pop());
+    if (history.canRedo()) {
+      frames = new ArrayList<>(history.redo(List.copyOf(frames)));
+
       framesChanged(true);
     }
   }

@@ -33,10 +33,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -65,8 +63,7 @@ final class PaletteEditorView extends BorderPane implements SavableTool {
   /** The second swatch (Shift-click), the other end of a gradient; -1 = none. */
   private int other = -1;
 
-  private final Deque<GimpPalette> undoStack = new ArrayDeque<>();
-  private final Deque<GimpPalette> redoStack = new ArrayDeque<>();
+  private final UndoHistory<GimpPalette> history = new UndoHistory<>(UNDO_LIMIT);
   private final javafx.beans.property.BooleanProperty dirty =
       new javafx.beans.property.SimpleBooleanProperty();
 
@@ -127,8 +124,7 @@ final class PaletteEditorView extends BorderPane implements SavableTool {
     }
     try {
       load(GimpPalette.read(file));
-      undoStack.clear();
-      redoStack.clear();
+      history.clear();
       refresh();
     } catch (IOException e) {
       status.setText(I18n.t("paletteeditor.error", e.getMessage()));
@@ -159,7 +155,7 @@ final class PaletteEditorView extends BorderPane implements SavableTool {
     columnsField.setTooltip(new Tooltip(I18n.t("paletteeditor.columns.tooltip")));
     columnsField.valueProperty().addListener((o, a, value) -> {
       if (!updating && value != null && value != columns) {
-        pushUndo();
+        history.record(palette());
         columns = value;
         dirty.set(true);
         refresh();
@@ -366,38 +362,29 @@ final class PaletteEditorView extends BorderPane implements SavableTool {
     return cell;
   }
 
-  private void pushUndo() {
-    undoStack.push(palette());
-    if (undoStack.size() > UNDO_LIMIT) {
-      undoStack.removeLast();
-    }
-    redoStack.clear();
-  }
-
   /** Records undo, applies {@code change} and redraws. */
   private void change(Runnable change) {
-    pushUndo();
+    history.record(palette());
     change.run();
     dirty.set(true);
     refresh();
   }
 
   void undo() {
-    if (undoStack.isEmpty()) {
+    if (!history.canUndo()) {
       return;
     }
-    redoStack.push(palette());
-    load(undoStack.pop());
+    load(history.undo(palette()));
     dirty.set(true);
     refresh();
   }
 
   void redo() {
-    if (redoStack.isEmpty()) {
+    if (!history.canRedo()) {
       return;
     }
-    undoStack.push(palette());
-    load(redoStack.pop());
+    load(history.redo(palette()));
+
     dirty.set(true);
     refresh();
   }

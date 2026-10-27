@@ -86,7 +86,9 @@ final class UmlCanvas extends Canvas {
       dragging = e.getButton() == MouseButton.PRIMARY ? boxAt(e.getX() / zoom, e.getY() / zoom)
           : null;
       dragged = false;
+      requestFocus(); // for Ctrl+Z
       if (dragging == null) return;
+
       double[] r = placed.get(dragging);
       grip = new double[] {e.getX() / zoom - r[0], e.getY() / zoom - r[1]};
       setCursor(Cursor.CLOSED_HAND);
@@ -151,6 +153,13 @@ final class UmlCanvas extends Canvas {
 
   boolean arrangedByHand() {
     return !pinned.isEmpty();
+  }
+
+  /** Puts the boxes where {@code positions} has them (undo, redo); none: laid out by itself. */
+  void place(Map<String, double[]> positions) {
+    setPinned(positions);
+    layout();
+    draw();
   }
 
   /** Forgets where the boxes were dragged and lays them out again. */

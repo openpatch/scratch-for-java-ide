@@ -140,8 +140,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   /** Undo entries hold every layer (strokes and layer edits undo alike). */
   private record Snapshot(List<WritableImage> layers, List<Boolean> visible, int active) {}
 
-  private final Deque<Snapshot> undoStack = new ArrayDeque<>();
-  private final Deque<Snapshot> redoStack = new ArrayDeque<>();
+  private final UndoHistory<Snapshot> history = new UndoHistory<>(40);
 
   private final ScrollPane scroll = new ScrollPane();
   private final Label zoomLabel = new Label();
@@ -226,16 +225,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     scroll.setFitToHeight(true);
     scroll.getStyleClass().add("paint-scroll");
     // Ctrl + wheel (or a pinch) zooms around the mouse
-    scroll.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
-      if (e.isShortcutDown() && e.getDeltaY() != 0) {
-        zoomAt(e.getDeltaY() > 0 ? zoom * 1.25 : zoom / 1.25, e.getSceneX(), e.getSceneY());
-        e.consume();
-      }
-    });
-    scroll.addEventFilter(javafx.scene.input.ZoomEvent.ZOOM, e -> {
-      zoomAt(zoom * e.getZoomFactor(), e.getSceneX(), e.getSceneY());
-      e.consume();
-    });
+    ScrollZoom.install(scroll, stack, 1.25, () -> zoom, this::setZoom);
     scroll.viewportBoundsProperty().addListener((o, old, bounds) -> {
       if (!fitted && bounds.getWidth() > 50) {
         fitted = true;
@@ -406,8 +396,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     layers.add(image);
     layerVisible.add(true);
     activeLayer = 0;
-    undoStack.clear();
-    redoStack.clear();
+    history.clear();
     encoded.clear();
     loadHistory();
     dirty.set(false);
@@ -840,25 +829,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
    * ({@code sceneX}, {@code sceneY}) where it is.
    */
   void zoomAt(double next, double sceneX, double sceneY) {
-    Point2D local = stack.sceneToLocal(sceneX, sceneY);
-    double px = local.getX() / zoom;
-    double py = local.getY() / zoom;
-    setZoom(next);
-    scroll.applyCss();
-    scroll.layout();
-    Point2D now = stack.localToScene(px * zoom, py * zoom);
-    var viewport = scroll.getViewportBounds();
-    var content = scroll.getContent().getLayoutBounds();
-    double extraW = content.getWidth() - viewport.getWidth();
-    double extraH = content.getHeight() - viewport.getHeight();
-    if (extraW > 0) {
-      scroll.setHvalue(Math.max(0, Math.min(1,
-          scroll.getHvalue() + (now.getX() - sceneX) / extraW)));
-    }
-    if (extraH > 0) {
-      scroll.setVvalue(Math.max(0, Math.min(1,
-          scroll.getVvalue() + (now.getY() - sceneY) / extraH)));
-    }
+    ScrollZoom.around(scroll, stack, sceneX, sceneY, () -> zoom, () -> setZoom(next));
   }
 
   private void setZoom(double next) {
@@ -1921,11 +1892,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
 
   private void pushUndo() {
     dirty.set(true);
-    undoStack.push(snapshot());
-    if (undoStack.size() > 40) {
-      undoStack.removeLast();
-    }
-    redoStack.clear();
+    history.record(snapshot());
   }
 
   private void undo() {
@@ -1933,23 +1900,19 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       floating = null;
       selection = null;
     }
-    if (undoStack.isEmpty()) {
+    if (!history.canUndo()) {
       return;
     }
-    Snapshot previous = undoStack.pop();
     dirty.set(true);
-    redoStack.push(snapshot());
-    restore(previous);
+    restore(history.undo(snapshot()));
   }
 
   private void redo() {
-    if (redoStack.isEmpty()) {
+    if (!history.canRedo()) {
       return;
     }
-    Snapshot next = redoStack.pop();
     dirty.set(true);
-    undoStack.push(snapshot());
-    restore(next);
+    restore(history.redo(snapshot()));
   }
 
   // --- layers ----------------------------------------------------------------
@@ -2176,12 +2139,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
           || current.layers().get(0).getHeight() != image.getHeight())) {
         return;
       }
-      undoStack.addAll(undo);
-      redoStack.addAll(redo);
+      history.load(undo, redo);
       if (current != null) restore(current);
     } catch (IOException | RuntimeException e) {
-      undoStack.clear(); // steps the editor can't read: none
-      redoStack.clear();
+      history.clear(); // steps the editor can't read: none
     }
   }
 
@@ -2191,8 +2152,9 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       java.util.Map<Snapshot, byte[]> known = new java.util.IdentityHashMap<>();
       List<byte[]> undo = new ArrayList<>();
       List<byte[]> redo = new ArrayList<>();
-      for (Snapshot step : undoStack) undo.add(bytesOf(step, known));
-      for (Snapshot step : redoStack) redo.add(bytesOf(step, known));
+      for (Snapshot step : history.undoSteps()) undo.add(bytesOf(step, known));
+      for (Snapshot step : history.redoSteps()) redo.add(bytesOf(step, known));
+
       encoded.clear();
       encoded.putAll(known);
       // one layer is the file itself; more are kept beside it

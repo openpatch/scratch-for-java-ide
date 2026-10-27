@@ -41,8 +41,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.Locale;
@@ -162,8 +160,8 @@ final class StageDesignerView extends BorderPane {
   private double dragStartDistance;
   private boolean dragChanged;
   private Double zoom; // null = fit to the available space
-  private final Deque<String> undo = new ArrayDeque<>();
-  private final Deque<String> redo = new ArrayDeque<>();
+  /** The stage's source before each designer change. */
+  private final UndoHistory<String> history = new UndoHistory<>(Integer.MAX_VALUE);
 
   StageDesignerView(ScratchProject project, String stageClass, Listener listener)
       throws IOException {
@@ -884,8 +882,8 @@ final class StageDesignerView extends BorderPane {
     codeOwnedNote.setVisible(partial);
     codeOwnedNote.setText(partial ? I18n.t("designer.codeowned",
         String.join(", ", document.codeOwnedSprites().stream().sorted().toList())) : "");
-    undoButton.setDisable(undoDelegate == null && undo.isEmpty());
-    redoButton.setDisable(redoDelegate == null && redo.isEmpty());
+    undoButton.setDisable(undoDelegate == null && !history.canUndo());
+    redoButton.setDisable(redoDelegate == null && !history.canRedo());
     refreshInstanceTiles();
     refreshClassTiles();
     refreshBackdropTiles();
@@ -1696,8 +1694,7 @@ final class StageDesignerView extends BorderPane {
       int at = source.indexOf("import ");
       String updated = at >= 0 ? source.substring(0, at) + importLine + source.substring(at)
           : importLine + source;
-      undo.push(source);
-      redo.clear();
+      history.record(source);
       LocalHistory.writeString(project.root(), stageFile, updated);
       // regions are unchanged: keep the in-memory model, the caller adds to it
       document = StageDocument.read(updated);
@@ -1849,8 +1846,7 @@ final class StageDesignerView extends BorderPane {
       String before = currentSource();
       String updated = document.writeOn(before, model);
       if (!updated.equals(before)) {
-        undo.push(before);
-        redo.clear();
+        history.record(before);
         LocalHistory.writeString(project.root(), stageFile, updated);
       }
       // the document is now the source of truth for further edits
@@ -1885,7 +1881,7 @@ final class StageDesignerView extends BorderPane {
       undoDelegate.run();
       return;
     }
-    restore(undo, redo);
+    restore(history::undo);
   }
 
   void redo() {
@@ -1893,16 +1889,18 @@ final class StageDesignerView extends BorderPane {
       redoDelegate.run();
       return;
     }
-    restore(redo, undo);
+    restore(history::redo);
   }
 
-  private void restore(Deque<String> from, Deque<String> to) {
-    if (from.isEmpty()) {
-      return;
-    }
+  /** Writes the source {@code step} hands back for the stage's current one. */
+  private void restore(java.util.function.UnaryOperator<String> step) {
     try {
-      to.push(Files.readString(stageFile, StandardCharsets.UTF_8));
-      LocalHistory.writeString(project.root(), stageFile, from.pop());
+      String source = step.apply(Files.readString(stageFile, StandardCharsets.UTF_8));
+      if (source == null) {
+        return;
+      }
+      LocalHistory.writeString(project.root(), stageFile, source);
+
       reload();
       listener.onStageWritten(stageFile);
     } catch (IOException e) {
