@@ -225,6 +225,17 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     scroll.setFitToWidth(true);
     scroll.setFitToHeight(true);
     scroll.getStyleClass().add("paint-scroll");
+    // Ctrl + wheel (or a pinch) zooms around the mouse
+    scroll.addEventFilter(javafx.scene.input.ScrollEvent.SCROLL, e -> {
+      if (e.isShortcutDown() && e.getDeltaY() != 0) {
+        zoomAt(e.getDeltaY() > 0 ? zoom * 1.25 : zoom / 1.25, e.getSceneX(), e.getSceneY());
+        e.consume();
+      }
+    });
+    scroll.addEventFilter(javafx.scene.input.ZoomEvent.ZOOM, e -> {
+      zoomAt(zoom * e.getZoomFactor(), e.getSceneX(), e.getSceneY());
+      e.consume();
+    });
     scroll.viewportBoundsProperty().addListener((o, old, bounds) -> {
       if (!fitted && bounds.getWidth() > 50) {
         fitted = true;
@@ -822,6 +833,32 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     double fit = Math.min((bounds.getWidth() - 60) / image.getWidth(),
         (bounds.getHeight() - 60) / image.getHeight());
     setZoom(Math.max(1, Math.min(16, Math.floor(fit * 4) / 4)));
+  }
+
+  /**
+   * Zooms to {@code next} keeping the picture point under the scene point
+   * ({@code sceneX}, {@code sceneY}) where it is.
+   */
+  void zoomAt(double next, double sceneX, double sceneY) {
+    Point2D local = stack.sceneToLocal(sceneX, sceneY);
+    double px = local.getX() / zoom;
+    double py = local.getY() / zoom;
+    setZoom(next);
+    scroll.applyCss();
+    scroll.layout();
+    Point2D now = stack.localToScene(px * zoom, py * zoom);
+    var viewport = scroll.getViewportBounds();
+    var content = scroll.getContent().getLayoutBounds();
+    double extraW = content.getWidth() - viewport.getWidth();
+    double extraH = content.getHeight() - viewport.getHeight();
+    if (extraW > 0) {
+      scroll.setHvalue(Math.max(0, Math.min(1,
+          scroll.getHvalue() + (now.getX() - sceneX) / extraW)));
+    }
+    if (extraH > 0) {
+      scroll.setVvalue(Math.max(0, Math.min(1,
+          scroll.getVvalue() + (now.getY() - sceneY) / extraH)));
+    }
   }
 
   private void setZoom(double next) {

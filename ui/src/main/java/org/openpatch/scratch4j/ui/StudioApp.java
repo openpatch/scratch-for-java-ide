@@ -149,6 +149,12 @@ public class StudioApp extends javafx.application.Application {
   private StageSelectorView selector;
   private TabPane sidebar;
   private TabPane bottomTabs;
+  /** The bottom panel's card; collapsed, only its tab row shows. */
+  private StackPane bottomCard;
+  private boolean bottomCollapsed;
+  private double bottomDivider = 0.76;
+  private Button bottomToggle;
+  private Tab tabAtPress;
   private Tab problemsTab;
   private Tab consoleTab;
   private ScratchMigrationPane migrationPane;
@@ -437,7 +443,27 @@ public class StudioApp extends javafx.application.Application {
     bottomTabs.setMinHeight(90);
 
     // the panels are cards on the window's background, the gaps between them the dividers
-    Node bottomCard = surface(bottomTabs);
+    bottomToggle = Icons.button("fth-chevron-down", I18n.t("panel.collapse"),
+        () -> setBottomCollapsed(!bottomCollapsed));
+    bottomToggle.getStyleClass().add("panel-toggle");
+    StackPane bottomStack = new StackPane(bottomTabs, bottomToggle);
+    StackPane.setAlignment(bottomToggle, Pos.TOP_RIGHT);
+    StackPane.setMargin(bottomToggle, new javafx.geometry.Insets(4, 6, 0, 0));
+    bottomCard = surface(bottomStack);
+    // a click on the tab already shown collapses the panel (or opens it again);
+    // any other tab, chosen by hand or by the IDE, opens it
+    bottomTabs.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_PRESSED,
+        e -> tabAtPress = bottomTabs.getSelectionModel().getSelectedItem());
+    bottomTabs.addEventFilter(javafx.scene.input.MouseEvent.MOUSE_CLICKED, e -> {
+      if (e.getButton() == javafx.scene.input.MouseButton.PRIMARY
+          && inTabHeader(e.getPickResult().getIntersectedNode())
+          && tabAtPress == bottomTabs.getSelectionModel().getSelectedItem()) {
+        setBottomCollapsed(!bottomCollapsed);
+      }
+    });
+    bottomTabs.getSelectionModel().selectedItemProperty().addListener((o, a, b) -> {
+      if (bottomCollapsed && b != null) setBottomCollapsed(false);
+    });
     centerSplit = new SplitPane(surface(centerStack), bottomCard);
     centerSplit.getStyleClass().add("work-split");
     centerSplit.setOrientation(Orientation.VERTICAL);
@@ -584,8 +610,11 @@ public class StudioApp extends javafx.application.Application {
       }
       needed += bar.getInsets().getLeft() + bar.getInsets().getRight() + 40;
       if (!compact && bar.getWidth() < needed) {
-        compactMenu.getItems().setAll(menus.getMenus());
+        List<Menu> all = new ArrayList<>(menus.getMenus());
+        compactMenu.getItems().setAll(all);
         menus.getMenus().clear();
+        // a menu button's accelerators only work while it is open: the scene keeps them
+        folded(all, true);
         menus.setVisible(false);
         menus.setManaged(false);
         compactMenu.setVisible(true);
@@ -593,6 +622,7 @@ public class StudioApp extends javafx.application.Application {
       } else if (compact && bar.getWidth() >= needed) {
         List<Menu> all = new ArrayList<>();
         for (var item : compactMenu.getItems()) all.add((Menu) item);
+        folded(all, false);
         compactMenu.getItems().clear();
         menus.getMenus().setAll(all);
         menus.setVisible(true);
@@ -611,6 +641,65 @@ public class StudioApp extends javafx.application.Application {
     StackPane card = new StackPane(content);
     card.getStyleClass().add("surface");
     return card;
+  }
+
+  /** Ctrl+P: type part of a file's name, Enter opens it (the open tabs come first). */
+  void quickOpen() {
+    ScratchProject p = project.get();
+    if (p == null) {
+      alert(I18n.t("status.no.project"));
+      return;
+    }
+    List<Path> recent = new ArrayList<>();
+    Path current = EditorTabs.fileOf(editor.getSelectionModel().getSelectedItem());
+    if (current != null) recent.add(current.toAbsolutePath().normalize());
+    for (Tab tab : editor.getTabs()) {
+      Path file = EditorTabs.fileOf(tab);
+      if (file != null && !recent.contains(file.toAbsolutePath().normalize())) {
+        recent.add(file.toAbsolutePath().normalize());
+      }
+    }
+    QuickOpen.show(stage, p.root().toAbsolutePath().normalize(), recent, this::openByType);
+  }
+
+  /** Whether {@code node} is a tab's header in the bottom panel (not its content). */
+  private boolean inTabHeader(Node node) {
+    for (Node n = node; n != null && n != bottomTabs; n = n.getParent()) {
+      if (n.getStyleClass().contains("tab-header-area")) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Collapses the bottom panel (Problems, Console, ...) to its tab row, or
+   * opens it again at the height it had.
+   */
+  void setBottomCollapsed(boolean collapse) {
+    if (collapse == bottomCollapsed) return;
+    bottomCollapsed = collapse;
+    if (collapse) {
+      bottomDivider = centerSplit.getDividerPositions()[0];
+      Node header = bottomTabs.lookup(".tab-header-area");
+      double height = (header == null ? 34 : header.getBoundsInParent().getMaxY())
+          + bottomCard.snappedTopInset() + bottomCard.snappedBottomInset();
+      bottomTabs.setMinHeight(0);
+      bottomCard.setMinHeight(height);
+      bottomCard.setMaxHeight(height);
+      centerSplit.setDividerPositions(1);
+    } else {
+      bottomTabs.setMinHeight(90);
+      bottomCard.setMinHeight(Region.USE_COMPUTED_SIZE);
+      bottomCard.setMaxHeight(Double.MAX_VALUE);
+      centerSplit.setDividerPositions(bottomDivider);
+    }
+    bottomCard.pseudoClassStateChanged(javafx.css.PseudoClass.getPseudoClass("collapsed"),
+        collapse);
+    bottomToggle.setGraphic(Icons.of(collapse ? "fth-chevron-up" : "fth-chevron-down"));
+    bottomToggle.getTooltip().setText(I18n.t(collapse ? "panel.expand" : "panel.collapse"));
+  }
+
+  boolean bottomCollapsed() {
+    return bottomCollapsed;
   }
 
   /** Shows a bottom tab the project needs now (only Problems and Console are always there). */
@@ -743,6 +832,7 @@ public class StudioApp extends javafx.application.Application {
     file.getItems().addAll(
         item("menu.file.new", "fth-plus-square", shortcut(KeyCode.N), this::createProject),
         item("menu.file.open", "fth-folder", shortcut(KeyCode.O), this::openProject),
+        item("menu.file.quickopen", "fth-search", shortcut(KeyCode.P), this::quickOpen),
         recentProjectsMenu(file),
         item("menu.file.sb3", "fth-download", null, this::importScratchProject),
         new SeparatorMenuItem(),
@@ -810,6 +900,8 @@ public class StudioApp extends javafx.application.Application {
             () -> showActiveView(ViewSwitch.View.VISUAL)),
         new SeparatorMenuItem(),
         item("diagram.menu", "fth-layout", null, this::openDiagrams),
+        item("menu.view.panel", "fth-sidebar", shortcut(KeyCode.J),
+            () -> setBottomCollapsed(!bottomCollapsed)),
         new SeparatorMenuItem(),
         item("menu.view.zoomin", "fth-zoom-in", null,
             () -> CodeEditor.FONT_SIZE.set(Math.min(36, CodeEditor.FONT_SIZE.get() + 1))),
@@ -875,6 +967,36 @@ public class StudioApp extends javafx.application.Application {
       }
       e.consume();
     });
+  }
+
+  /**
+   * While the menus are folded into the compact menu button, their shortcuts
+   * (Ctrl+S, F5, Ctrl+P, ...) are the scene's; unfolded, the menu bar has them.
+   */
+  private void folded(List<Menu> menus, boolean fold) {
+    if (scene == null) return;
+    for (Menu menu : menus) {
+      for (MenuItem item : allItems(menu)) {
+        KeyCombination key = item.getAccelerator();
+        if (key == null) continue;
+        if (fold) {
+          scene.getAccelerators().put(key, () -> {
+            if (!item.isDisable()) item.fire();
+          });
+        } else {
+          scene.getAccelerators().remove(key);
+        }
+      }
+    }
+  }
+
+  private static List<MenuItem> allItems(Menu menu) {
+    List<MenuItem> items = new ArrayList<>();
+    for (MenuItem item : menu.getItems()) {
+      items.add(item);
+      if (item instanceof Menu sub) items.addAll(allItems(sub));
+    }
+    return items;
   }
 
   private static KeyCombination shortcut(KeyCode code) {
@@ -3050,6 +3172,10 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /** The status line's text (tests). */
+  EditorTabs editorForTests() {
+    return editor;
+  }
+
   String statusForTests() {
     return status.getText();
   }
