@@ -184,7 +184,7 @@ class FileActionsIT {
     AtomicReference<DialogPane> result = new AtomicReference<>();
     for (int attempt = 0; attempt < 60 && result.get() == null; attempt++) {
       onFx(() -> Window.getWindows().stream().filter(Stage.class::isInstance)
-          .map(Stage.class::cast).filter(stage -> stage.getTitle().equals(I18n.t(title)))
+          .map(Stage.class::cast).filter(stage -> I18n.t(title).equals(stage.getTitle()))
           .filter(stage -> stage.getScene().getRoot() instanceof DialogPane)
           .findFirst().ifPresent(stage -> result.set((DialogPane) stage.getScene().getRoot())));
       Thread.sleep(100);

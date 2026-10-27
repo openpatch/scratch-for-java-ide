@@ -19,7 +19,7 @@ import org.openpatch.scratch4j.core.project.LibraryJarSource;
 
 /**
  * The whole IDE window at its smallest size (900x600) with the tiled demo's
- * World in the designer: the header fits, the stage preview fits its space
+ * Level in the designer: the header fits, the stage preview fits its space
  * and shows the map. Run under {@code xvfb-run -a} with
  * {@code -Dscratch4j.uismoke=true}.
  */
@@ -151,7 +151,7 @@ class LayoutIT {
       // the stage preview fits into its pane
       StageDesignerView designer = (StageDesignerView) scene.getRoot()
           .lookupAll(".designer").stream().findFirst().orElse(null);
-      assertThat(designer).as("designer panel beside World.java").isNotNull();
+      assertThat(designer).as("designer panel beside Level.java").isNotNull();
       var canvas = designer.canvas().localToScene(designer.canvas().getBoundsInLocal());
       assertThat(canvas.getMaxX()).isLessThanOrEqualTo(width + 1);
       assertThat(designer.shownMap()).isNotNull();
@@ -163,7 +163,7 @@ class LayoutIT {
           break;
         }
       }
-      assertThat(code).as("the designer sits in World.java's tab").isNotNull();
+      assertThat(code).as("the designer sits in Level.java's tab").isNotNull();
       designer.selectFromCodeLine("inventory = new UIItem();");
       assertThat(code.linkedLines()).as("inventory's lines light up").isNotEmpty();
       int line = code.content().lines().toList().indexOf("    inventory = new UIItem();") + 1;
@@ -191,7 +191,7 @@ class LayoutIT {
     onFx(() -> {
       for (var n : window.get().getScene().getRoot().lookupAll(".code-editor")) {
         for (javafx.scene.Node p = n; p != null; p = p.getParent()) {
-          if (p instanceof CodeEditor c && c.file().getFileName().toString().equals("World.java")) {
+          if (p instanceof CodeEditor c && c.file().getFileName().toString().equals("Level.java")) {
             worldCode.set(c);
           }
         }
@@ -230,7 +230,8 @@ class LayoutIT {
     // a colour swatch in the gutter: its picker stays open while the line changes
     onFx(() -> {
       var area = worldCode.get().area();
-      int at = worldCode.get().content().indexOf("    GameState.get().map = mapFile;");
+      // above the stage's setColor, so its swatch is the first one
+      int at = worldCode.get().content().indexOf("    this.setColor(0, 0, 0);");
       area.insertText(at, "    this.setTint(0);\n");
       area.moveTo(at);
       area.requestFollowCaret();
@@ -287,7 +288,7 @@ class LayoutIT {
 
     // the view switch at the end of the tab strip: the code with its blocks, both, the stage
     onFx(() -> {
-      Path world = tiled.resolve("World.java");
+      Path world = tiled.resolve("Level.java");
       CodeEditor code = worldCode.get();
       var root = window.get().getScene().getRoot();
       ViewSwitch views = (ViewSwitch) root.lookup(".view-switch-bar");
@@ -332,9 +333,9 @@ class LayoutIT {
     });
 
     // the Visual button closes the panel and opens it again
-    onFx(() -> app.get().openVisualForFile(tiled.resolve("World.java")));
+    onFx(() -> app.get().openVisualForFile(tiled.resolve("Level.java")));
     onFx(() -> assertThat(window.get().getScene().getRoot().lookupAll(".designer")).isEmpty());
-    onFx(() -> app.get().openVisualForFile(tiled.resolve("World.java")));
+    onFx(() -> app.get().openVisualForFile(tiled.resolve("Level.java")));
     onFx(() -> window.get().setHeight(840));
     settle();
     onFx(() -> {
@@ -388,8 +389,8 @@ class LayoutIT {
     // a version after a "run", then a change: the versions dialog shows the diff
     org.openpatch.scratch4j.core.io.ProjectSnapshots.keep(tiled,
         org.openpatch.scratch4j.core.io.ProjectSnapshots.Kind.RAN);
-    java.nio.file.Files.writeString(tiled.resolve("World.java"),
-        java.nio.file.Files.readString(tiled.resolve("World.java"))
+    java.nio.file.Files.writeString(tiled.resolve("Level.java"),
+        java.nio.file.Files.readString(tiled.resolve("Level.java"))
             .replace("this.setColor(0, 0, 0);", "this.setColor(255, 0, 0);"));
     AtomicReference<javafx.scene.control.Dialog<?>> versions = new AtomicReference<>();
     onFx(() -> {
@@ -410,10 +411,10 @@ class LayoutIT {
       Theme.apply(scene);
       diagrams.applyCss();
       diagrams.layout();
-      assertThat(diagrams.canvas().placed()).containsKeys("World", "Player", "Stage");
-      // Stage above World (inheritance goes up)
+      assertThat(diagrams.canvas().placed()).containsKeys("Level", "Player", "Stage");
+      // Stage above Level (inheritance goes up)
       assertThat(diagrams.canvas().placed().get("Stage")[1])
-          .isLessThan(diagrams.canvas().placed().get("World")[1]);
+          .isLessThan(diagrams.canvas().placed().get("Level")[1]);
       UiSmokeIT.snapshot(diagrams.canvas(), Path.of("target/class-diagram.png"));
 
       // Player dragged aside stays there, also in a new view, until arranged again;
@@ -432,7 +433,7 @@ class LayoutIT {
       assertThat(classes.placed().get("Player")[0]).isEqualTo(player[0] + 150);
       assertThat(classes.placed().get("Player")[1]).isEqualTo(player[1] + 40);
       assertThat(scroll.getHvalue()).isEqualTo(scrolled);
-      assertThat(classes.placed().get("World")).startsWith(classes.pinned().get("World"));
+      assertThat(classes.placed().get("Level")).startsWith(classes.pinned().get("Level"));
       assertThat(tiled.resolve(".scratch4j/diagram.json")).exists();
       DiagramView reopened = new DiagramView(
           org.openpatch.scratch4j.core.project.ScratchProject.open(tiled), () -> null, f -> { });
@@ -443,7 +444,7 @@ class LayoutIT {
       assertThat(classes.placed().get("Player")).startsWith(player[0], player[1]);
       assertThat(tiled.resolve(".scratch4j/diagram.json")).doesNotExist();
       diagrams.showObjects(List.of(
-          new org.openpatch.scratch4j.runner.Debugger.ObjectNode(1, "World",
+          new org.openpatch.scratch4j.runner.Debugger.ObjectNode(1, "Level",
               List.of(new org.openpatch.scratch4j.runner.Debugger.Variable("items", "List",
                   "[2]")),
               List.of(new org.openpatch.scratch4j.runner.Debugger.Reference("player", 2),
@@ -475,7 +476,7 @@ class LayoutIT {
       assertThat(lines).isGreaterThan(1);
 
       // a world holding one of them comes first in its layer, before the loose coins
-      coins.add(new org.openpatch.scratch4j.runner.Debugger.ObjectNode(99, "World", List.of(),
+      coins.add(new org.openpatch.scratch4j.runner.Debugger.ObjectNode(99, "Level", List.of(),
           List.of(new org.openpatch.scratch4j.runner.Debugger.Reference("grid[1][7]", 10))));
       diagrams.showObjects(coins, null);
       double[] world = diagrams.canvas().placed().get("99");
@@ -512,7 +513,7 @@ class LayoutIT {
       player.layout();
       UiSmokeIT.snapshot(player, Path.of("target/sprite-animations.png"));
       // the hitbox is drawn over the costume the sprite starts with, not the whole sheet
-      assertThat(player.hitboxCostume()).isEqualTo("assets/Skeleton.png#0,0,32,32");
+      assertThat(player.hitboxCostume()).isEqualTo("assets/Skeleton.png#frame:0,32,32");
       ((javafx.scene.control.TabPane) player.lookup(".tab-pane")).getSelectionModel().select(3);
       player.applyCss();
       player.layout();
@@ -523,10 +524,10 @@ class LayoutIT {
       var sheet = CostumeView.costume("assets/Skeleton.png", tiled);
       SheetGridDialogAccess access = new SheetGridDialogAccess(sheet, walkLeft);
       assertThat(access.statements()).containsExactly(
-          "this.addAnimation(\"walk-left\", \"assets/Skeleton.png\", 4, 32, 32, 2, true);");
+          "this.addAnimation(\"walk-left\", \"assets/Skeleton.png\", 32, 32, 2, 6, 10, 14);");
       access.clickCell(1, 2);
       assertThat(access.statements()).containsExactly(
-          "this.addAnimation(\"walk-left\", \"assets/Skeleton.png\", 3, 32, 32, 1, true);");
+          "this.addAnimation(\"walk-left\", \"assets/Skeleton.png\", 32, 32, 1, 5, 9);");
       access.snapshot(Path.of("target/sheet-grid.png"));
       SheetGridDialogAccess costumes = new SheetGridDialogAccess(sheet, null);
       costumes.clickCell(0, 0);
