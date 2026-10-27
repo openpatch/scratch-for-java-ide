@@ -177,3 +177,9 @@ See [the data-path decision](docs/learner-support-data-path.md) for details.
 Printable common-error handouts: [English](docs/common-errors-en.html) and
 [Deutsch](docs/common-errors-de.html). Regenerate both from the snippet corpus
 with `mvn -pl core test -Dtest=CommonErrorsHandoutTest -Dscratch4j.handoutDir=../docs`.
+
+## Trademark notice
+
+Scratch for Java and Scratch for Java Studio are independent projects by
+[OpenPatch](https://openpatch.org). They are not affiliated with or endorsed
+by the Scratch Foundation or the Scratch Team.
