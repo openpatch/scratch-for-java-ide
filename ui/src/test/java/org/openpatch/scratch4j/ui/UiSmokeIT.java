@@ -801,6 +801,20 @@ class UiSmokeIT {
         imageEditor.applyCss();
         imageEditor.layout();
         snapshot(imageEditor, Path.of("target/image-editor.png"));
+
+        // colour picker: a project palette as the default, plus a recent custom colour
+        Palettes.add(project.root(), "builtin:pico-8", javafx.scene.paint.Color.rgb(12, 34, 56));
+        Palettes.setProjectDefault(project.root(), "assets/palettes/pico-8.gpl");
+        Palettes.remember(project.root(), javafx.scene.paint.Color.rgb(200, 120, 40, 0.6));
+        ScratchColorPicker palettePicker = new ScratchColorPicker(javafx.scene.paint.Color.web("#29adff"), project.root());
+        javafx.scene.layout.VBox pickerContent = palettePicker.popupContent();
+        javafx.scene.Scene pickerScene = new javafx.scene.Scene(
+            new javafx.scene.layout.StackPane(pickerContent), 380, 420);
+        Theme.apply(pickerScene);
+        pickerContent.applyCss();
+        pickerContent.layout();
+        assertThat(pickerContent.lookupAll(".swatch-button")).hasSize(17 + 1);
+        snapshot(pickerScene.getRoot(), Path.of("target/color-picker.png"));
       } catch (Throwable t) {
         failure.set(t);
       } finally {

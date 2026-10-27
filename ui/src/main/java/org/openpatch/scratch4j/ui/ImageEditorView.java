@@ -70,7 +70,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       new javafx.scene.control.ListView<>();
   private final javafx.scene.canvas.Canvas overlay = new javafx.scene.canvas.Canvas();
   private final StackPane stack = new StackPane(layerCanvas, overlay);
-  private final ScratchColorPicker colorPicker = new ScratchColorPicker(Color.BLACK);
+  private final ScratchColorPicker colorPicker;
   private final ComboBox<Integer> brushSize = new ComboBox<>();
 
   private enum Tool { SELECT, PENCIL, ERASER, FILL, LINE, RECT, ELLIPSE, TEXT, PICKER,
@@ -128,6 +128,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   ImageEditorView(ScratchProject project, Path file) throws IOException {
     this.project = project;
     this.file = file;
+    this.colorPicker = new ScratchColorPicker(Color.BLACK, project == null ? null : project.root());
     getStyleClass().add("paint-editor");
     Image loaded = loadImage(file);
     this.image = new WritableImage(loaded.getPixelReader(),

@@ -1,0 +1,13 @@
+GIMP Palette
+Name: Greyscale
+Columns: 9
+#
+  0   0   0	grey 0%
+ 32  32  32	grey 13%
+ 64  64  64	grey 25%
+ 96  96  96	grey 38%
+128 128 128	grey 50%
+160 160 160	grey 63%
+192 192 192	grey 75%
+224 224 224	grey 88%
+255 255 255	grey 100%

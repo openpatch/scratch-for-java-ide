@@ -59,6 +59,11 @@ public final class ProjectSettings {
   public String appVersion = "1.0";
   /** Project-relative image for the exported app's icon; empty = splash or first costume. */
   public String appIcon = "";
+  /**
+   * The colour palette pickers open on: a project-relative {@code .gpl} file
+   * or {@code builtin:<name>}; empty = the built-in Scratch colours.
+   */
+  public String palette = "";
 
   /** Reads the settings of the project at {@code projectRoot}; defaults if absent. */
   public static ProjectSettings load(Path projectRoot) {
@@ -87,6 +92,9 @@ public final class ProjectSettings {
           }
           if (s.appIcon == null) {
             s.appIcon = "";
+          }
+          if (s.palette == null) {
+            s.palette = "";
           }
           return s;
         }

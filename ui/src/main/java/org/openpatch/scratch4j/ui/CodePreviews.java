@@ -114,7 +114,7 @@ final class CodePreviews {
           : "  \u00b7  " + I18n.t("codepreview.color.pick")), null));
       if (replaceLine != null) {
         holder.setOnMouseClicked(e -> {
-          ScratchColorPicker picker = new ScratchColorPicker(color);
+          ScratchColorPicker picker = new ScratchColorPicker(color, root);
           picker.openAt(holder, picked -> replaceLine.accept(withColor(line, match, picked)));
           e.consume();
         });

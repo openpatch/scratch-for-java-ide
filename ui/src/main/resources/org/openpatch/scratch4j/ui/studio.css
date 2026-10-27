@@ -1475,6 +1475,13 @@
 .color-slider .track {
   -fx-background-color: transparent;
 }
+.swatch-button {
+  -fx-padding: 2;
+}
+.palette-swatches,
+.palette-swatches > .viewport {
+  -fx-background-color: transparent;
+}
 
 .facing-warning {
   -fx-background-color: #fff4d6;

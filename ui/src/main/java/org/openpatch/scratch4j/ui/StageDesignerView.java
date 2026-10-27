@@ -823,7 +823,7 @@ final class StageDesignerView extends BorderPane {
     colorButton.setGraphic(colorChip);
     colorButton.getStyleClass().add("color-swatch-button");
     colorButton.setTooltip(new Tooltip(I18n.t("designer.color.tooltip")));
-    colorButton.setOnAction(e -> new ScratchColorPicker(chipColor())
+    colorButton.setOnAction(e -> new ScratchColorPicker(chipColor(), project.root())
         .openAt(colorButton, this::setStageColor));
     colorNote.getStyleClass().add("text-muted");
     HBox colorRow = new HBox(8, fieldLabel(I18n.t("designer.color")), colorButton, colorReset,
