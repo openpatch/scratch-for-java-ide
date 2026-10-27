@@ -108,7 +108,10 @@ final class FrameStrip extends HBox {
     fps.setPrefWidth(70);
     fps.setMinWidth(70);
     fps.setTooltip(new Tooltip(I18n.t("frames.fps")));
-    fps.valueProperty().addListener((o, a, b) -> restartPlayer());
+    fps.valueProperty().addListener((o, a, b) -> {
+      restartPlayer();
+      copyButton.setTooltip(new Tooltip(code()));
+    });
     preview.setFitWidth(THUMB + 16);
     preview.setFitHeight(THUMB + 16);
     preview.setPreserveRatio(true);
@@ -303,16 +306,19 @@ final class FrameStrip extends HBox {
     }
   }
 
-  /** {@code this.addAnimation("walk", "assets/images/walk%d.png", 4);} for these frames. */
+  /**
+   * {@code this.addAnimation("walk", "assets/images/walk%d.png", 4);} for these frames,
+   * and the interval that plays them at the preview's speed.
+   */
   String code() {
-    return code(sequence.pattern(), frames.size());
+    return code(sequence.pattern(), frames.size(), fps.getValue());
   }
 
-  static String code(String pattern, int frames) {
+  static String code(String pattern, int frames, int fps) {
     String file = pattern.substring(pattern.lastIndexOf('/') + 1);
     String name = file.substring(0, file.indexOf("%d")).replaceAll("[^A-Za-z0-9_]", "");
     return "this.addAnimation(\"" + (name.isEmpty() ? "animation" : name) + "\", \""
-        + pattern + "\", " + frames + ");";
+        + pattern + "\", " + frames + ");\n" + SheetAnimationPanel.interval(fps);
   }
 
   void copyCode() {

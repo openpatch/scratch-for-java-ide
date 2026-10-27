@@ -38,7 +38,8 @@ import java.util.function.Supplier;
  * the animation's frames as a strip in playback order (remove one with its
  * x, drag to reorder), a looping preview of the picture as painted so far,
  * and the {@code addAnimation(name, sheet, w, h, frames...)} line to copy
- * into a sprite. The frames are picked on the editor's canvas (see
+ * into a sprite, with the {@code setAnimationInterval} that plays it at the
+ * preview's speed. The frames are picked on the editor's canvas (see
  * {@link #toggleTile} and {@link #setRun}); tiles are numbered row by row
  * from 0, as the library counts them. An animation the project's code
  * already makes of the sheet can be the starting point.
@@ -49,8 +50,11 @@ final class SheetAnimationPanel extends HBox {
   private static final double FRAME = 44;
   private static final int UNDO_LIMIT = 100;
 
-  /** One animation of the sheet as the code has it (or as set up here). */
-  record Animation(String name, int width, int height, List<Integer> frames) {
+  /**
+   * One animation of the sheet as the code has it (or as set up here);
+   * {@code fps} is the speed the class's {@code setAnimationInterval} gives, 0 for none.
+   */
+  record Animation(String name, int width, int height, List<Integer> frames, int fps) {
     @Override
     public String toString() {
       return name + "  (" + width + "×" + height + ": "
@@ -183,7 +187,10 @@ final class SheetAnimationPanel extends HBox {
     fps.setPrefWidth(70);
     fps.setMinWidth(70);
     fps.setTooltip(new Tooltip(I18n.t("frames.fps")));
-    fps.valueProperty().addListener((o, a, b) -> restartPlayer());
+    fps.valueProperty().addListener((o, a, b) -> {
+      restartPlayer();
+      updateCode();
+    });
     Label fpsLabel = new Label(I18n.t("frames.fps.short"));
     fpsLabel.getStyleClass().add("text-muted");
     fpsLabel.setMinWidth(javafx.scene.layout.Region.USE_PREF_SIZE);
@@ -259,6 +266,10 @@ final class SheetAnimationPanel extends HBox {
     return code.getText();
   }
 
+  void setFps(int value) {
+    fps.getValueFactory().setValue(value);
+  }
+
   int columns() {
     return columns((int) picture.get().getWidth(), tileWidth.getValue());
   }
@@ -272,6 +283,9 @@ final class SheetAnimationPanel extends HBox {
     name.setText(animation.name());
     tileWidth.getValueFactory().setValue(animation.width());
     tileHeight.getValueFactory().setValue(animation.height());
+    if (animation.fps() > 0) {
+      fps.getValueFactory().setValue(animation.fps());
+    }
     updating = false;
     setFrames(animation.frames());
   }
@@ -479,7 +493,7 @@ final class SheetAnimationPanel extends HBox {
 
   private void updateCode() {
     code.setText(code(name.getText().strip(), reference, tileWidth.getValue(),
-        tileHeight.getValue(), frames));
+        tileHeight.getValue(), frames, fps.getValue()));
   }
 
   void copyCode() {
@@ -557,16 +571,35 @@ final class SheetAnimationPanel extends HBox {
     return frames;
   }
 
-  /** {@code this.addAnimation("name", "sheet", w, h, 0, 1, ...);} */
+  /** {@code this.addAnimation("name", "sheet", w, h, 0, 1, ...);} and its interval. */
   static String code(String name, String reference, int width, int height,
-      List<Integer> frames) {
+      List<Integer> frames, int fps) {
     StringBuilder line = new StringBuilder("this.addAnimation(\"")
         .append(name.isEmpty() ? "animation" : name).append("\", \"").append(reference)
         .append("\", ").append(width).append(", ").append(height);
     for (int frame : frames) {
       line.append(", ").append(frame);
     }
-    return line.append(");").toString();
+    return line.append(");\n").append(interval(fps)).toString();
+  }
+
+  /** {@code this.setAnimationInterval(0.125);}: each frame shows for 1/fps seconds. */
+  static String interval(int fps) {
+    double seconds = Math.round(1000.0 / Math.max(1, fps)) / 1000.0;
+    return "this.setAnimationInterval(" + seconds + ");";
+  }
+
+  private static final java.util.regex.Pattern INTERVAL = java.util.regex.Pattern.compile(
+      "this\\.setAnimationInterval\\(\\s*([0-9]*\\.?[0-9]+)\\s*\\)");
+
+  /** The preview speed a literal {@code setAnimationInterval} in {@code source} gives, or 0. */
+  static int fps(String source) {
+    java.util.regex.Matcher matcher = INTERVAL.matcher(source);
+    if (!matcher.find()) {
+      return 0;
+    }
+    double seconds = Double.parseDouble(matcher.group(1));
+    return seconds <= 0 ? 0 : (int) Math.max(1, Math.min(30, Math.round(1 / seconds)));
   }
 
   /** The sheet animations the project's code makes of {@code reference} (literal calls). */
@@ -574,11 +607,12 @@ final class SheetAnimationPanel extends HBox {
     List<Animation> found = new ArrayList<>();
     for (Path source : sources) {
       try {
-        for (SpriteAssets.Entry entry : SpriteAssets.list(Files.readString(source))) {
+        String text = Files.readString(source);
+        for (SpriteAssets.Entry entry : SpriteAssets.list(text)) {
           if (entry.isSheetAnimation() && reference.equals(entry.reference())
               && entry.sheetFrames() != null && !entry.sheetFrames().isEmpty()) {
             found.add(new Animation(entry.name(), entry.tileWidth(), entry.tileHeight(),
-                List.copyOf(entry.sheetFrames())));
+                List.copyOf(entry.sheetFrames()), fps(text)));
           }
         }
       } catch (java.io.IOException | RuntimeException e) {

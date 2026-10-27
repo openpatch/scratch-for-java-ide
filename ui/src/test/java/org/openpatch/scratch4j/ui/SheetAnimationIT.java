@@ -109,7 +109,7 @@ class SheetAnimationIT {
         drag(view.get(), 0, 1, 3, 1);
         assertThat(panel.frames()).containsExactly(4, 5, 6, 7);
         assertThat(panel.code()).isEqualTo("this.addAnimation(\"idle\", \"" + SHEET
-            + "\", 16, 16, 4, 5, 6, 7);");
+            + "\", 16, 16, 4, 5, 6, 7);\nthis.setAnimationInterval(0.125);");
       });
       // the strip's frames live in a scroll pane: they join the scene with its skin
       LayoutIT.settle();
@@ -123,9 +123,12 @@ class SheetAnimationIT {
         assertThat(panel.frames()).containsExactly(4, 5, 7);
         panel.move(2, 0);
         assertThat(panel.frames()).containsExactly(7, 4, 5);
+        // the interval follows the preview's speed
+        panel.setFps(4);
         panel.copyCode();
         assertThat(javafx.scene.input.Clipboard.getSystemClipboard().getString())
-            .isEqualTo("this.addAnimation(\"idle\", \"" + SHEET + "\", 16, 16, 7, 4, 5);");
+            .isEqualTo("this.addAnimation(\"idle\", \"" + SHEET + "\", 16, 16, 7, 4, 5);\n"
+                + "this.setAnimationInterval(0.25);");
         // picking off: the tools paint again (a click is a pencil stroke, not a frame)
         panel.setPicking(false);
         click(view.get(), 0, 6);
@@ -168,6 +171,7 @@ class SheetAnimationIT {
         public class Cat extends Sprite {
           public Cat() {
             this.addAnimation("sit", "assets/cat.png", 16, 16, 1);
+            this.setAnimationInterval(0.25);
           }
         }
         """);
@@ -178,7 +182,8 @@ class SheetAnimationIT {
       view.showSheetAnimation(true);
       assertThat(view.sheetPanel().frames()).containsExactly(1);
       assertThat(view.sheetPanel().code())
-          .isEqualTo("this.addAnimation(\"sit\", \"assets/cat.png\", 16, 16, 1);");
+          .isEqualTo("this.addAnimation(\"sit\", \"assets/cat.png\", 16, 16, 1);\n"
+              + "this.setAnimationInterval(0.25);");
     });
   }
 }
