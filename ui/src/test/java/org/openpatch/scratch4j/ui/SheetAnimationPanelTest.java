@@ -16,10 +16,11 @@ class SheetAnimationPanelTest {
 
   @Test
   void guessesSquareTilesFromTheSheetsShape() {
-    assertThat(SheetAnimationPanel.guessTile(32, 16)).containsExactly(16, 16);
-    assertThat(SheetAnimationPanel.guessTile(16, 64)).containsExactly(16, 16);
-    assertThat(SheetAnimationPanel.guessTile(64, 64)).containsExactly(64, 64);
-    assertThat(SheetAnimationPanel.guessTile(50, 16)).containsExactly(50, 16);
+    assertThat(SheetGridDialog.guessTile(32, 16)).containsExactly(16, 16);
+    assertThat(SheetGridDialog.guessTile(16, 64)).containsExactly(16, 16);
+    assertThat(SheetGridDialog.guessTile(128, 32)).containsExactly(32, 32);
+    assertThat(SheetGridDialog.guessTile(96, 64)).containsExactly(32, 32);
+    assertThat(SheetGridDialog.guessTile(50, 16)).containsExactly(50, 16);
     assertThat(SheetAnimationPanel.firstRow(64, 16)).containsExactly(0, 1, 2, 3);
     assertThat(SheetAnimationPanel.columns(70, 16)).isEqualTo(4);
   }

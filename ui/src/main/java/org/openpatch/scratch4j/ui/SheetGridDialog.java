@@ -59,7 +59,7 @@ final class SheetGridDialog {
     this.sheet = sheet;
     this.reference = reference;
     this.mode = mode;
-    int[] guess = SheetSlicerDialog.guessTile((int) sheet.getWidth(), (int) sheet.getHeight());
+    int[] guess = guessTile((int) sheet.getWidth(), (int) sheet.getHeight());
     int w = entry != null && entry.tileWidth() > 0 ? entry.tileWidth() : guess[0];
     int h = entry != null && entry.tileHeight() > 0 ? entry.tileHeight() : guess[1];
     tileWidth = new Spinner<>(1, Math.max(1, (int) sheet.getWidth()), w);
@@ -286,5 +286,25 @@ final class SheetGridDialog {
     String file = reference.substring(reference.lastIndexOf('/') + 1);
     String base = file.replaceAll("\\.[A-Za-z]+$", "").replaceAll("[^A-Za-z0-9_]", "");
     return base.isEmpty() ? "tile" : base;
+  }
+
+  /**
+   * A first guess of the tile size: square tiles when the sheet is a strip of
+   * them, else the largest common tile size that gives more than one tile,
+   * else the whole sheet.
+   */
+  static int[] guessTile(int width, int height) {
+    if (width > height && width % height == 0) {
+      return new int[] {height, height};
+    }
+    if (height > width && height % width == 0) {
+      return new int[] {width, width};
+    }
+    for (int size : new int[] {128, 64, 48, 32, 16}) {
+      if (width % size == 0 && height % size == 0 && width / size * (height / size) > 1) {
+        return new int[] {size, size};
+      }
+    }
+    return new int[] {width, height};
   }
 }

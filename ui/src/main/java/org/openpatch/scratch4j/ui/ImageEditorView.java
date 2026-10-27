@@ -244,60 +244,6 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     updateApplyButton();
     updateStatus();
     redrawOverlay();
-    warnIfFacingUp();
-  }
-
-  /**
-   * Scratch for Java turns a sprite by its costume facing right (direction
-   * 90). A costume whose visible pixels are much taller than wide was most
-   * likely drawn facing up: say so once, with a rotate button.
-   */
-  private void warnIfFacingUp() {
-    if (!looksFacingUp(image)) {
-      return;
-    }
-    Label text = new Label(I18n.t("imageeditor.facing.warning"));
-    text.setWrapText(true);
-    Button rotate = new Button(I18n.t("imageeditor.rotate"), Icons.of("fth-rotate-cw"));
-    HBox bar = new HBox(10, Icons.of("fth-alert-triangle"), text, rotate);
-    bar.getStyleClass().add("facing-warning");
-    bar.setAlignment(Pos.CENTER_LEFT);
-    bar.setPadding(new Insets(6, 10, 6, 10));
-    HBox.setHgrow(text, Priority.ALWAYS);
-    Node top = getTop();
-    VBox stacked = new VBox(top, bar);
-    rotate.setOnAction(e -> {
-      transform(ImageEditorView::rotate90);
-      stacked.getChildren().remove(bar);
-    });
-    setTop(stacked);
-  }
-
-  /** Visible (non-transparent) pixels at least 1.6x taller than wide. */
-  static boolean looksFacingUp(Image image) {
-    PixelReader reader = image.getPixelReader();
-    int w = (int) image.getWidth();
-    int h = (int) image.getHeight();
-    int minX = w;
-    int maxX = -1;
-    int minY = h;
-    int maxY = -1;
-    for (int y = 0; y < h; y++) {
-      for (int x = 0; x < w; x++) {
-        if ((reader.getArgb(x, y) >>> 24) > 24) {
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
-      }
-    }
-    if (maxX < 0) {
-      return false;
-    }
-    int width = maxX - minX + 1;
-    int height = maxY - minY + 1;
-    return height >= 16 && height >= 1.6 * width;
   }
 
   Path file() {
@@ -1025,7 +971,6 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       loadOnion();
       redrawOverlay();
     });
-    Button slice = Icons.button("mdi2c-content-cut", I18n.t("slicer.title"), this::sliceSheet);
     sheetToggle = new ToggleButton(null, Icons.of("mdi2f-filmstrip"));
     sheetToggle.getStyleClass().addAll("button-icon", "flat");
     sheetToggle.setTooltip(new javafx.scene.control.Tooltip(I18n.t("sheetanim.tooltip")));
@@ -1051,7 +996,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         zoomLabel,
         Icons.button("fth-zoom-in", I18n.t("designer.zoomin"), () -> setZoom(zoom * 1.5)),
         Icons.button("fth-maximize", I18n.t("designer.fit"), this::fitZoom),
-        pixelGrid, smoothing, facesRight, onion, slice, sheetToggle,
+        pixelGrid, smoothing, facesRight, onion, sheetToggle,
         spacer, cropButton, applyToSprite, save);
     cropButton.setText(I18n.t("imageeditor.crop"));
     cropButton.setGraphic(Icons.of("fth-crop"));
@@ -1213,19 +1158,6 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     draggedSlice = -1;
     overlay.getGraphicsContext2D().clearRect(0, 0, overlay.getWidth(), overlay.getHeight());
     redrawOverlay();
-  }
-
-  /** The sheet slicer works on the saved file (unsaved strokes are saved first). */
-  private void sliceSheet() {
-    commitFloating();
-    if (!undoStack.isEmpty()) {
-      save();
-    }
-    String reference = project.root().relativize(file).toString().replace('\\', '/');
-    SheetSlicerDialog.show(project, copy(image), reference, classFile -> {
-      onSpriteWritten.accept(classFile);
-      status.setText(I18n.t("slicer.saved", classFile.getFileName()));
-    });
   }
 
   // --- select / move / scale ----------------------------------------------

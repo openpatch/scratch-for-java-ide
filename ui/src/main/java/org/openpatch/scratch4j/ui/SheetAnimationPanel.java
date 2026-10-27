@@ -89,7 +89,7 @@ final class SheetAnimationPanel extends HBox {
 
     // the starting point: an animation from the code, else a guess from the sheet's shape
     WritableImage sheet = picture.get();
-    int[] guess = guessTile((int) sheet.getWidth(), (int) sheet.getHeight());
+    int[] guess = SheetGridDialog.guessTile((int) sheet.getWidth(), (int) sheet.getHeight());
     tileWidth.getValueFactory().setValue(guess[0]);
     tileHeight.getValueFactory().setValue(guess[1]);
     frames = new ArrayList<>(firstRow((int) sheet.getWidth(), guess[0]));
@@ -379,21 +379,6 @@ final class SheetAnimationPanel extends HBox {
   /** Tiles per row, as the library counts them. */
   static int columns(int sheetWidth, int tileWidth) {
     return Math.max(0, sheetWidth / Math.max(1, tileWidth));
-  }
-
-  /**
-   * A first guess of the tile size: square tiles as tall as a strip that is
-   * wider than tall (or as wide as one that is taller than wide), else the
-   * whole picture.
-   */
-  static int[] guessTile(int width, int height) {
-    if (width >= height && width % height == 0) {
-      return new int[] {height, height};
-    }
-    if (height > width && height % width == 0) {
-      return new int[] {width, width};
-    }
-    return new int[] {width, height};
   }
 
   /** The tiles of the first row: 0, 1, ... */

@@ -288,22 +288,12 @@ class UiSmokeIT {
         paint.mergeDown();
         assertThat(paint.layerCount()).isEqualTo(1);
         assertThat(paint.image().getPixelReader().getArgb(1, 1)).isEqualTo(0xff0000ff);
-        var tall = new javafx.scene.image.WritableImage(40, 40);
-        for (int y = 0; y < 40; y++) {
-          for (int x = 15; x < 25; x++) {
-            tall.getPixelWriter().setArgb(x, y, 0xff000000);
-          }
-        }
-        assertThat(ImageEditorView.looksFacingUp(tall)).isTrue();
-        assertThat(ImageEditorView.looksFacingUp(paint.image())).isFalse();
         ScratchColorPicker picker = new ScratchColorPicker(javafx.scene.paint.Color.BLACK);
         javafx.scene.paint.Color orange = javafx.scene.paint.Color.hsb(36, 0.9, 1.0, 0.5);
         picker.setValue(orange);
         assertThat(picker.getValue().getHue()).isCloseTo(36, org.assertj.core.data.Offset.offset(0.5));
         assertThat(picker.getValue().getOpacity()).isCloseTo(0.5,
             org.assertj.core.data.Offset.offset(0.01));
-        assertThat(SheetSlicerDialog.guessTile(128, 32)).containsExactly(32, 32);
-        assertThat(SheetSlicerDialog.guessTile(96, 64)).containsExactly(32, 32);
 
         // map and font previews from the bundled demos
         Path tiled = org.openpatch.scratch4j.core.project.BundledTemplates.create("demo-tiled",
