@@ -117,6 +117,24 @@ final class PaletteEditorView extends BorderPane implements SavableTool {
     return file;
   }
 
+  /**
+   * Re-reads the file after something else wrote it (the image editor's
+   * palette panel), unless there are edits here that would be lost.
+   */
+  void reloadIfUnchanged() {
+    if (dirty.get()) {
+      return;
+    }
+    try {
+      load(GimpPalette.read(file));
+      undoStack.clear();
+      redoStack.clear();
+      refresh();
+    } catch (IOException e) {
+      status.setText(I18n.t("paletteeditor.error", e.getMessage()));
+    }
+  }
+
   /** The palette as edited (not necessarily saved). */
   GimpPalette palette() {
     return new GimpPalette(name, columns, entries);

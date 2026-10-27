@@ -1498,6 +1498,15 @@
   -fx-border-color: -color-accent-emphasis;
   -fx-border-style: segments(4, 3);
 }
+.palette-swatch-small {
+  -fx-padding: 1;
+  -fx-border-width: 2;
+  -fx-border-radius: 4;
+  -fx-border-color: transparent;
+}
+.palette-swatch-small:selected {
+  -fx-border-color: -color-accent-emphasis;
+}
 .palette-details {
   -fx-border-color: -color-border-default;
   -fx-border-width: 0 0 0 1;

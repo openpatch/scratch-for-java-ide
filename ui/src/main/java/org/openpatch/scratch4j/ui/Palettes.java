@@ -138,26 +138,43 @@ final class Palettes {
   }
 
   /**
-   * Appends {@code color} (opaque: .gpl has no alpha) to palette {@code id}
-   * and returns the id written to: a built-in palette is first copied into
-   * the project's palette folder.
+   * Appends {@code color} (opaque: .gpl has no alpha) to palette {@code id};
+   * returns the id written to (see {@link #save}).
    */
   static String add(Path root, String id, Color color) throws IOException {
     GimpPalette palette = load(root, id);
-    Path file;
-    if (isBuiltin(id)) {
-      String base = id.substring(BUILTIN.length());
-      file = root.resolve(FOLDER).resolve(base + GimpPalette.EXTENSION);
-      for (int i = 2; Files.exists(file); i++) {
-        file = root.resolve(FOLDER).resolve(base + "-" + i + GimpPalette.EXTENSION);
-      }
-    } else {
-      file = root.resolve(id);
-    }
     List<GimpPalette.Entry> entries = new ArrayList<>(palette.entries());
     entries.add(entry(color));
-    new GimpPalette(palette.name(), palette.columns(), entries).write(file);
-    return FOLDER + "/" + file.getFileName();
+    return save(root, id, new GimpPalette(palette.name(), palette.columns(), entries));
+  }
+
+  /**
+   * Writes {@code palette} as palette {@code id} and returns the id written
+   * to: a built-in palette is read-only, so it goes to a new file in the
+   * project's palette folder ({@code pico-8.gpl}, {@code pico-8-2.gpl}, ...).
+   */
+  static String save(Path root, String id, GimpPalette palette) throws IOException {
+    Path file = isBuiltin(id) ? newFile(root, id.substring(BUILTIN.length())) : root.resolve(id);
+    palette.write(file);
+    return idOf(root, file);
+  }
+
+  /** A palette file that does not exist yet: {@code name.gpl}, else {@code name-2.gpl}, ... */
+  static Path newFile(Path root, String name) {
+    String base = name.strip().replaceAll("[^A-Za-z0-9_ -]", "_");
+    if (base.isEmpty()) {
+      base = "palette";
+    }
+    Path file = root.resolve(FOLDER).resolve(base + GimpPalette.EXTENSION);
+    for (int i = 2; Files.exists(file); i++) {
+      file = root.resolve(FOLDER).resolve(base + "-" + i + GimpPalette.EXTENSION);
+    }
+    return file;
+  }
+
+  /** The id of a palette file in the project. */
+  static String idOf(Path root, Path file) {
+    return root.relativize(file).toString().replace('\\', '/');
   }
 
   static Color color(GimpPalette.Entry entry) {

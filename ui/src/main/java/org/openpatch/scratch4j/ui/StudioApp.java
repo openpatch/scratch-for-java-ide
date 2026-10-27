@@ -1362,6 +1362,11 @@ public class StudioApp extends javafx.application.Application {
           ImageEditorView paint = new ImageEditorView(project.get(), file);
           paint.setOnSpriteWritten(this::afterSpriteClassWritten);
           paint.setOnSaved(saved -> afterImageSaved());
+          paint.setOnOpenFile(palette -> {
+            fileTree.reload();
+            openByType(palette);
+          });
+          paint.setOnPaletteWritten(this::afterPaletteWritten);
           return paint;
         } catch (IOException e) {
           alert(I18n.t("error.openfile", e.getMessage()), e);
@@ -1408,10 +1413,8 @@ public class StudioApp extends javafx.application.Application {
       editor.openTool("palette:" + file, file.getFileName().toString(),
           "mdi2p-palette-outline", () -> {
             try {
-              return new PaletteEditorView(project.get().root(), file, saved -> {
-                fileTree.reload();
-                scheduleCheck();
-              });
+              return new PaletteEditorView(project.get().root(), file,
+                  this::afterPaletteWritten);
             } catch (IOException e) {
               alert(I18n.t("error.openfile", e.getMessage()), e);
               // an unreadable palette still opens as text
@@ -2945,6 +2948,19 @@ public class StudioApp extends javafx.application.Application {
   }
 
   /** A repainted picture: animation, sprite and stage previews and code lines re-read it. */
+  /** A palette file changed: open image editors and the palette's own editor show it. */
+  private void afterPaletteWritten(Path palette) {
+    fileTree.reload();
+    for (Node tool : editor.tools()) {
+      if (tool instanceof ImageEditorView image) {
+        image.reloadPalettes();
+      } else if (tool instanceof PaletteEditorView paletteEditor
+          && paletteEditor.file().equals(palette)) {
+        paletteEditor.reloadIfUnchanged();
+      }
+    }
+  }
+
   private void afterImageSaved() {
     reloadDesigners();
     for (Tab tab : editor.getTabs()) {

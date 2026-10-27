@@ -853,6 +853,27 @@ class UiSmokeIT {
         paletteEditor.applyCss();
         paletteEditor.layout();
         snapshot(paletteEditor, Path.of("target/palette-editor.png"));
+
+        // the image editor's palette panel: the project default, pick, add, replace, remove
+        java.util.List<Path> panelWrites = new java.util.ArrayList<>();
+        imageEditor.setOnPaletteWritten(panelWrites::add);
+        imageEditor.reloadPalettes();
+        PalettePanel panel = imageEditor.palettePanel();
+        assertThat(panel.paletteId()).isEqualTo("assets/palettes/pico-8.gpl");
+        panel.pick(8);
+        assertThat(imageEditor.paintColour()).isEqualTo(javafx.scene.paint.Color.web("#ff004d"));
+        panel.addCurrent();
+        assertThat(panel.palette().entries()).hasSize(18);
+        panel.replace(17, javafx.scene.paint.Color.web("#123456"));
+        assertThat(panel.palette().entries().get(17).hex()).isEqualTo("#123456");
+        panel.remove(17);
+        assertThat(panel.palette().entries()).hasSize(17);
+        assertThat(panelWrites).hasSize(3)
+            .allMatch(palettePath -> palettePath.endsWith("assets/palettes/pico-8.gpl"));
+        panel.fromPicture(javax.imageio.ImageIO.read(png.toFile()), "bunny");
+        assertThat(panel.paletteId()).isEqualTo("assets/palettes/bunny.gpl");
+        assertThat(panel.palette().name()).isEqualTo("bunny");
+        // (on screen, after a pulse: PalettePanelIT; a snapshot here shows the cached swatches)
       } catch (Throwable t) {
         failure.set(t);
       } finally {

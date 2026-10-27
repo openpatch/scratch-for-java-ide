@@ -71,6 +71,7 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private final javafx.scene.canvas.Canvas overlay = new javafx.scene.canvas.Canvas();
   private final StackPane stack = new StackPane(layerCanvas, overlay);
   private final ScratchColorPicker colorPicker;
+  private PalettePanel palettePanel;
   private final ComboBox<Integer> brushSize = new ComboBox<>();
 
   private enum Tool { SELECT, PENCIL, ERASER, FILL, LINE, RECT, ELLIPSE, TEXT, PICKER,
@@ -184,7 +185,15 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     setTop(topBar());
     setLeft(toolRail());
     setCenter(scroll);
-    setRight(layerPanel());
+    palettePanel = new PalettePanel(project == null ? null : project.root(),
+        colorPicker.valueProperty());
+    palettePanel.setPicture(this::flattenedPicture,
+        file.getFileName().toString().replaceFirst("\\.[^.]+$", ""));
+    Node layers = layerPanel();
+    VBox.setVgrow(layers, Priority.ALWAYS);
+    VBox side = new VBox(palettePanel, new Separator(), layers);
+    side.getStyleClass().add("paint-side");
+    setRight(side);
     Label credits = new Label(I18n.t("library.credits"));
     credits.getStyleClass().add("text-muted");
     Region spacer = new Region();
@@ -287,6 +296,46 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   /** Called after the picture was written to its file (previews elsewhere re-read it). */
   void setOnSaved(java.util.function.Consumer<Path> action) {
     onSaved = action;
+  }
+
+  /** The palette panel's pencil opens a {@code .gpl} file with this. */
+  void setOnOpenFile(java.util.function.Consumer<Path> action) {
+    palettePanel.setOnOpen(action);
+  }
+
+  /** Called after the palette panel wrote a {@code .gpl} file. */
+  void setOnPaletteWritten(java.util.function.Consumer<Path> action) {
+    palettePanel.setOnWritten(action);
+  }
+
+  /** Shows palette changes made elsewhere (the palette editor, another image). */
+  void reloadPalettes() {
+    palettePanel.reload();
+  }
+
+  PalettePanel palettePanel() {
+    return palettePanel;
+  }
+
+  /** The colour the tools paint with. */
+  Color paintColour() {
+    return colorPicker.getValue();
+  }
+
+  /** The visible layers as an AWT image, for "palette from this picture". */
+  private java.awt.image.BufferedImage flattenedPicture() {
+    WritableImage flat = flattened();
+    int w = (int) flat.getWidth();
+    int h = (int) flat.getHeight();
+    java.awt.image.BufferedImage picture = new java.awt.image.BufferedImage(w, h,
+        java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    javafx.scene.image.PixelReader reader = flat.getPixelReader();
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        picture.setRGB(x, y, reader.getArgb(x, y));
+      }
+    }
+    return picture;
   }
 
   /** Called after a tool wrote into a sprite class (the host reloads code and designers). */
