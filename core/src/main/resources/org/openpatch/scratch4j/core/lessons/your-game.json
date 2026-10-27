@@ -1,0 +1,132 @@
+{
+  "id": "your-game",
+  "template": "getting-started-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Your own game",
+    "de": "Dein eigenes Spiel"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag (or F5). This is where your game starts: a bunny on a stage.",
+        "de": "Drücke die grüne Flagge (oder F5). Hier beginnt dein Spiel: ein Hase auf einer Bühne."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "class",
+      "title": {
+        "en": "A second sprite",
+        "de": "Eine zweite Figur"
+      },
+      "text": {
+        "en": "Add a class Carrot (Add > Class) that extends Sprite, with this code. Later you can pick another costume.",
+        "de": "Füge eine Klasse Carrot hinzu (Hinzufügen > Klasse), die Sprite erweitert, mit diesem Code. Später kannst du ein anderes Kostüm wählen."
+      },
+      "code": "import org.openpatch.scratch.*;\n\npublic class Carrot extends Sprite {\n  public Carrot() {\n    this.addCostume(\"carrot\");\n    this.setSize(40);\n    this.setX(150);\n  }\n}",
+      "check": {
+        "classExists": {
+          "name": "Carrot",
+          "extends": "Sprite"
+        }
+      }
+    },
+    {
+      "id": "stage",
+      "title": {
+        "en": "On the stage",
+        "de": "Auf die Bühne"
+      },
+      "text": {
+        "en": "In MyStage.java, put this below this.add(bunny);: the carrot joins the game.",
+        "de": "Schreib in MyStage.java diese Zeile unter this.add(bunny);: Die Karotte kommt ins Spiel."
+      },
+      "code": "    this.add(new Carrot());",
+      "check": {
+        "contains": {
+          "file": "MyStage.java",
+          "pattern": "this\\.add\\s*\\(\\s*new\\s+\\w+"
+        }
+      }
+    },
+    {
+      "id": "touch",
+      "title": {
+        "en": "Something happens",
+        "de": "Es passiert etwas"
+      },
+      "text": {
+        "en": "Put this method in Carrot.java, below the constructor: when the bunny touches the carrot, it jumps to a new place.",
+        "de": "Schreib diese Methode in Carrot.java unter den Konstruktor: Wenn der Hase die Karotte berührt, springt sie an einen neuen Platz."
+      },
+      "code": "  public void run() {\n    if (this.isTouchingSprite(Bunny.class)) {\n      this.setX(Random.randomInt(-200, 200));\n    }\n  }",
+      "check": {
+        "contains": {
+          "file": "Carrot.java",
+          "pattern": "isTouchingSprite\\s*\\("
+        }
+      }
+    },
+    {
+      "id": "points",
+      "title": {
+        "en": "Count the carrots",
+        "de": "Zähl die Karotten"
+      },
+      "text": {
+        "en": "Put this in MyStage.java above main. Then call it in Carrot's if, below setX: ((MyStage) this.getStage()).addPoint();",
+        "de": "Schreib das in MyStage.java über main. Ruf es dann im if von Carrot unter setX auf: ((MyStage) this.getStage()).addPoint();"
+      },
+      "code": "  private int points = 0;\n\n  public void addPoint() {\n    this.points = this.points + 1;\n    this.bunny.say(\"Carrots: \" + this.points);\n  }",
+      "check": {
+        "all": [
+          {
+            "methodExists": {
+              "name": "addPoint",
+              "file": "MyStage.java"
+            }
+          },
+          {
+            "contains": {
+              "file": "Carrot.java",
+              "pattern": "addPoint\\s*\\(\\s*\\)\\s*;"
+            }
+          }
+        ]
+      },
+      "hints": {
+        "en": [
+          "Catch the coins does the same with its addPoint() method."
+        ],
+        "de": [
+          "Fang die Münzen macht dasselbe mit seiner Methode addPoint()."
+        ]
+      }
+    },
+    {
+      "id": "yours",
+      "title": {
+        "en": "Make it yours",
+        "de": "Mach es zu deinem Spiel"
+      },
+      "text": {
+        "en": "Now it is your game: other costumes, a backdrop, more carrots in a loop, a faster bunny, a win message with if. Run it when you like what you made.",
+        "de": "Jetzt ist es dein Spiel: andere Kostüme, ein Bühnenbild, mehr Karotten in einer Schleife, ein schnellerer Hase, eine Gewinn-Nachricht mit if. Starte es, wenn dir gefällt, was du gebaut hast."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "id": "level-up",
+  "template": "dodge-the-rocks-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "If and else: level up",
+    "de": "If und else: nächstes Level"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag (or F5), then SPACE. Dodge the rocks with the arrow keys.",
+        "de": "Drücke die grüne Flagge (oder F5), dann LEERTASTE. Weich den Steinen mit den Pfeiltasten aus."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "if-else",
+      "title": {
+        "en": "A message with if and else",
+        "de": "Eine Nachricht mit if und else"
+      },
+      "text": {
+        "en": "In GameStage.java, showScore() shows the score. Replace its line with this: from 10 dodged rocks on, the text says Level 2, else it shows the score as before.",
+        "de": "In GameStage.java zeigt showScore() die Punkte. Ersetze ihre Zeile hiermit: Ab 10 ausgewichenen Steinen steht Level 2 da, sonst (else) die Punkte wie vorher."
+      },
+      "code": "    if (this.dodged >= 10) {\n      this.scoreText.showText(\"Level 2! Dodged: \" + this.dodged);\n    } else {\n      this.scoreText.showText(\"Dodged: \" + this.dodged);\n    }",
+      "check": {
+        "all": [
+          {
+            "contains": {
+              "file": "GameStage.java",
+              "pattern": "if\\s*\\(\\s*(this\\.)?dodged\\s*>=?\\s*\\d+\\s*\\)"
+            }
+          },
+          {
+            "contains": {
+              "file": "GameStage.java",
+              "pattern": "\\belse\\b"
+            }
+          }
+        ]
+      },
+      "hints": {
+        "en": [
+          "Like Scratch's if-then-else block: one part or the other runs, never both."
+        ],
+        "de": [
+          "Wie der falls-dann-sonst-Block in Scratch: Der eine Teil oder der andere läuft, nie beide."
+        ]
+      }
+    },
+    {
+      "id": "sooner",
+      "title": {
+        "en": "Level 2 sooner",
+        "de": "Früher Level 2"
+      },
+      "text": {
+        "en": "Change the 10 in this.dodged >= 10 to 5, so you see level 2 sooner.",
+        "de": "Ändere die 10 in this.dodged >= 10 in 5, damit du Level 2 früher siehst."
+      },
+      "check": {
+        "changed": {
+          "file": "GameStage.java",
+          "pattern": "dodged\\s*>=?\\s*(\\d+)",
+          "from": "10"
+        }
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program and watch the change.",
+        "de": "Starte das Programm und beobachte die Änderung."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "else-if",
+      "title": {
+        "en": "A third level",
+        "de": "Ein drittes Level"
+      },
+      "text": {
+        "en": "Replace the line if (this.dodged >= 5) { with this: else if checks a second condition when the first one is false.",
+        "de": "Ersetze die Zeile if (this.dodged >= 5) { hiermit: else if prüft eine zweite Bedingung, wenn die erste nicht stimmt."
+      },
+      "code": "    if (this.dodged >= 20) {\n      this.scoreText.showText(\"Level 3! Dodged: \" + this.dodged);\n    } else if (this.dodged >= 5) {",
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "else\\s+if\\s*\\("
+        }
+      },
+      "hints": {
+        "en": [
+          "The biggest number comes first: Java checks from the top and stops at the first true one."
+        ],
+        "de": [
+          "Die größte Zahl kommt zuerst: Java prüft von oben und hört beim ersten Treffer auf."
+        ]
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it once more and enjoy what you built.",
+        "de": "Starte es noch einmal und freu dich über das, was du gebaut hast."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

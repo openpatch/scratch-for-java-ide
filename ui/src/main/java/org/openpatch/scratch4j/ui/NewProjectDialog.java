@@ -79,13 +79,18 @@ final class NewProjectDialog {
         // a broken bundled lesson is left out; the tests keep them working
       }
     }
-    lessons.getSelectionModel().selectFirst();
+    // the path: numbered, the finished ones ticked, the first one still to do chosen
+    java.util.Set<String> finished = LessonPath.finished();
+    lessons.getItems().stream().filter(l -> !finished.contains(l.id())).findFirst()
+        .ifPresentOrElse(lessons.getSelectionModel()::select,
+            lessons.getSelectionModel()::selectFirst);
     lessons.setMaxWidth(Double.MAX_VALUE);
     lessons.setConverter(new StringConverter<>() {
       @Override
       public String toString(org.openpatch.scratch4j.core.lesson.Lesson lesson) {
         return lesson == null ? "" : I18n.t("template.lesson.item", lesson.title(locale),
-            lesson.steps().size());
+            lesson.steps().size(), LessonPath.number(lesson.id()))
+            + (finished.contains(lesson.id()) ? "  \u2713" : "");
       }
 
       @Override

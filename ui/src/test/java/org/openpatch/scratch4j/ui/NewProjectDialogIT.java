@@ -35,7 +35,7 @@ class NewProjectDialogIT {
         assertThat(lessons.isDisabled()).as("the lesson card is preselected").isFalse();
         var name = (javafx.scene.control.TextField) pane.lookup("#project-name");
         assertThat(name.getText()).startsWith("Dein-erstes-Programm");
-        lessons.getSelectionModel().select(2);
+        lessons.getSelectionModel().select(Lesson.bundledIds().indexOf("catch-the-coins"));
         lessons.getOnAction().handle(null);
         assertThat(name.getText()).startsWith("Fang-die-Muenzen");
         UiSmokeIT.snapshot(pane, Path.of("target/new-project-lessons.png"));

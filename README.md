@@ -12,9 +12,12 @@ project format may change while we test it with students and teachers.
 ## Features
 
 - Create a project from a guided lesson, a starter, tutorial, or demo; open an
-  existing project folder or import a Scratch `.sb3` project. The start page
-  offers to continue an unfinished lesson, and Help → Show me around tours the
-  window (once by itself on the first project).
+  existing project folder or import a Scratch `.sb3` project. The 13 guided
+  lessons form a numbered path: each tutorial is followed by a lesson on the
+  concept its project shows (variables, loops, methods, if/else, lists), and the
+  path ends with a game of the student's own. Finished lessons are ticked, the
+  start page offers to continue an unfinished one, and Help → Show me around
+  tours the window (once by itself on the first project).
 - Edit Java with completion, live diagnostics, beginner-friendly explanations
   in English and German, a Scratch block palette, and a searchable Reference
   in the sidebar (F1 looks up the word at the caret), all without a browser.

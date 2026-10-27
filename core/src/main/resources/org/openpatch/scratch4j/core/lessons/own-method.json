@@ -1,0 +1,113 @@
+{
+  "id": "own-method",
+  "template": "catch-the-coins-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Your own method",
+    "de": "Deine eigene Methode"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag (or F5) and look at what the program does.",
+        "de": "Drücke die grüne Flagge (oder F5) und schau, was das Programm macht."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "method",
+      "title": {
+        "en": "Spot the twins",
+        "de": "Finde die Zwillinge"
+      },
+      "text": {
+        "en": "In Basket.java, both ifs in run() do the same two things: setDirection, then move(5). Write a method that does it once. Put it below run(), before the last }.",
+        "de": "In Basket.java machen beide ifs in run() dasselbe: setDirection, dann move(5). Schreib eine Methode, die das einmal macht. Setz sie unter run(), vor die letzte }."
+      },
+      "code": "  private void walk(int direction) {\n    this.setDirection(direction);\n    this.move(5);\n  }",
+      "check": {
+        "methodExists": {
+          "name": "walk",
+          "file": "Basket.java"
+        }
+      },
+      "hints": {
+        "en": [
+          "direction is a parameter: the value you give the method when you call it."
+        ],
+        "de": [
+          "direction ist ein Parameter: der Wert, den du der Methode beim Aufruf gibst."
+        ]
+      }
+    },
+    {
+      "id": "call",
+      "title": {
+        "en": "Call your method",
+        "de": "Ruf deine Methode auf"
+      },
+      "text": {
+        "en": "Replace the two lines in each if with one call: this.walk(90); for RIGHT and this.walk(-90); for LEFT.",
+        "de": "Ersetze die zwei Zeilen in jedem if durch einen Aufruf: this.walk(90); für RECHTS und this.walk(-90); für LINKS."
+      },
+      "check": {
+        "all": [
+          {
+            "contains": {
+              "file": "Basket.java",
+              "text": "this.walk(90);"
+            }
+          },
+          {
+            "contains": {
+              "file": "Basket.java",
+              "text": "this.walk(-90);"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "once",
+      "title": {
+        "en": "Change it in one place",
+        "de": "An einer Stelle ändern"
+      },
+      "text": {
+        "en": "Change move(5) in walk to move(8). Both directions are faster now, and you changed only one line.",
+        "de": "Ändere move(5) in walk in move(8). Jetzt sind beide Richtungen schneller, und du hast nur eine Zeile geändert."
+      },
+      "check": {
+        "changed": {
+          "file": "Basket.java",
+          "pattern": "move\\s*\\(\\s*(\\d+)\\s*\\)",
+          "from": "5"
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it once more and enjoy what you built.",
+        "de": "Starte es noch einmal und freu dich über das, was du gebaut hast."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

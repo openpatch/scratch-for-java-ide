@@ -3645,7 +3645,17 @@ public class StudioApp extends javafx.application.Application {
       var last = completed.get(completed.size() - 1);
       setStatus("\u2714 " + I18n.t("lesson.stepdone", last.title(locale)));
       if (progress.finished()) {
-        notice(I18n.t("lesson.finished", progress.lesson().title(locale)));
+        String next = LessonPath.next(progress.lesson().id());
+        org.openpatch.scratch4j.core.lesson.Lesson following = null;
+        try {
+          following = next == null ? null : org.openpatch.scratch4j.core.lesson.Lesson.bundled(next);
+        } catch (IOException e) {
+          // no next lesson to name
+        }
+        notice(following == null
+            ? I18n.t("lesson.finished", progress.lesson().title(locale))
+            : I18n.t("lesson.finished.next", progress.lesson().title(locale),
+                following.title(locale)));
       }
       if (sidebar.getTabs().contains(lessonTab)) {
         sidebar.getSelectionModel().select(lessonTab);

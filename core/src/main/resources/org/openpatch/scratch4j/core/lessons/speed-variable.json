@@ -1,0 +1,141 @@
+{
+  "id": "speed-variable",
+  "template": "make-it-walk-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Variables: your own speed",
+    "de": "Variablen: deine eigene Geschwindigkeit"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag (or F5). Walk with the arrow keys.",
+        "de": "Drücke die grüne Flagge (oder F5). Lauf mit den Pfeiltasten."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "variable",
+      "title": {
+        "en": "A speed variable",
+        "de": "Eine Variable für die Geschwindigkeit"
+      },
+      "text": {
+        "en": "A variable is a named box for a value, like a Scratch variable. Put this line in Walker.java right below public class Walker extends Sprite {.",
+        "de": "Eine Variable ist eine Kiste mit Namen für einen Wert, wie eine Variable in Scratch. Schreib diese Zeile in Walker.java direkt unter public class Walker extends Sprite {."
+      },
+      "code": "  private int speed = 3;",
+      "check": {
+        "contains": {
+          "file": "Walker.java",
+          "pattern": "int\\s+speed\\s*="
+        }
+      },
+      "hints": {
+        "en": [
+          "int means a whole number.",
+          "The line goes outside of every method, at the top of the class."
+        ],
+        "de": [
+          "int bedeutet ganze Zahl.",
+          "Die Zeile steht außerhalb aller Methoden, oben in der Klasse."
+        ]
+      }
+    },
+    {
+      "id": "use",
+      "title": {
+        "en": "Use the variable",
+        "de": "Benutze die Variable"
+      },
+      "text": {
+        "en": "In run(), the alien moves 3 steps in both directions: this.move(3);. Replace both with this.move(this.speed);.",
+        "de": "In run() läuft der Alien in beide Richtungen 3 Schritte: this.move(3);. Ersetze beide durch this.move(this.speed);."
+      },
+      "check": {
+        "all": [
+          {
+            "contains": {
+              "file": "Walker.java",
+              "text": "this.move(this.speed);"
+            }
+          },
+          {
+            "lineChanged": {
+              "file": "Walker.java",
+              "line": "this.move(3);"
+            }
+          }
+        ]
+      },
+      "hints": {
+        "en": [
+          "There are two this.move(3); lines: one for RIGHT, one for LEFT."
+        ],
+        "de": [
+          "Es gibt zwei Zeilen this.move(3);: eine für RECHTS, eine für LINKS."
+        ]
+      }
+    },
+    {
+      "id": "change",
+      "title": {
+        "en": "One number for both",
+        "de": "Eine Zahl für beide"
+      },
+      "text": {
+        "en": "Change the 3 in private int speed = 3; to 6. Both directions get faster at once: that is what a variable is for.",
+        "de": "Ändere die 3 in private int speed = 3; in 6. Beide Richtungen werden auf einmal schneller: genau dafür ist eine Variable da."
+      },
+      "check": {
+        "changed": {
+          "file": "Walker.java",
+          "pattern": "int\\s+speed\\s*=\\s*(\\d+)",
+          "from": "3"
+        }
+      }
+    },
+    {
+      "id": "faster",
+      "title": {
+        "en": "Faster while playing",
+        "de": "Schneller beim Spielen"
+      },
+      "text": {
+        "en": "A variable can change while the program runs. Put this at the start of run(): holding UP makes the alien faster, up to 15.",
+        "de": "Eine Variable kann sich ändern, während das Programm läuft. Schreib das an den Anfang von run(): Wer OBEN gedrückt hält, macht den Alien schneller, bis 15."
+      },
+      "code": "    if (this.isKeyPressed(KeyCode.UP) && this.speed < 15) {\n      this.speed = this.speed + 1;\n    }",
+      "check": {
+        "contains": {
+          "file": "Walker.java",
+          "pattern": "speed\\s*=\\s*(this\\.)?speed\\s*\\+|speed\\s*\\+\\+|speed\\s*\\+="
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it once more and enjoy what you built.",
+        "de": "Starte es noch einmal und freu dich über das, was du gebaut hast."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

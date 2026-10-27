@@ -116,6 +116,63 @@ class BundledLessonsTest {
         List.of(new Create("Bomb.java")),
         List.of(after("GameStage.java", "      this.add(new Rock());\n    }\n")),
         List.of(run())));
+    walks.put("speed-variable", List.of(
+        List.of(run()),
+        List.of(after("Walker.java", "public class Walker extends Sprite {\n")),
+        List.of(edit("Walker.java", "this.move(3);", "this.move(this.speed);")),
+        List.of(edit("Walker.java", "private int speed = 3;", "private int speed = 6;")),
+        List.of(after("Walker.java", "  public void run() {\n")),
+        List.of(run())));
+    walks.put("coin-row", List.of(
+        List.of(run()),
+        List.of(edit("CatchStage.java", "i < 4;", "i < 6;")),
+        List.of(edit("CatchStage.java", "      this.add(new Coin());\n", CODE + "\n")),
+        List.of(run()),
+        List.of(after("CatchStage.java", "      coin.setX(-250 + i * 100);\n")),
+        List.of(run())));
+    walks.put("own-method", List.of(
+        List.of(run()),
+        List.of(edit("Basket.java", "    this.ifOnEdgeBounce();\n  }\n",
+            "    this.ifOnEdgeBounce();\n  }\n\n" + CODE + "\n")),
+        List.of(edit("Basket.java", "      this.setDirection(90);\n      this.move(5);\n",
+                "      this.walk(90);\n"),
+            edit("Basket.java", "      this.setDirection(-90);\n      this.move(5);\n",
+                "      this.walk(-90);\n")),
+        List.of(edit("Basket.java", "this.move(5);", "this.move(8);")),
+        List.of(run())));
+    walks.put("level-up", List.of(
+        List.of(run()),
+        List.of(edit("GameStage.java",
+            "    this.scoreText.showText(\"Dodged: \" + this.dodged);\n", CODE + "\n")),
+        List.of(edit("GameStage.java", "this.dodged >= 10", "this.dodged >= 5")),
+        List.of(run()),
+        List.of(edit("GameStage.java", "    if (this.dodged >= 5) {\n", CODE + "\n")),
+        List.of(run())));
+    walks.put("rock-list", List.of(
+        List.of(run()),
+        List.of(after("GameStage.java", "  private int dodged = 0;\n"),
+            edit("GameStage.java", "import org.openpatch.scratch.*;\n",
+                "import org.openpatch.scratch.*;\nimport java.util.ArrayList;\n")),
+        List.of(edit("GameStage.java", "      this.add(new Rock());\n", CODE + "\n")),
+        List.of(edit("GameStage.java", "  private void showScore() {\n",
+                CODE + "\n\n  private void showScore() {\n"),
+            edit("Rock.java", "private void dropFromTop()", "public void dropFromTop()")),
+        List.of(after("GameStage.java", "    this.dodged = this.dodged + 1;\n")),
+        List.of(edit("GameStage.java", "\"Dodged: \" + this.dodged);",
+            "\"Dodged: \" + this.dodged + \"  Rocks: \" + this.rocks.size());")),
+        List.of(run())));
+    walks.put("your-game", List.of(
+        List.of(run()),
+        List.of(new Create("Carrot.java")),
+        List.of(after("MyStage.java", "    this.add(bunny);\n")),
+        List.of(edit("Carrot.java", "    this.setX(150);\n  }\n",
+            "    this.setX(150);\n  }\n\n" + CODE + "\n")),
+        List.of(edit("MyStage.java", "  public static void main",
+                CODE + "\n\n  public static void main"),
+            edit("Carrot.java", "      this.setX(Random.randomInt(-200, 200));\n",
+                "      this.setX(Random.randomInt(-200, 200));\n"
+                    + "      ((MyStage) this.getStage()).addPoint();\n")),
+        List.of(run())));
     return walks;
   }
 

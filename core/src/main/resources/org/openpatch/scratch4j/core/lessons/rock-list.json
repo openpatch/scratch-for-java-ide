@@ -1,0 +1,147 @@
+{
+  "id": "rock-list",
+  "template": "dodge-the-rocks-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Lists: all rocks at once",
+    "de": "Listen: alle Steine auf einmal"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag (or F5), then SPACE. Dodge the rocks with the arrow keys.",
+        "de": "Drücke die grüne Flagge (oder F5), dann LEERTASTE. Weich den Steinen mit den Pfeiltasten aus."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "list",
+      "title": {
+        "en": "A list",
+        "de": "Eine Liste"
+      },
+      "text": {
+        "en": "A list holds many objects in one variable. Put this line in GameStage.java below private int dodged = 0;. If ArrayList is underlined, click the light bulb to import it.",
+        "de": "Eine Liste hält viele Objekte in einer Variablen. Schreib diese Zeile in GameStage.java unter private int dodged = 0;. Wenn ArrayList unterstrichen ist, klick auf die Glühbirne, um es zu importieren."
+      },
+      "code": "  private ArrayList<Rock> rocks = new ArrayList<>();",
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "ArrayList\\s*<\\s*Rock\\s*>"
+        }
+      },
+      "hints": {
+        "en": [
+          "The import line is import java.util.ArrayList; at the very top."
+        ],
+        "de": [
+          "Die Import-Zeile lautet import java.util.ArrayList; ganz oben."
+        ]
+      }
+    },
+    {
+      "id": "fill",
+      "title": {
+        "en": "Fill the list",
+        "de": "Füll die Liste"
+      },
+      "text": {
+        "en": "Replace this.add(new Rock()); in the for loop with this: each rock goes into the list and onto the stage.",
+        "de": "Ersetze this.add(new Rock()); in der for-Schleife hiermit: Jeder Stein kommt in die Liste und auf die Bühne."
+      },
+      "code": "      Rock rock = new Rock();\n      this.rocks.add(rock);\n      this.add(rock);",
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "rocks\\.add\\s*\\("
+        }
+      }
+    },
+    {
+      "id": "each",
+      "title": {
+        "en": "Every rock at once",
+        "de": "Jeder Stein auf einmal"
+      },
+      "text": {
+        "en": "A for-each loop visits every rock in the list. Put this method in GameStage.java above showScore(): S is a shield that sends all rocks back up. Then change private void dropFromTop() in Rock.java to public, so the stage may call it.",
+        "de": "Eine for-each-Schleife besucht jeden Stein in der Liste. Schreib diese Methode in GameStage.java über showScore(): S ist ein Schild, das alle Steine wieder nach oben schickt. Ändere dann in Rock.java private void dropFromTop() in public, damit die Bühne sie aufrufen darf."
+      },
+      "code": "  public void whenKeyPressed(KeyCode keyCode) {\n    if (keyCode == KeyCode.S) {\n      for (Rock rock : this.rocks) {\n        rock.dropFromTop();\n      }\n    }\n  }",
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "for\\s*\\(\\s*Rock\\s+\\w+\\s*:\\s*(this\\.)?rocks\\s*\\)"
+        }
+      }
+    },
+    {
+      "id": "more",
+      "title": {
+        "en": "More rocks over time",
+        "de": "Mit der Zeit mehr Steine"
+      },
+      "text": {
+        "en": "Put this in addDodge() below this.dodged = this.dodged + 1;: every 5 dodged rocks a new rock joins the list.",
+        "de": "Schreib das in addDodge() unter this.dodged = this.dodged + 1;: Alle 5 ausgewichenen Steine kommt ein neuer Stein in die Liste."
+      },
+      "code": "    if (this.dodged % 5 == 0) {\n      Rock rock = new Rock();\n      this.rocks.add(rock);\n      this.add(rock);\n    }",
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "rocks\\.add[\\s\\S]*rocks\\.add"
+        }
+      },
+      "hints": {
+        "en": [
+          "% is the remainder: this.dodged % 5 == 0 at 5, 10, 15, ..."
+        ],
+        "de": [
+          "% ist der Rest beim Teilen: this.dodged % 5 == 0 bei 5, 10, 15, ..."
+        ]
+      }
+    },
+    {
+      "id": "size",
+      "title": {
+        "en": "How many?",
+        "de": "Wie viele?"
+      },
+      "text": {
+        "en": "this.rocks.size() tells how many rocks the list holds. In showScore(), change the text to \"Dodged: \" + this.dodged + \"  Rocks: \" + this.rocks.size().",
+        "de": "this.rocks.size() sagt, wie viele Steine in der Liste sind. Ändere in showScore() den Text in \"Dodged: \" + this.dodged + \"  Rocks: \" + this.rocks.size()."
+      },
+      "check": {
+        "contains": {
+          "file": "GameStage.java",
+          "pattern": "rocks\\.size\\s*\\(\\s*\\)"
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it once more and enjoy what you built.",
+        "de": "Starte es noch einmal und freu dich über das, was du gebaut hast."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

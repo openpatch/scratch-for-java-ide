@@ -256,10 +256,16 @@ public record Lesson(String id, String template, List<String> languages,
     }
   }
 
-  /** The ids of the lessons shipped with the IDE, in the order they are offered. */
+  /**
+   * The ids of the lessons shipped with the IDE, in the order they are offered:
+   * a path where each concept lesson (variables, loops, methods, if/else,
+   * lists) follows the tutorial whose project it builds on, ending with a game
+   * of the student's own.
+   */
   public static List<String> bundledIds() {
-    return List.of("first-steps", "make-it-walk", "catch-the-coins", "red-light-green-light",
-        "guess-the-number", "bouncy-hedgehog", "dodge-the-rocks");
+    return List.of("first-steps", "make-it-walk", "speed-variable", "catch-the-coins",
+        "coin-row", "own-method", "red-light-green-light", "guess-the-number",
+        "bouncy-hedgehog", "dodge-the-rocks", "level-up", "rock-list", "your-game");
   }
 
   /** The project's lesson, or null when it has none. */

@@ -1,0 +1,118 @@
+{
+  "id": "coin-row",
+  "template": "catch-the-coins-100",
+  "languages": [
+    "de",
+    "en"
+  ],
+  "title": {
+    "en": "Loops: a row of coins",
+    "de": "Schleifen: eine Reihe Münzen"
+  },
+  "steps": [
+    {
+      "id": "run",
+      "title": {
+        "en": "Start the program",
+        "de": "Starte das Programm"
+      },
+      "text": {
+        "en": "Press the green flag (or F5) and look at what the program does.",
+        "de": "Drücke die grüne Flagge (oder F5) und schau, was das Programm macht."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "count",
+      "title": {
+        "en": "Count the loop",
+        "de": "Zähl die Schleife"
+      },
+      "text": {
+        "en": "In CatchStage.java, the for loop runs while i < 4, so it adds 4 coins. Make it 6.",
+        "de": "In CatchStage.java läuft die for-Schleife, solange i < 4 ist, und fügt so 4 Münzen hinzu. Mach 6 daraus."
+      },
+      "check": {
+        "changed": {
+          "file": "CatchStage.java",
+          "pattern": "i\\s*<\\s*(\\d+)",
+          "from": "4"
+        }
+      }
+    },
+    {
+      "id": "use-i",
+      "title": {
+        "en": "Use i",
+        "de": "Benutze i"
+      },
+      "text": {
+        "en": "Inside the loop, i counts 0, 1, 2, ... Replace this.add(new Coin()); in the loop with this: every coin starts at its own place in a row.",
+        "de": "In der Schleife zählt i 0, 1, 2, ... Ersetze this.add(new Coin()); in der Schleife hiermit: Jede Münze startet an ihrem eigenen Platz in einer Reihe."
+      },
+      "code": "      Coin coin = new Coin();\n      coin.setX(-250 + i * 100);\n      coin.setY(300);\n      this.add(coin);",
+      "check": {
+        "contains": {
+          "file": "CatchStage.java",
+          "pattern": "setX\\s*\\([^;]*\\bi\\b"
+        }
+      },
+      "hints": {
+        "en": [
+          "-250 + i * 100 is -250, -150, -50, ... one for each turn of the loop."
+        ],
+        "de": [
+          "-250 + i * 100 ergibt -250, -150, -50, ... eins für jeden Durchlauf."
+        ]
+      }
+    },
+    {
+      "id": "try",
+      "title": {
+        "en": "Try it out",
+        "de": "Probier es aus"
+      },
+      "text": {
+        "en": "Run the program and watch the change.",
+        "de": "Starte das Programm und beobachte die Änderung."
+      },
+      "check": {
+        "ran": true
+      }
+    },
+    {
+      "id": "sizes",
+      "title": {
+        "en": "Bigger and bigger",
+        "de": "Immer größer"
+      },
+      "text": {
+        "en": "Put this line below coin.setX(...);: each coin in the row is a bit bigger than the one before.",
+        "de": "Schreib diese Zeile unter coin.setX(...);: Jede Münze der Reihe ist etwas größer als die davor."
+      },
+      "code": "      coin.setSize(20 + i * 8);",
+      "check": {
+        "contains": {
+          "file": "CatchStage.java",
+          "pattern": "setSize\\s*\\([^;]*\\bi\\b"
+        }
+      }
+    },
+    {
+      "id": "play",
+      "title": {
+        "en": "Play your game",
+        "de": "Spiel dein Spiel"
+      },
+      "text": {
+        "en": "Run it once more and enjoy what you built.",
+        "de": "Starte es noch einmal und freu dich über das, was du gebaut hast."
+      },
+      "check": {
+        "ran": true
+      }
+    }
+  ]
+}

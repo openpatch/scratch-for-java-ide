@@ -123,8 +123,11 @@ final class WelcomeView extends StackPane {
         LessonProgress progress = LessonProgress.load(lesson, project);
         if (progress.finished()) continue;
         Button card = bigButton("fth-compass", I18n.t("welcome.continue", lesson.title(locale)),
-            I18n.t("welcome.continue.hint", progress.current() + 1, lesson.steps().size(),
-                project.getFileName()), () -> onOpen.accept(project));
+            LessonPath.number(lesson.id()) > 0
+                ? I18n.t("welcome.continue.path", progress.current() + 1, lesson.steps().size(),
+                    LessonPath.number(lesson.id()), LessonPath.ids().size())
+                : I18n.t("welcome.continue.hint", progress.current() + 1, lesson.steps().size(),
+                    project.getFileName()), () -> onOpen.accept(project));
         card.setId("welcome-continue");
         card.getStyleClass().add("primary-card");
         return card;
