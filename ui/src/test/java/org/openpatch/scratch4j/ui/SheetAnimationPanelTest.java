@@ -21,8 +21,20 @@ class SheetAnimationPanelTest {
     assertThat(SheetGridDialog.guessTile(128, 32)).containsExactly(32, 32);
     assertThat(SheetGridDialog.guessTile(96, 64)).containsExactly(32, 32);
     assertThat(SheetGridDialog.guessTile(50, 16)).containsExactly(50, 16);
-    assertThat(SheetAnimationPanel.firstRow(64, 16)).containsExactly(0, 1, 2, 3);
     assertThat(SheetAnimationPanel.columns(70, 16)).isEqualTo(4);
+  }
+
+  @Test
+  void aDragPicksTheRunAlongTheRowOrColumnItMostlyFollows() {
+    // the boy's sheet: 4 columns, an animation runs down a column
+    assertThat(SheetAnimationPanel.run(4, 0, 12)).containsExactly(0, 4, 8, 12);
+    assertThat(SheetAnimationPanel.run(4, 13, 1)).containsExactly(13, 9, 5, 1);
+    assertThat(SheetAnimationPanel.run(4, 4, 7)).containsExactly(4, 5, 6, 7);
+    assertThat(SheetAnimationPanel.run(4, 7, 4)).containsExactly(7, 6, 5, 4);
+    // a little off the line: still that column (or row)
+    assertThat(SheetAnimationPanel.run(4, 5, 14)).containsExactly(5, 9, 13);
+    assertThat(SheetAnimationPanel.run(4, 0, 7)).containsExactly(0, 1, 2, 3);
+    assertThat(SheetAnimationPanel.run(4, 6, 6)).containsExactly(6);
   }
 
   @Test

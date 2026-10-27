@@ -71,6 +71,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   private SheetAnimationPanel sheetPanel;
   private ToggleButton sheetToggle;
   private final VBox bottomBox = new VBox();
+  // picking an animation's frames on the canvas: the tile pressed, the run dragged, hover
+  private int sheetPressTile = -1;
+  private List<Integer> sheetDragRun = List.of();
+  private int sheetHoverTile = -1;
   private WritableImage image;
   /** One view per layer, bottom first; the overlay sits on top. */
   // layers are painted on a canvas: an ImageView of a WritableImage smooths
@@ -167,6 +171,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     stack.getStyleClass().add("paint-surface");
     stack.setOnMousePressed(e -> {
       stack.requestFocus();
+      if (sheetPicking()) {
+        sheetPress(e.getX() / zoom, e.getY() / zoom);
+        return;
+      }
       if (tool == Tool.SELECT) {
         selectPress(e.getX() / zoom, e.getY() / zoom);
       } else {
@@ -175,6 +183,10 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       }
     });
     stack.setOnMouseDragged(e -> {
+      if (sheetPicking()) {
+        sheetDrag(e.getX() / zoom, e.getY() / zoom);
+        return;
+      }
       if (tool == Tool.SELECT) {
         selectDrag(e.getX() / zoom, e.getY() / zoom, e.isShiftDown());
       } else {
@@ -182,12 +194,26 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       }
     });
     stack.setOnMouseReleased(e -> {
+      if (sheetPicking()) {
+        sheetRelease(e.isShiftDown());
+        return;
+      }
       if (tool == Tool.SELECT) {
         selectRelease();
       } else {
         release(toPixel(e.getX(), e.getY()));
       }
       updateFrameThumb();
+    });
+    stack.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED, e -> {
+      if (sheetPicking()) {
+        sheetHover(tileAt(e.getX() / zoom, e.getY() / zoom));
+      }
+    });
+    stack.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_EXITED, e -> {
+      if (sheetHoverTile >= 0) {
+        sheetHover(-1);
+      }
     });
     stack.setFocusTraversable(true);
     stack.setCursor(javafx.scene.Cursor.CROSSHAIR);
@@ -414,6 +440,12 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       sheetPanel.setVisible(show);
       sheetPanel.setManaged(show);
     }
+    if (!show) {
+      stack.setCursor(javafx.scene.Cursor.CROSSHAIR);
+      updateStatus();
+    } else {
+      status.setText(I18n.t("sheetanim.pick.status"));
+    }
     redrawOverlay();
   }
 
@@ -427,12 +459,85 @@ final class ImageEditorView extends BorderPane implements SavableTool {
         .relativize(file.toAbsolutePath().normalize()).toString().replace('\\', '/');
   }
 
+  /** Whether the canvas picks an animation's frames (the film strip shows, picking is on). */
+  private boolean sheetPicking() {
+    return sheetPanel != null && sheetPanel.isVisible() && sheetPanel.picking();
+  }
+
+  /** The sheet tile at picture point (x, y), or -1 off the tiles. */
+  private int tileAt(double x, double y) {
+    int column = (int) Math.floor(x / sheetPanel.tileWidth());
+    int row = (int) Math.floor(y / sheetPanel.tileHeight());
+    if (x < 0 || y < 0 || column >= sheetPanel.columns() || row >= sheetPanel.rows()) {
+      return -1;
+    }
+    return row * sheetPanel.columns() + column;
+  }
+
+  private void sheetPress(double x, double y) {
+    sheetPressTile = tileAt(x, y);
+    sheetDragRun = sheetPressTile < 0 ? List.of() : List.of(sheetPressTile);
+    redrawOverlay();
+  }
+
+  /** Dragging along a row or column shows the run the release will pick. */
+  private void sheetDrag(double x, double y) {
+    int tile = tileAt(x, y);
+    if (sheetPressTile < 0 || tile < 0) {
+      return;
+    }
+    sheetDragRun = SheetAnimationPanel.run(sheetPanel.columns(), sheetPressTile, tile);
+    sheetHover(tile);
+  }
+
+  /**
+   * A click toggles one tile; a drag over several makes them the animation.
+   * With Shift a click adds the tile again and a drag adds the run.
+   */
+  private void sheetRelease(boolean shift) {
+    if (sheetPressTile >= 0) {
+      if (sheetDragRun.size() > 1) {
+        sheetPanel.setRun(sheetDragRun, shift);
+      } else {
+        sheetPanel.toggleTile(sheetPressTile, shift);
+      }
+    }
+    sheetPressTile = -1;
+    sheetDragRun = List.of();
+    redrawOverlay();
+  }
+
+  private void sheetHover(int tile) {
+    sheetHoverTile = tile;
+    status.setText(tile < 0 ? I18n.t("sheetanim.pick.status")
+        : SheetAnimationPanel.describe(tile, sheetPanel.columns()));
+    redrawOverlay();
+  }
+
   /** The sheet's tile grid, and the animation's tiles numbered in their order. */
   private void drawSheetGrid(javafx.scene.canvas.GraphicsContext g) {
     int w = sheetPanel.tileWidth();
     int h = sheetPanel.tileHeight();
-    int columns = SheetAnimationPanel.columns((int) image.getWidth(), w);
-    int rows = (int) image.getHeight() / Math.max(1, h);
+    int columns = sheetPanel.columns();
+    int rows = sheetPanel.rows();
+    stack.setCursor(sheetPicking() ? javafx.scene.Cursor.HAND : javafx.scene.Cursor.CROSSHAIR);
+    if (columns == 0 || rows == 0) {
+      return;
+    }
+    Color accent = Color.rgb(133, 92, 214);
+    // the tile under the pointer, and the frame the preview shows
+    if (sheetPicking() && sheetHoverTile >= 0) {
+      g.setFill(Color.rgb(133, 92, 214, 0.15));
+      g.fillRect(sheetHoverTile % columns * w * zoom, sheetHoverTile / columns * h * zoom,
+          w * zoom, h * zoom);
+    }
+    List<Integer> frames = sheetPanel.frames();
+    int playing = sheetPanel.previewIndex();
+    if (playing >= 0 && frames.get(playing) < columns * rows) {
+      int tile = frames.get(playing);
+      g.setFill(Color.rgb(255, 213, 0, 0.25));
+      g.fillRect(tile % columns * w * zoom, tile / columns * h * zoom, w * zoom, h * zoom);
+    }
     g.setStroke(Color.rgb(133, 92, 214, 0.55));
     g.setLineWidth(1);
     for (int x = 0; x <= columns; x++) {
@@ -441,24 +546,43 @@ final class ImageEditorView extends BorderPane implements SavableTool {
     for (int y = 0; y <= rows; y++) {
       g.strokeLine(0, y * h * zoom + 0.5, columns * w * zoom, y * h * zoom + 0.5);
     }
-    List<Integer> frames = sheetPanel.frames();
-    g.setLineWidth(2);
+    // the animation's tiles, numbered in playback order (a tile used twice shows both)
     g.setFont(javafx.scene.text.Font.font(11));
+    java.util.Map<Integer, List<String>> labels = new java.util.LinkedHashMap<>();
     for (int i = 0; i < frames.size(); i++) {
-      int tile = frames.get(i);
-      if (columns == 0 || tile >= columns * rows) {
-        continue;
+      if (frames.get(i) < columns * rows) {
+        labels.computeIfAbsent(frames.get(i), t -> new ArrayList<>()).add(Integer.toString(i + 1));
       }
-      double x = tile % columns * w * zoom;
-      double y = tile / columns * h * zoom;
-      g.setStroke(Color.rgb(133, 92, 214));
+    }
+    for (var entry : labels.entrySet()) {
+      double x = entry.getKey() % columns * w * zoom;
+      double y = entry.getKey() / columns * h * zoom;
+      String text = String.join(",", entry.getValue());
+      g.setLineWidth(2);
+      g.setStroke(accent);
       g.strokeRect(x + 1, y + 1, w * zoom - 2, h * zoom - 2);
-      g.setFill(Color.rgb(133, 92, 214));
-      g.fillRect(x + 1, y + 1, 18, 14);
+      g.setFill(accent);
+      g.fillRect(x + 1, y + 1, 8 + 7 * text.length(), 14);
       g.setFill(Color.WHITE);
-      g.fillText(Integer.toString(i + 1), x + 4, y + 12);
+      g.fillText(text, x + 4, y + 12);
+    }
+    // the run being dragged: dashed, numbered as it will play
+    if (sheetDragRun.size() > 1) {
+      g.setLineDashes(6, 4);
+      g.setLineWidth(2);
+      g.setStroke(Color.rgb(255, 171, 25));
+      for (int i = 0; i < sheetDragRun.size(); i++) {
+        int tile = sheetDragRun.get(i);
+        double x = tile % columns * w * zoom;
+        double y = tile / columns * h * zoom;
+        g.strokeRect(x + 3, y + 3, w * zoom - 6, h * zoom - 6);
+        g.setFill(Color.rgb(255, 171, 25));
+        g.fillText(Integer.toString(i + 1), x + w * zoom - 14, y + h * zoom - 6);
+      }
+      g.setLineDashes();
     }
   }
+
 
   /** The onion skin button shows when there are frames around this one. */
   private void updateOnionToggle() {
@@ -537,6 +661,15 @@ final class ImageEditorView extends BorderPane implements SavableTool {
   /** The pixels being edited (tests read them). */
   WritableImage image() {
     return image;
+  }
+
+  /** The canvas the mouse paints (and picks frames) on, and its zoom (tests). */
+  Node canvasForTest() {
+    return stack;
+  }
+
+  double zoomForTest() {
+    return zoom;
   }
 
   /** Paints one pixel of the active layer as one stroke (tests). */
@@ -791,9 +924,13 @@ final class ImageEditorView extends BorderPane implements SavableTool {
       switch (code) {
         case S -> save();
         case Z -> {
-          if (shift) redo(); else undo();
+          if (sheetPicking()) {
+            if (shift) sheetPanel.redo(); else sheetPanel.undo();
+          } else if (shift) redo(); else undo();
         }
-        case Y -> redo();
+        case Y -> {
+          if (sheetPicking()) sheetPanel.redo(); else redo();
+        }
         case A -> selectAll();
         case C -> copySelection();
         case X -> {

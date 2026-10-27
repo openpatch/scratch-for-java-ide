@@ -1534,6 +1534,22 @@
 .frame-thumb:selected {
   -fx-border-color: -color-accent-emphasis;
 }
+/* the frame the sheet preview shows: yellow, like its tile on the canvas */
+.frame-cell:selected .frame-thumb {
+  -fx-border-color: #ffd500;
+}
+.frame-cell {
+  -fx-cursor: hand;
+}
+.frame-remove {
+  -fx-padding: 1;
+  -fx-background-color: rgba(0, 0, 0, 0.45);
+  -fx-background-radius: 4;
+}
+.frame-remove .ikonli-font-icon {
+  -fx-icon-size: 10px;
+  -fx-icon-color: white;
+}
 .tile-number {
   -fx-font-size: 9px;
   -fx-padding: 0 2 0 2;

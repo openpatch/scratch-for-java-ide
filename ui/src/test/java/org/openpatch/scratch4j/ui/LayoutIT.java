@@ -59,25 +59,36 @@ class LayoutIT {
 
   /** Presses the primary button at one point of a node, drags to another and lets go. */
   static void drag(Node node, double x1, double y1, double x2, double y2) {
-    mouse(node, javafx.scene.input.MouseEvent.MOUSE_PRESSED, x1, y1, true);
-    mouse(node, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, (x1 + x2) / 2, (y1 + y2) / 2, true);
-    mouse(node, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, x2, y2, true);
-    mouse(node, javafx.scene.input.MouseEvent.MOUSE_RELEASED, x2, y2, false);
+    drag(node, x1, y1, x2, y2, false);
+  }
+
+  /** {@link #drag} with Shift held. */
+  static void shiftDrag(Node node, double x1, double y1, double x2, double y2) {
+    drag(node, x1, y1, x2, y2, true);
+  }
+
+  private static void drag(Node node, double x1, double y1, double x2, double y2,
+      boolean shift) {
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_PRESSED, x1, y1, true, shift);
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, (x1 + x2) / 2, (y1 + y2) / 2, true,
+        shift);
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_DRAGGED, x2, y2, true, shift);
+    mouse(node, javafx.scene.input.MouseEvent.MOUSE_RELEASED, x2, y2, false, shift);
   }
 
   /** A primary-button click in the middle of a node. */
   static void click(Node node) {
     var bounds = node.getLayoutBounds();
     mouse(node, javafx.scene.input.MouseEvent.MOUSE_CLICKED, bounds.getCenterX(),
-        bounds.getCenterY(), false);
+        bounds.getCenterY(), false, false);
   }
 
   private static void mouse(Node node,
       javafx.event.EventType<javafx.scene.input.MouseEvent> type, double x, double y,
-      boolean down) {
+      boolean down, boolean shift) {
     var scene = node.localToScene(x, y);
     javafx.event.Event.fireEvent(node, new javafx.scene.input.MouseEvent(type, scene.getX(),
-        scene.getY(), 0, 0, javafx.scene.input.MouseButton.PRIMARY, 1, false, false, false,
+        scene.getY(), 0, 0, javafx.scene.input.MouseButton.PRIMARY, 1, shift, false, false,
         false, down, false, false, false, false,
         type == javafx.scene.input.MouseEvent.MOUSE_PRESSED, null));
   }

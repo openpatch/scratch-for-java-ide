@@ -16,7 +16,7 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
-import javafx.scene.layout.FlowPane;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -27,22 +27,27 @@ import org.openpatch.scratch4j.core.region.SpriteAssets;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.function.Supplier;
 
 /**
  * The image editor's animation preview for a sprite sheet: the tile size,
- * which tiles make the animation (numbered row by row from 0, as the library
- * counts them; click a tile to add it), a looping preview of the picture as
- * painted so far, and the {@code addAnimation(name, sheet, w, h, frames...)}
- * line to copy into a sprite. An animation that already uses the sheet in
- * the project's code can be loaded as the starting point.
+ * the animation's frames as a strip in playback order (remove one with its
+ * x, drag to reorder), a looping preview of the picture as painted so far,
+ * and the {@code addAnimation(name, sheet, w, h, frames...)} line to copy
+ * into a sprite. The frames are picked on the editor's canvas (see
+ * {@link #toggleTile} and {@link #setRun}); tiles are numbered row by row
+ * from 0, as the library counts them. An animation the project's code
+ * already makes of the sheet can be the starting point.
  */
 final class SheetAnimationPanel extends HBox {
 
   private static final double PREVIEW = 96;
-  private static final double TILE = 36;
+  private static final double FRAME = 44;
+  private static final int UNDO_LIMIT = 100;
 
   /** One animation of the sheet as the code has it (or as set up here). */
   record Animation(String name, int width, int height, List<Integer> frames) {
@@ -55,12 +60,14 @@ final class SheetAnimationPanel extends HBox {
 
   private final String reference;
   private final Supplier<WritableImage> picture;
-  private final Runnable onGridChanged;
+  private final Runnable onChanged;
   private final TextField name = new TextField("idle");
   private final Spinner<Integer> tileWidth = new Spinner<>(1, 4096, 16);
   private final Spinner<Integer> tileHeight = new Spinner<>(1, 4096, 16);
   private final TextField framesField = new TextField();
-  private final FlowPane tiles = new FlowPane(4, 4);
+  private final ToggleButton pick = new ToggleButton(I18n.t("sheetanim.pick"),
+      Icons.of("mdi2g-gesture-tap"));
+  private final HBox strip = new HBox(6);
   // canvases, not ImageViews: an ImageView smooths when scaled even with setSmooth(false)
   private final javafx.scene.canvas.Canvas preview =
       new javafx.scene.canvas.Canvas(PREVIEW, PREVIEW);
@@ -69,6 +76,8 @@ final class SheetAnimationPanel extends HBox {
   private final javafx.scene.control.TextArea code = new javafx.scene.control.TextArea();
   private final Label message = new Label();
   private final Timeline player = new Timeline();
+  private final Deque<List<Integer>> undoStack = new ArrayDeque<>();
+  private final Deque<List<Integer>> redoStack = new ArrayDeque<>();
   private List<Integer> frames = new ArrayList<>();
   private int previewFrame;
   private boolean updating;
@@ -76,14 +85,15 @@ final class SheetAnimationPanel extends HBox {
   /**
    * {@code reference} is the sheet's project-relative path, {@code picture}
    * gives it as painted so far, {@code known} are animations the code
-   * already makes of it, {@code onGridChanged} redraws the canvas's grid.
+   * already makes of it, {@code onChanged} redraws the canvas (grid, frames,
+   * the frame playing).
    */
   SheetAnimationPanel(String reference, Supplier<WritableImage> picture, List<Animation> known,
-      Runnable onGridChanged) {
+      Runnable onChanged) {
     super(12);
     this.reference = reference;
     this.picture = picture;
-    this.onGridChanged = onGridChanged;
+    this.onChanged = onChanged;
     getStyleClass().add("sheet-animation");
     setPadding(new Insets(8, 10, 8, 10));
 
@@ -92,7 +102,6 @@ final class SheetAnimationPanel extends HBox {
     int[] guess = SheetGridDialog.guessTile((int) sheet.getWidth(), (int) sheet.getHeight());
     tileWidth.getValueFactory().setValue(guess[0]);
     tileHeight.getValueFactory().setValue(guess[1]);
-    frames = new ArrayList<>(firstRow((int) sheet.getWidth(), guess[0]));
 
     ComboBox<Animation> fromCode = new ComboBox<>();
     fromCode.getItems().setAll(known);
@@ -111,28 +120,21 @@ final class SheetAnimationPanel extends HBox {
     for (Spinner<Integer> spinner : List.of(tileWidth, tileHeight)) {
       spinner.setEditable(true);
       spinner.setPrefWidth(84);
+      spinner.setMinWidth(84);
       spinner.valueProperty().addListener((o, a, b) -> {
         if (!updating) {
-          gridChanged();
+          framesChanged(true);
         }
       });
     }
-    framesField.setPromptText("0, 1, 2, 3");
-    framesField.setPrefColumnCount(14);
+    framesField.setPromptText("0, 4, 8, 12");
+    framesField.setPrefColumnCount(12);
     framesField.setTooltip(new Tooltip(I18n.t("sheetanim.frames.tooltip")));
     framesField.textProperty().addListener((o, a, text) -> {
       if (!updating) {
         frames = new ArrayList<>(parseFrames(text));
         framesChanged(false);
       }
-    });
-    Button clear = Icons.button("fth-x", I18n.t("sheetanim.clear"), () -> {
-      frames.clear();
-      framesChanged(true);
-    });
-    Button row = Icons.button("fth-more-horizontal", I18n.t("sheetanim.row"), () -> {
-      frames = new ArrayList<>(firstRow((int) picture.get().getWidth(), tileWidth.getValue()));
-      framesChanged(true);
     });
 
     GridPane form = new GridPane();
@@ -141,21 +143,31 @@ final class SheetAnimationPanel extends HBox {
     form.addRow(0, label("sheetanim.name"), name);
     form.addRow(1, label("sheetanim.tile"), new HBox(4, tileWidth, new Label("×"),
         tileHeight));
-    HBox framesRow = new HBox(2, framesField, row, clear);
-    framesRow.setAlignment(Pos.CENTER_LEFT);
-    form.addRow(2, label("sheetanim.frames"), framesRow);
+    form.addRow(2, label("sheetanim.frames"), framesField);
     VBox settings = new VBox(6, fromCode, form);
 
-    ScrollPane tileScroll = new ScrollPane(tiles);
-    tileScroll.setFitToWidth(true);
-    tileScroll.setPrefViewportHeight(2 * TILE + 26);
-    tileScroll.getStyleClass().add("edge-to-edge");
-    tiles.setPadding(new Insets(2));
-    Label tilesHint = new Label(I18n.t("sheetanim.tiles.hint"));
-    tilesHint.getStyleClass().add("text-muted");
-    VBox tileBox = new VBox(4, tilesHint, tileScroll);
-    HBox.setHgrow(tileBox, Priority.ALWAYS);
-    tileBox.setMinWidth(160);
+    // picking on the canvas is on while the panel shows; off, the tools paint again
+    pick.setSelected(true);
+    pick.setTooltip(new Tooltip(I18n.t("sheetanim.pick.tooltip")));
+    pick.setOnAction(e -> onChanged.run());
+    HBox stripActions = new HBox(2, pick,
+        Icons.button("fth-corner-up-left", I18n.t("imageeditor.undo"), this::undo),
+        Icons.button("fth-corner-up-right", I18n.t("imageeditor.redo"), this::redo),
+        Icons.button("fth-x", I18n.t("sheetanim.clear"), () -> setFrames(List.of())));
+    stripActions.setAlignment(Pos.CENTER_LEFT);
+    ScrollPane stripScroll = new ScrollPane(strip);
+    stripScroll.setFitToHeight(true);
+    stripScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+    stripScroll.setPrefViewportHeight(FRAME + 30);
+    stripScroll.getStyleClass().add("edge-to-edge");
+    strip.setPadding(new Insets(2));
+    strip.setAlignment(Pos.CENTER_LEFT);
+    Label hint = new Label(I18n.t("sheetanim.pick.hint"));
+    hint.getStyleClass().add("text-muted");
+    hint.setWrapText(true);
+    VBox stripBox = new VBox(4, stripActions, stripScroll, hint);
+    HBox.setHgrow(stripBox, Priority.ALWAYS);
+    stripBox.setMinWidth(200);
 
     StackPane previewBox = new StackPane(preview);
     previewBox.setPrefSize(PREVIEW + 8, PREVIEW + 8);
@@ -181,7 +193,7 @@ final class SheetAnimationPanel extends HBox {
 
     code.setEditable(false);
     code.setWrapText(true);
-    code.setPrefRowCount(3);
+    code.setPrefRowCount(4);
     code.getStyleClass().add("code-line");
     Button copy = Icons.labeled("fth-clipboard", I18n.t("sheetanim.copy"), this::copyCode);
     copy.getStyleClass().add("accent");
@@ -189,9 +201,11 @@ final class SheetAnimationPanel extends HBox {
     message.setWrapText(true);
     VBox codeColumn = new VBox(6, label("sheetanim.code"), code, copy, message);
     codeColumn.setPrefWidth(300);
+    // the strip grows, but never into the code
+    codeColumn.setMinWidth(260);
 
-    getChildren().addAll(settings, new Separator(javafx.geometry.Orientation.VERTICAL), tileBox,
-        new Separator(javafx.geometry.Orientation.VERTICAL), previewColumn,
+    getChildren().addAll(settings, new Separator(javafx.geometry.Orientation.VERTICAL),
+        stripBox, new Separator(javafx.geometry.Orientation.VERTICAL), previewColumn,
         new Separator(javafx.geometry.Orientation.VERTICAL), codeColumn);
 
     player.setCycleCount(Timeline.INDEFINITE);
@@ -202,7 +216,7 @@ final class SheetAnimationPanel extends HBox {
       fromCode.getSelectionModel().selectFirst();
       load(known.getFirst());
     } else {
-      gridChanged();
+      framesChanged(true);
     }
   }
 
@@ -226,8 +240,31 @@ final class SheetAnimationPanel extends HBox {
     return List.copyOf(frames);
   }
 
+  /** Whether clicks on the canvas pick frames (else the tools paint). */
+  boolean picking() {
+    return pick.isSelected();
+  }
+
+  void setPicking(boolean on) {
+    pick.setSelected(on);
+    onChanged.run();
+  }
+
+  /** The position in {@link #frames()} the preview shows, or -1. */
+  int previewIndex() {
+    return frames.isEmpty() ? -1 : Math.min(previewFrame, frames.size() - 1);
+  }
+
   String code() {
     return code.getText();
+  }
+
+  int columns() {
+    return columns((int) picture.get().getWidth(), tileWidth.getValue());
+  }
+
+  int rows() {
+    return (int) picture.get().getHeight() / Math.max(1, tileHeight.getValue());
   }
 
   void load(Animation animation) {
@@ -236,16 +273,96 @@ final class SheetAnimationPanel extends HBox {
     tileWidth.getValueFactory().setValue(animation.width());
     tileHeight.getValueFactory().setValue(animation.height());
     updating = false;
-    frames = new ArrayList<>(animation.frames());
-    gridChanged();
+    setFrames(animation.frames());
   }
 
-  /** Tile size changed: new tile buttons; the frames stay as numbers. */
-  private void gridChanged() {
-    rebuildTiles();
-    framesChanged(true);
-    onGridChanged.run();
+  // --- picking (the editor's canvas calls these) ---------------------------------
+
+  /**
+   * A click on a tile: a tile not in the animation is added at the end, one
+   * in it is taken out; with {@code repeat} it is added again (0, 1, 0, 2).
+   */
+  void toggleTile(int tile, boolean repeat) {
+    List<Integer> next = new ArrayList<>(frames);
+    if (!repeat && next.contains(tile)) {
+      next.remove(Integer.valueOf(tile));
+    } else {
+      next.add(tile);
+    }
+    setFrames(next);
   }
+
+  /** A drag along a row or column: {@code run} becomes the animation (or is added to it). */
+  void setRun(List<Integer> run, boolean append) {
+    List<Integer> next = new ArrayList<>(append ? frames : List.of());
+    next.addAll(run);
+    setFrames(next);
+  }
+
+  /** The frames as one undoable step. */
+  void setFrames(List<Integer> next) {
+    if (next.equals(frames)) {
+      return;
+    }
+    undoStack.push(List.copyOf(frames));
+    if (undoStack.size() > UNDO_LIMIT) {
+      undoStack.removeLast();
+    }
+    redoStack.clear();
+    frames = new ArrayList<>(next);
+    framesChanged(true);
+  }
+
+  void undo() {
+    if (!undoStack.isEmpty()) {
+      redoStack.push(List.copyOf(frames));
+      frames = new ArrayList<>(undoStack.pop());
+      framesChanged(true);
+    }
+  }
+
+  void redo() {
+    if (!redoStack.isEmpty()) {
+      undoStack.push(List.copyOf(frames));
+      frames = new ArrayList<>(redoStack.pop());
+      framesChanged(true);
+    }
+  }
+
+  /** "Row 2, column 1 (tile 5)" for the status bar. */
+  static String describe(int tile, int columns) {
+    return I18n.t("sheetanim.tile.at", tile / Math.max(1, columns) + 1,
+        tile % Math.max(1, columns) + 1, tile);
+  }
+
+  /**
+   * The tiles from {@code from} to {@code to} along the row or the column
+   * they share most: dragging mostly sideways stays in {@code from}'s row,
+   * mostly up or down in its column. In drag order, ends included.
+   */
+  static List<Integer> run(int columns, int from, int to) {
+    int r0 = from / columns;
+    int c0 = from % columns;
+    int r1 = to / columns;
+    int c1 = to % columns;
+    List<Integer> run = new ArrayList<>();
+    if (Math.abs(c1 - c0) >= Math.abs(r1 - r0)) {
+      int step = c1 >= c0 ? 1 : -1;
+      for (int c = c0; ; c += step) {
+        run.add(r0 * columns + c);
+        if (c == c1) break;
+      }
+    } else {
+      int step = r1 >= r0 ? 1 : -1;
+      for (int r = r0; ; r += step) {
+        run.add(r * columns + c0);
+        if (r == r1) break;
+      }
+    }
+    return run;
+  }
+
+  // --- the strip of chosen frames ------------------------------------------------
 
   private void framesChanged(boolean writeField) {
     if (writeField) {
@@ -256,53 +373,102 @@ final class SheetAnimationPanel extends HBox {
     int count = tileCount();
     long outside = frames.stream().filter(f -> f >= count).count();
     message.setText(outside > 0 ? I18n.t("sheetanim.outside", count) : "");
-    markTiles();
+    rebuildStrip();
     updateCode();
     previewFrame = 0;
     restartPlayer();
-    onGridChanged.run();
+    onChanged.run();
   }
 
-  /** The sheet's tiles as buttons; a click appends the tile to the animation. */
-  private void rebuildTiles() {
-    tiles.getChildren().clear();
-    WritableImage sheet = picture.get();
-    int columns = columns((int) sheet.getWidth(), tileWidth.getValue());
-    int count = tileCount();
-    for (int i = 0; i < count; i++) {
-      int index = i;
-      javafx.scene.canvas.Canvas view = new javafx.scene.canvas.Canvas(TILE, TILE);
-      drawTile(view, sheet, tileRect(i, columns));
-      Label number = new Label(Integer.toString(i));
-      number.getStyleClass().add("tile-number");
-      StackPane cell = new StackPane(view, number);
-      StackPane.setAlignment(number, Pos.TOP_LEFT);
-      cell.setPrefSize(TILE + 6, TILE + 6);
-      cell.getStyleClass().add("frame-thumb");
-      cell.setCursor(javafx.scene.Cursor.HAND);
-      Tooltip.install(cell, new Tooltip(I18n.t("sheetanim.tile.add", i)));
-      cell.setOnMouseClicked(e -> {
-        frames.add(index);
-        framesChanged(true);
-      });
-      tiles.getChildren().add(cell);
+  private void rebuildStrip() {
+    strip.getChildren().clear();
+    for (int i = 0; i < frames.size(); i++) {
+      strip.getChildren().add(frameCell(i));
+    }
+    if (frames.isEmpty()) {
+      Label empty = new Label(I18n.t("sheetanim.empty"));
+      empty.getStyleClass().add("text-muted");
+      strip.getChildren().add(empty);
+    }
+    markPlaying();
+  }
+
+  /** Frame {@code index} of the animation: its tile, its place, an x to take it out. */
+  private VBox frameCell(int index) {
+    int tile = frames.get(index);
+    javafx.scene.canvas.Canvas view = new javafx.scene.canvas.Canvas(FRAME, FRAME);
+    if (tile < tileCount()) {
+      drawTile(view, picture.get(), tileRect(tile, columns()));
+    }
+    Button remove = Icons.button("fth-x", I18n.t("sheetanim.remove"), () -> {
+      List<Integer> next = new ArrayList<>(frames);
+      next.remove(index);
+      setFrames(next);
+    });
+    remove.getStyleClass().add("frame-remove");
+    StackPane box = new StackPane(view, remove);
+    StackPane.setAlignment(remove, Pos.TOP_RIGHT);
+    box.setPrefSize(FRAME + 6, FRAME + 6);
+    box.getStyleClass().add("frame-thumb");
+    Label number = new Label((index + 1) + "  ·  #" + tile);
+    number.getStyleClass().add("text-muted");
+    VBox cell = new VBox(2, box, number);
+    cell.setAlignment(Pos.CENTER);
+    cell.getStyleClass().add("frame-cell");
+    Tooltip.install(cell, new Tooltip(describe(tile, columns())));
+    // a click shows this frame (the preview pauses); drag to move it
+    cell.setOnMouseClicked(e -> {
+      play.setSelected(false);
+      play.setGraphic(Icons.of("fth-play"));
+      previewFrame = index;
+      restartPlayer();
+      onChanged.run();
+    });
+    cell.setOnDragDetected(e -> {
+      var board = cell.startDragAndDrop(TransferMode.MOVE);
+      ClipboardContent content = new ClipboardContent();
+      content.putString(Integer.toString(index));
+      board.setContent(content);
+      board.setDragView(view.snapshot(null, null));
+      e.consume();
+    });
+    cell.setOnDragOver(e -> {
+      if (e.getGestureSource() instanceof VBox source && source.getParent() == strip) {
+        e.acceptTransferModes(TransferMode.MOVE);
+      }
+      e.consume();
+    });
+    cell.setOnDragDropped(e -> {
+      move(Integer.parseInt(e.getDragboard().getString()), index);
+      e.setDropCompleted(true);
+      e.consume();
+    });
+    return cell;
+  }
+
+  /** Moves frame {@code from} to place {@code to}. */
+  void move(int from, int to) {
+    if (from == to || from < 0 || from >= frames.size() || to < 0 || to >= frames.size()) {
+      return;
+    }
+    List<Integer> next = new ArrayList<>(frames);
+    next.add(to, next.remove(from));
+    setFrames(next);
+  }
+
+  /** Outlines the frame the preview shows. */
+  private void markPlaying() {
+    int playing = previewIndex();
+    for (int i = 0; i < strip.getChildren().size(); i++) {
+      strip.getChildren().get(i).pseudoClassStateChanged(PLAYING, i == playing);
     }
   }
 
-  /** Outlines the tiles the animation uses. */
-  private void markTiles() {
-    for (int i = 0; i < tiles.getChildren().size(); i++) {
-      tiles.getChildren().get(i).pseudoClassStateChanged(USED, frames.contains(i));
-    }
-  }
-
-  private static final javafx.css.PseudoClass USED =
+  private static final javafx.css.PseudoClass PLAYING =
       javafx.css.PseudoClass.getPseudoClass("selected");
 
   private int tileCount() {
-    WritableImage sheet = picture.get();
-    return columns((int) sheet.getWidth(), tileWidth.getValue())
-        * Math.max(0, (int) sheet.getHeight() / tileHeight.getValue());
+    return columns() * Math.max(0, rows());
   }
 
   private javafx.geometry.Rectangle2D tileRect(int index, int columns) {
@@ -323,10 +489,9 @@ final class SheetAnimationPanel extends HBox {
     message.setText(I18n.t("sheetanim.copied"));
   }
 
-  /** Redraws the preview (the picture changed). */
+  /** Redraws the strip and the preview (the picture changed). */
   void pictureChanged() {
-    rebuildTiles();
-    markTiles();
+    rebuildStrip();
     restartPlayer();
   }
 
@@ -340,20 +505,20 @@ final class SheetAnimationPanel extends HBox {
     player.getKeyFrames().add(new KeyFrame(Duration.millis(1000.0 / fps.getValue()), e -> {
       previewFrame = (previewFrame + 1) % Math.max(1, frames.size());
       showPreviewFrame();
+      onChanged.run();
     }));
     player.play();
   }
 
   /** The preview shows the sheet as painted so far, cropped to one frame. */
   private void showPreviewFrame() {
+    markPlaying();
     int count = tileCount();
     if (frames.isEmpty() || previewFrame >= frames.size() || frames.get(previewFrame) >= count) {
       preview.getGraphicsContext2D().clearRect(0, 0, PREVIEW, PREVIEW);
       return;
     }
-    WritableImage sheet = picture.get();
-    drawTile(preview, sheet, tileRect(frames.get(previewFrame),
-        columns((int) sheet.getWidth(), tileWidth.getValue())));
+    drawTile(preview, picture.get(), tileRect(frames.get(previewFrame), columns()));
   }
 
   /** One tile, scaled to fit the canvas, crisp (pixel art stays pixel art). */
@@ -379,15 +544,6 @@ final class SheetAnimationPanel extends HBox {
   /** Tiles per row, as the library counts them. */
   static int columns(int sheetWidth, int tileWidth) {
     return Math.max(0, sheetWidth / Math.max(1, tileWidth));
-  }
-
-  /** The tiles of the first row: 0, 1, ... */
-  static List<Integer> firstRow(int sheetWidth, int tileWidth) {
-    List<Integer> row = new ArrayList<>();
-    for (int i = 0; i < columns(sheetWidth, tileWidth); i++) {
-      row.add(i);
-    }
-    return row;
   }
 
   /** The tile numbers in {@code text} ("0, 1 2;3"), skipping what is not a number. */
