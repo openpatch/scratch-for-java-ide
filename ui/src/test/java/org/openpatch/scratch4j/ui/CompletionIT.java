@@ -11,6 +11,8 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.robot.Robot;
 import javafx.stage.Stage;
 import javafx.stage.Window;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.junit.jupiter.api.io.TempDir;
@@ -35,6 +37,21 @@ class CompletionIT {
 
   @TempDir
   Path tmp;
+
+  private Prefs.Completion completion;
+
+  /** Most of these tests type and expect suggestions: the while-typing setting. */
+  @BeforeEach
+  void suggestWhileTyping() throws Exception {
+    completion = CodeEditor.COMPLETION.get();
+    LayoutIT.startFx();
+    LayoutIT.onFx(() -> CodeEditor.COMPLETION.set(Prefs.Completion.AUTO));
+  }
+
+  @AfterEach
+  void restoreSuggestions() throws Exception {
+    LayoutIT.onFx(() -> CodeEditor.COMPLETION.set(completion));
+  }
 
   @Test
   void compiledLibraryMethodsUseTheNamesOfTheMatchingDocumentedOverload() throws Exception {
@@ -336,6 +353,57 @@ class CompletionIT {
       });
       assertThat(runs.get()).isOne();
     } finally {
+      LayoutIT.onFx(opened.window()::hide);
+    }
+  }
+
+  /** Settings > Suggestions: only with Ctrl+Space types without asking javac; off ignores it. */
+  @Test
+  void suggestionsWaitForCtrlSpaceOrStayOffAsSet() throws Exception {
+    String text = """
+        class Player {
+          void run() {
+           \s
+          }
+        }
+        """;
+    int caret = text.indexOf("   \n") + 3;
+    Opened opened = openEditor(text, editor -> editor);
+    CodeEditor code = opened.code();
+    java.util.concurrent.atomic.AtomicInteger runs = new java.util.concurrent.atomic.AtomicInteger();
+    Prefs.Completion before = CodeEditor.COMPLETION.get();
+    try {
+      LayoutIT.onFx(() -> {
+        CodeEditor.COMPLETION.set(Prefs.Completion.MANUAL);
+        code.setSemanticCompleter((source, content, offset) -> {
+          runs.incrementAndGet();
+          return new Completions.Result(offset, "", false, List.of(
+              new Completions.Item("getX", Completions.Kind.METHOD, "getX()", "double",
+                  "org.openpatch.scratch.Sprite", false, List.of())));
+        });
+        code.area().requestFocus();
+        code.area().moveTo(caret);
+        for (String ch : List.of("g", "e", ".")) {
+          code.area().fireEvent(new KeyEvent(KeyEvent.KEY_TYPED,
+              ch, "", KeyCode.UNDEFINED, false, false, false, false));
+        }
+      });
+      Thread.sleep(300);
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> {
+        assertThat(code.completionShowing()).as("typing does not open the list").isFalse();
+        assertThat(runs.get()).isZero();
+        CodeEditor.COMPLETION.set(Prefs.Completion.OFF);
+        code.area().fireEvent(new KeyEvent(KeyEvent.KEY_PRESSED,
+            "", "", KeyCode.SPACE, false, true, false, false));
+      });
+      Thread.sleep(300);
+      LayoutIT.settle();
+      LayoutIT.onFx(() -> assertThat(code.completionShowing()).as("off: Ctrl+Space too").isFalse());
+      LayoutIT.onFx(() -> CodeEditor.COMPLETION.set(Prefs.Completion.MANUAL));
+      openSuggestions(opened.window(), code, caret + 2);
+    } finally {
+      LayoutIT.onFx(() -> CodeEditor.COMPLETION.set(before));
       LayoutIT.onFx(opened.window()::hide);
     }
   }

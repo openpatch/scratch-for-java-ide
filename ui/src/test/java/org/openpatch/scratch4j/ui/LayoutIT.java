@@ -206,7 +206,9 @@ class LayoutIT {
     });
     settle();
     // real keys (the robot): "a" completes "addBa" to the suggestions, Enter takes one
+    Prefs.Completion completion = CodeEditor.COMPLETION.get();
     onFx(() -> {
+      CodeEditor.COMPLETION.set(Prefs.Completion.AUTO);
       window.get().toFront();
       window.get().requestFocus();
       worldCode.get().area().requestFocus();
@@ -225,6 +227,7 @@ class LayoutIT {
       worldCode.get().undo();
       worldCode.get().undo();
       worldCode.get().undo();
+      CodeEditor.COMPLETION.set(completion);
     });
 
     // a colour swatch in the gutter: its picker stays open while the line changes

@@ -81,4 +81,36 @@ class EditorShortcutsIT {
     });
     assertThat(SoundIO.decode(wav).sampleCount()).isEqualTo(4410);
   }
+
+  private static void wheel(Node target, double deltaY) {
+    boolean mac = System.getProperty("os.name").toLowerCase().contains("mac");
+    Event.fireEvent(target, new javafx.scene.input.ScrollEvent(
+        javafx.scene.input.ScrollEvent.SCROLL, 10, 10, 10, 10,
+        false, !mac, false, mac, false, false, 0, deltaY, 0, deltaY,
+        javafx.scene.input.ScrollEvent.HorizontalTextScrollUnits.NONE, 0,
+        javafx.scene.input.ScrollEvent.VerticalTextScrollUnits.NONE, 0, 0, null));
+  }
+
+  /** Ctrl + wheel makes code bigger and smaller; a wheel step's still events (Linux) do neither. */
+  @Test
+  void ctrlWheelZoomsTheCodeBothWays() throws Exception {
+    startFx();
+    onFx(() -> {
+      CodeEditor code = new CodeEditor(tmp.resolve("Cat.java"), "class Cat {}",
+          org.openpatch.scratch4j.core.api.ApiIndex.load(), () -> tmp);
+      new Scene(code, 400, 200);
+      int before = CodeEditor.FONT_SIZE.get();
+      try {
+        CodeEditor.FONT_SIZE.set(14);
+        wheel(code.area(), 40);
+        wheel(code.area(), 0);
+        assertThat(CodeEditor.FONT_SIZE.get()).as("bigger").isEqualTo(15);
+        wheel(code.area(), -40);
+        wheel(code.area(), 0);
+        assertThat(CodeEditor.FONT_SIZE.get()).as("smaller").isEqualTo(14);
+      } finally {
+        CodeEditor.FONT_SIZE.set(before);
+      }
+    });
+  }
 }

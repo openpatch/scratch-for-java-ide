@@ -17,12 +17,16 @@ class PrefsTest {
   void portableMarkerInTheInstallFolderMovesSettingsThere() throws Exception {
     Path appDir = Files.createDirectories(install.resolve("lib/app"));
     String previous = System.getProperty("scratch4j.appDir");
+    // the build points tests at a settings folder of their own
+    String settings = System.getProperty("scratch4j.settingsDir");
     try {
+      System.clearProperty("scratch4j.settingsDir");
       System.setProperty("scratch4j.appDir", appDir.toString());
       assertThat(Prefs.portableDir()).isNull();
       Files.writeString(install.resolve("portable"), "");
       assertThat(Prefs.portableDir()).isEqualTo(install.normalize());
     } finally {
+      if (settings != null) System.setProperty("scratch4j.settingsDir", settings);
       if (previous == null) {
         System.clearProperty("scratch4j.appDir");
       } else {

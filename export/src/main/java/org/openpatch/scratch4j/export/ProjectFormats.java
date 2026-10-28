@@ -146,18 +146,11 @@ public final class ProjectFormats {
     if (files > PortableProject.MAX_FILES) {
       throw new IOException(String.format(java.util.Locale.ROOT, "Archive has %,d files; at most %,d can be imported", files, PortableProject.MAX_FILES));
     }
-    String base = PortableProject.path(zipFile.getFileName().toString().replaceFirst("(?i)\\.zip$", ""));
-    Path root;
-    Path target;
-    if (!flat && tops.size() == 1) {
-      root = parentDir.resolve(tops.iterator().next());
-      target = parentDir;
-    } else {
-      root = parentDir.resolve(base);
-      target = root;
-    }
+    String base = PortableProject.path(zipFile.getFileName().toString().replaceFirst("(?i)\\.(zip|scratch4j)$", ""));
+    Path root = parentDir.resolve(!flat && tops.size() == 1 ? tops.iterator().next() : base);
+    // opening the same shared file twice gives a second project, not an error
     if (Files.exists(root)) {
-      throw new IOException("Folder already exists: " + root);
+      root = parentDir.resolve(org.openpatch.scratch4j.core.project.ProjectFileManagement.copyName(root));
     }
     Files.createDirectories(parentDir);
     Path staging = Files.createTempDirectory(parentDir, ".scratch4j-zip-");

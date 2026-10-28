@@ -119,6 +119,19 @@ class ProjectFormatsTest {
   }
 
   @Test
+  void studioFileIsNamedAfterItselfAndOpeningItTwiceGivesASecondProject() throws Exception {
+    Path archive = tmp.resolve("Spiel.scratch4j");
+    try (var zip = new java.util.zip.ZipOutputStream(Files.newOutputStream(archive))) {
+      zip.putNextEntry(new java.util.zip.ZipEntry("Main.java"));
+      zip.write("void main() {}\n".getBytes(StandardCharsets.UTF_8));
+    }
+    Path parent = tmp.resolve("projects");
+    assertThat(ProjectFormats.importZip(archive, parent)).isEqualTo(parent.resolve("Spiel"));
+    assertThat(ProjectFormats.importZip(archive, parent)).isEqualTo(parent.resolve("Spiel-2"));
+    assertThat(parent.resolve("Spiel-2/Main.java")).exists();
+  }
+
+  @Test
   void browserImportKeepsCourseProvidedDesktopSourcesUnchanged() throws Exception {
     Path archive = tmp.resolve("course.zip");
     String list = "/// School-provided course class\npublic class List<T> {}\n";

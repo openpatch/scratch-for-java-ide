@@ -32,7 +32,10 @@ project format may change while we test it with students and teachers.
   file manager onto the Files pane to copy them into the project. Existing
   files keep their contents; matching names get a number.
 - Run programs in a separate JVM, use the console and debugger, and export a
-  runnable JAR, a portable app folder, or a BlueJ/VS Code project ZIP.
+  runnable JAR, a portable app folder, a web page, or a BlueJ/VS Code project ZIP.
+  The web page is the game compiled to WebAssembly (no Java needed in the
+  browser); "Open in browser" serves it from this computer, and the zip next to
+  it uploads as it is to itch.io or any static website.
 - Save milestones and return to earlier work through Project → History. Versions use
   embedded Git, so no Git installation or setup is needed.
 - Project → Hand in writes the project as `Name_Project_date.zip` into the
@@ -123,6 +126,10 @@ Icons retain their respective licenses.
 ## Continue between browser and desktop
 
 Open a browser workspace JSON or portable project ZIP through the Project menu.
+The Online-IDE's "Open in Scratch for Java Studio" saves the project as a
+`.scratch4j` file (a project ZIP). The installers register that extension, so a
+double-click imports it into the projects folder. The AppImage only registers it
+on desktops that integrate AppImages.
 Export a Browser project ZIP to continue in an embedded IDE revision with ZIP
 support. Code, assets, flavor and lesson identity travel with the project. NRW
 course classes remain ordinary source on desktop and are retained in the browser.

@@ -113,12 +113,23 @@ final class Prefs {
 
   private Prefs() {}
 
-  static boolean darkTheme() {
-    return NODE.getBoolean("theme.dark", false);
+  /** Light, dark, or as the operating system is set. */
+  enum ThemeMode { LIGHT, DARK, SYSTEM }
+
+  /** The theme; before there was a choice of three, a dark or light one was stored. */
+  static ThemeMode themeMode() {
+    String old = NODE.get("theme.dark", "");
+    ThemeMode fallback = old.isEmpty() ? ThemeMode.SYSTEM
+        : Boolean.parseBoolean(old) ? ThemeMode.DARK : ThemeMode.LIGHT;
+    try {
+      return ThemeMode.valueOf(NODE.get("theme.mode", fallback.name()));
+    } catch (IllegalArgumentException e) {
+      return fallback;
+    }
   }
 
-  static void darkTheme(boolean dark) {
-    NODE.putBoolean("theme.dark", dark);
+  static void themeMode(ThemeMode mode) {
+    NODE.put("theme.mode", mode.name());
   }
 
   static I18n.Language language() {
@@ -183,6 +194,67 @@ final class Prefs {
 
   static void blocksOpen(boolean besideVisual, boolean open) {
     NODE.putBoolean(besideVisual ? "blocks.open.split" : "blocks.open.code", open);
+  }
+
+  /** When the block pane shows beside the code: always, only beside the visual editor, never. */
+  enum BlocksPanel { ALWAYS, SPLIT, NEVER }
+
+  static BlocksPanel blocksPanel() {
+    try {
+      return BlocksPanel.valueOf(NODE.get("blocks.panel", BlocksPanel.ALWAYS.name()));
+    } catch (IllegalArgumentException e) {
+      return BlocksPanel.ALWAYS;
+    }
+  }
+
+  static void blocksPanel(BlocksPanel panel) {
+    NODE.put("blocks.panel", panel.name());
+  }
+
+  /** Typing a bracket or quote also types its partner. */
+  static boolean autoPairs() {
+    return NODE.getBoolean("editor.autoPairs", true);
+  }
+
+  static void autoPairs(boolean on) {
+    NODE.putBoolean("editor.autoPairs", on);
+  }
+
+  /** The Monaspace family code is shown in (bundled, see {@code fonts/}). */
+  enum CodeFont {
+    NEON, ARGON, XENON, RADON, KRYPTON;
+
+    /** "Neon": the name in the family's file names and in Settings. */
+    String label() {
+      return name().charAt(0) + name().substring(1).toLowerCase(java.util.Locale.ROOT);
+    }
+  }
+
+  static CodeFont codeFont() {
+    try {
+      return CodeFont.valueOf(NODE.get("editor.font", CodeFont.NEON.name()));
+    } catch (IllegalArgumentException e) {
+      return CodeFont.NEON;
+    }
+  }
+
+  static void codeFont(CodeFont font) {
+    NODE.put("editor.font", font.name());
+  }
+
+  /** When suggestions show: while typing, only on Ctrl+Space, or never. */
+  enum Completion { AUTO, MANUAL, OFF }
+
+  static Completion completion() {
+    try {
+      return Completion.valueOf(NODE.get("editor.completion", Completion.MANUAL.name()));
+    } catch (IllegalArgumentException e) {
+      return Completion.MANUAL;
+    }
+  }
+
+  static void completion(Completion mode) {
+    NODE.put("editor.completion", mode.name());
   }
 
   /** The folder the last project was created in or opened from ("" if none yet). */

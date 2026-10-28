@@ -16,9 +16,12 @@ class SharedProjectFileTest {
   void projectZipsAndWorkspaceJsonsAreAcceptedInAnyCase() throws Exception {
     Path zip = Files.createFile(dir.resolve("Spiel.ZIP"));
     Path json = Files.createFile(dir.resolve("spiel.json"));
+    Path studio = Files.createFile(dir.resolve("Spiel.Scratch4J"));
     assertThat(SharedProjectFile.accepts(zip)).isTrue();
     assertThat(SharedProjectFile.accepts(json)).isTrue();
+    assertThat(SharedProjectFile.accepts(studio)).isTrue();
     assertThat(SharedProjectFile.isJson(zip)).isFalse();
+    assertThat(SharedProjectFile.isJson(studio)).isFalse();
     assertThat(SharedProjectFile.isJson(json)).isTrue();
   }
 

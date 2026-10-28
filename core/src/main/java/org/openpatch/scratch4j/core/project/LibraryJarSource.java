@@ -25,7 +25,7 @@ public final class LibraryJarSource {
    * Scratch for Java 7: projects switch to it as a whole (decision log). Until it is released,
    * point {@code SCRATCH4J_ALL_JAR} at a locally built {@code all/target/scratch-*-all.jar}.
    */
-  public static final String SCRATCH_VERSION = "7.0.0";
+  public static final String SCRATCH_VERSION = "7.1.0";
 
   private static final String RELEASE_URL =
       "https://github.com/openpatch/scratch-for-java/releases/download/v"
@@ -131,6 +131,49 @@ public final class LibraryJarSource {
     } catch (IOException e) {
       throw new IOException("Could not download " + RELEASE_URL
           + " (offline? set SCRATCH4J_ALL_JAR to an existing scratch-all jar): " + e.getMessage(), e);
+    }
+    Files.move(partial, jar, StandardCopyOption.REPLACE_EXISTING);
+    return jar;
+  }
+
+  /**
+   * The web export ({@code scratch-<v>-web.jar}: the library's browser platform with TeaVM, run
+   * with {@code java -jar}), downloaded once into {@code cacheDir} from the same release as the
+   * library. Set {@code SCRATCH4J_WEB_JAR} to a locally built {@code web/target/scratch-*-web.jar}.
+   */
+  public static Path webJar(Path cacheDir) throws IOException {
+    return webJar(LibraryFlavour.STANDARD, cacheDir);
+  }
+
+  /**
+   * The web export for a flavour: the NRW one ({@code scratch-<v>-nrw-web.jar}, override
+   * {@code SCRATCH4J_NRW_WEB_JAR}) returns the Abitur's List from find, getAll and
+   * getTouchingSprites, as the NRW library jar does.
+   */
+  public static Path webJar(LibraryFlavour flavour, Path cacheDir) throws IOException {
+    boolean nrw = flavour == LibraryFlavour.NRW;
+    String variable = nrw ? "SCRATCH4J_NRW_WEB_JAR" : "SCRATCH4J_WEB_JAR";
+    String override = System.getenv(variable);
+    if (override != null && !override.isBlank()) {
+      Path p = Path.of(override);
+      if (Files.isRegularFile(p)) {
+        return p;
+      }
+      throw new IOException(variable + " does not point at a file: " + override);
+    }
+    String name = "scratch-" + SCRATCH_VERSION + (nrw ? "-nrw" : "") + "-web.jar";
+    Path jar = cacheDir.resolve(name);
+    if (Files.isRegularFile(jar)) {
+      return jar;
+    }
+    String url = "https://github.com/openpatch/scratch-for-java/releases/download/v" + SCRATCH_VERSION + "/" + name;
+    Files.createDirectories(cacheDir);
+    Path partial = jar.resolveSibling(name + ".part");
+    try (InputStream in = URI.create(url).toURL().openStream()) {
+      Files.copy(in, partial, StandardCopyOption.REPLACE_EXISTING);
+    } catch (IOException e) {
+      throw new IOException("Could not download " + url
+          + " (offline? set " + variable + " to an existing web jar): " + e.getMessage(), e);
     }
     Files.move(partial, jar, StandardCopyOption.REPLACE_EXISTING);
     return jar;

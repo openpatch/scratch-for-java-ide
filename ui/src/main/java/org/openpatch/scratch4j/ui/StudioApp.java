@@ -270,6 +270,7 @@ public class StudioApp extends javafx.application.Application {
     scene = new Scene(root, width, height);
     windowChrome.installResize(scene);
     Theme.apply(scene);
+    Theme.followSystem(scene);
     installEditorShortcuts();
     checkDelay.setOnFinished(e -> checkProject());
     stage.setTitle("Scratch for Java Studio");
@@ -292,7 +293,10 @@ public class StudioApp extends javafx.application.Application {
     List<String> startupArgs = getParameters() == null ? List.of() : getParameters().getRaw();
     if (startupArgs.size() == 2 && startupArgs.get(0).equals("--smoke")) {
       PackagedSmoke.start(this, stage, Path.of(startupArgs.get(1)).toAbsolutePath());
-    } else openFromArguments();
+    } else {
+      openFromArguments();
+      importOpenedFiles();
+    }
   }
 
   // --- layout --------------------------------------------------------------------
@@ -813,7 +817,8 @@ public class StudioApp extends javafx.application.Application {
    * The view switch and the block pane follow the tab shown: a sprite's or a
    * stage's blocks at the left of its code, open or folded to the categories
    * as last chosen for the code alone and for the code beside the visual
-   * editor; no blocks without code to drop them into.
+   * editor; no blocks without code to drop them into, nor where Settings
+   * turned them off.
    */
   private void updatePaletteContext() {
     Tab tab = editor.getSelectionModel().getSelectedItem();
@@ -826,8 +831,11 @@ public class StudioApp extends javafx.application.Application {
     } else {
       viewSwitch.showFor(code.file(), VisualMode.kind(code.file()), code.view());
     }
+    Prefs.BlocksPanel shown = Prefs.blocksPanel();
     boolean dock = project.get() != null && code != null
-        && context != VisualMode.PaletteContext.NONE && code.view() != ViewSwitch.View.VISUAL;
+        && context != VisualMode.PaletteContext.NONE && code.view() != ViewSwitch.View.VISUAL
+        && shown != Prefs.BlocksPanel.NEVER
+        && (shown != Prefs.BlocksPanel.SPLIT || code.view() == ViewSwitch.View.SPLIT);
     if (paletteHost != null && (paletteHost != code || !dock)) {
       paletteHost.undockPalette();
       paletteHost = null;
@@ -1024,7 +1032,8 @@ public class StudioApp extends javafx.application.Application {
   }
 
   private void showSettings() {
-    SettingsDialog.show(stage, scene, this::switchLanguage, this::setCompatibilityGraphics);
+    SettingsDialog.show(stage, scene, this::switchLanguage, this::setCompatibilityGraphics,
+        this::updatePaletteContext);
   }
 
   /**
@@ -1238,6 +1247,36 @@ public class StudioApp extends javafx.application.Application {
       openProjectAt(first);
     } else if (SharedProjectFile.accepts(first)) {
       importShared(first, args.size() > 1 ? Path.of(args.get(1)).toAbsolutePath() : ProjectsFolder.current());
+    }
+  }
+
+  private static final Object openedLock = new Object();
+  private static final List<Path> openedFiles = new java.util.ArrayList<>();
+  private static StudioApp shown;
+
+  /**
+   * Files the system asked Studio to open: on macOS a double-clicked
+   * {@code .scratch4j} arrives as an event, not as an argument, also while Studio runs.
+   * Ones that come before the window is ready are imported once it is.
+   */
+  public static void openFiles(List<Path> files) {
+    StudioApp app;
+    synchronized (openedLock) {
+      openedFiles.addAll(files);
+      app = shown;
+    }
+    if (app != null) javafx.application.Platform.runLater(app::importOpenedFiles);
+  }
+
+  private void importOpenedFiles() {
+    List<Path> files;
+    synchronized (openedLock) {
+      shown = this;
+      files = List.copyOf(openedFiles);
+      openedFiles.clear();
+    }
+    for (Path file : files) {
+      if (SharedProjectFile.accepts(file)) importShared(file.toAbsolutePath(), ProjectsFolder.current());
     }
   }
 
@@ -4465,6 +4504,19 @@ public class StudioApp extends javafx.application.Application {
               .exportBlueJZip(p, out.resolve(p.name() + "-bluej.zip"));
           case "vscode" -> org.openpatch.scratch4j.export.ProjectFormats
               .exportVsCodeZip(p, out.resolve(p.name() + "-vscode.zip"));
+          case "web" -> {
+            Platform.runLater(() -> setStatus(I18n.t("export.web.preparing")));
+            Path jar = LibraryJarSource.webJar(
+                org.openpatch.scratch4j.core.project.LibraryFlavour.fromId(p.settings().flavour), userLibraryCache());
+            Platform.runLater(() -> setStatus(I18n.t("export.running")));
+            Path page = org.openpatch.scratch4j.export.WebPage.export(p, jar,
+                org.openpatch.scratch4j.runner.ProgramRuntime.java(), out.resolve(p.name() + "-web")).getParent();
+            // index.html at the top of the zip, as itch.io and other hosts want it
+            Path zip = out.resolve(p.name() + "-web.zip");
+            Files.deleteIfExists(zip);
+            org.openpatch.scratch4j.export.Zip.zipDirectoryAs(page, "", zip);
+            yield page;
+          }
           default -> throw new IOException("unknown export format " + format);
         };
         Platform.runLater(() -> {
@@ -4473,10 +4525,24 @@ public class StudioApp extends javafx.application.Application {
           Alert done = new Alert(Alert.AlertType.INFORMATION, I18n.t("export.done", result));
           done.setHeaderText(null);
           ButtonType show = new ButtonType(I18n.t("tree.reveal"));
-          done.getButtonTypes().setAll(show, I18n.ok());
-          done.showAndWait().filter(b -> b == show).ifPresent(b ->
-              browse((Files.isDirectory(result) ? result : result.getParent()).toUri()
-                  .toString()));
+          ButtonType open = new ButtonType(I18n.t("export.web.open"));
+          if ("web".equals(format)) {
+            done.setContentText(I18n.t("export.web.done", result));
+            done.getButtonTypes().setAll(open, show, I18n.ok());
+          } else {
+            done.getButtonTypes().setAll(show, I18n.ok());
+          }
+          done.showAndWait().ifPresent(b -> {
+            if (b == show) {
+              browse((Files.isDirectory(result) ? result : result.getParent()).toUri().toString());
+            } else if (b == open) {
+              try {
+                browse(PagePreview.url(result));
+              } catch (IOException e) {
+                alert(I18n.t("export.failed", e.getMessage()), e);
+              }
+            }
+          });
         });
       } catch (IOException | RuntimeException e) {
         Platform.runLater(() -> alert(I18n.t("export.failed", e.getMessage()), e));
@@ -4538,7 +4604,6 @@ public class StudioApp extends javafx.application.Application {
         library,
         beginnerItem(),
         learning.flag(true), learning.flag(false), learning.reportItem(stage),
-        item("handin.folder.menu", "fth-inbox", null, this::chooseHandInFolder),
         item("menu.project.course", "fth-book-open", null, this::importCoursePack),
         item("lessoneditor.menu", "fth-compass", null, this::editLesson),
         new SeparatorMenuItem(),
@@ -4870,19 +4935,6 @@ public class StudioApp extends javafx.application.Application {
     return safe.isEmpty() ? "project" : safe;
   }
 
-  /** For teachers: the folder every hand-in on this computer goes to. */
-  private void chooseHandInFolder() {
-    DirectoryChooser chooser = new DirectoryChooser();
-    chooser.setTitle(I18n.t("handin.folder.menu"));
-    if (!Prefs.handInFolder().isBlank() && Files.isDirectory(Path.of(Prefs.handInFolder()))) {
-      chooser.setInitialDirectory(new File(Prefs.handInFolder()));
-    }
-    File chosen = chooser.showDialog(stage);
-    if (chosen == null) return;
-    Prefs.handInFolder(chosen.getAbsolutePath());
-    setStatus(I18n.t("handin.folder.set", chosen.getAbsolutePath()));
-  }
-
   private void importCoursePack() {
     javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
     chooser.setTitle(I18n.t("menu.project.course"));
@@ -4914,7 +4966,7 @@ public class StudioApp extends javafx.application.Application {
   private void openSharedZip() {
     javafx.stage.FileChooser chooser = new javafx.stage.FileChooser();
     chooser.setTitle(I18n.t("menu.project.openzip"));
-    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(I18n.t("welcome.import.hint"), "*.zip", "*.json"));
+    chooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter(I18n.t("welcome.import.hint"), "*.zip", "*" + SharedProjectFile.EXTENSION, "*.json"));
     File zip = chooser.showOpenDialog(stage);
     if (zip == null) return;
     javafx.stage.DirectoryChooser parent = new javafx.stage.DirectoryChooser();

@@ -520,8 +520,7 @@ final class SpriteAssetsView extends BorderPane {
       alert(I18n.t("spriteassets.animated.only"));
       return;
     }
-    AssetPickerDialog.pickImage(project.root(), I18n.t("spriteassets.fromsheet"))
-        .filter(ref -> ref.startsWith("assets/"))
+    AssetPickerDialog.pickImage(project.root(), I18n.t("spriteassets.fromsheet"), false)
         .ifPresent(ref -> editSheet(ref, kind == SpriteAssets.Kind.ANIMATION
             ? SheetGridDialog.Mode.ANIMATION : SheetGridDialog.Mode.COSTUMES, null, null));
   }
@@ -655,12 +654,20 @@ final class SpriteAssetsView extends BorderPane {
         ? AssetPickerDialog.pickImage(project.root(), I18n.t("spriteassets.costumes"))
         : AssetPickerDialog.pickSound(project.root(), I18n.t("spriteassets.sounds"));
     chosen.ifPresent(reference -> {
-      boolean fileReference = reference.startsWith("assets/");
+      boolean fileReference = isProjectFile(reference);
       String name = fileReference ? reference.substring(reference.lastIndexOf('/') + 1)
           .replaceFirst("\\.[^.]+$", "") : reference;
       write(source -> SpriteAssets.add(source, kind, name,
           fileReference ? reference : null, 0));
     });
+  }
+
+  /**
+   * A picked project file ("sprites/cat.png", anywhere in the project) rather
+   * than a built-in name: built-in names have no file extension.
+   */
+  private static boolean isProjectFile(String reference) {
+    return reference.matches("(?i).+\\.[a-z0-9]+$");
   }
 
   private void animationDialog() {

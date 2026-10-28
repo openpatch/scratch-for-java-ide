@@ -109,4 +109,25 @@ class EditorIndentIT {
       assertThat(area.getText()).isEqualTo("// see (\"");
     });
   }
+
+  /** Settings > Close brackets automatically, turned off: each key types itself alone. */
+  @Test
+  void bracketsComeAloneWhenPairsAreOff() throws Exception {
+    LayoutIT.startFx();
+    LayoutIT.onFx(() -> {
+      var apiIndex = org.openpatch.scratch4j.core.api.ApiIndex.load();
+      CodeEditor code = new CodeEditor(tmp.resolve("Cat.java"), "", apiIndex, () -> tmp);
+      var area = code.area();
+      boolean before = CodeEditor.AUTO_PAIRS.get();
+      try {
+        CodeEditor.AUTO_PAIRS.set(false);
+        type(area, "move(\"");
+        assertThat(area.getText()).isEqualTo("move(\"");
+        press(area, KeyCode.BACK_SPACE, null);
+        assertThat(area.getText()).isEqualTo("move(");
+      } finally {
+        CodeEditor.AUTO_PAIRS.set(before);
+      }
+    });
+  }
 }

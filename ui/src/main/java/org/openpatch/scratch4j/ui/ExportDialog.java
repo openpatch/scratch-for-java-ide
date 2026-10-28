@@ -19,7 +19,7 @@ import java.util.Optional;
 
 /**
  * File > Export: one dialog instead of a menu. A card per target (an app
- * folder for this computer, a runnable JAR, BlueJ or VS Code zips), each with
+ * folder for this computer, a runnable JAR, a web page, BlueJ or VS Code zips), each with
  * a sentence saying what you get; an app for another operating system below.
  * The result is the format id {@code StudioApp.export} understands, or
  * {@link #APP_INFO} to edit the version and icon first. The beginner interface
@@ -57,7 +57,7 @@ final class ExportDialog {
     GridPane cards = new GridPane();
     cards.setHgap(10);
     cards.setVgap(10);
-    List<String> formats = beginner ? List.of("app") : List.of("app", "jar", "bluej", "vscode");
+    List<String> formats = beginner ? List.of("app") : List.of("app", "jar", "web", "bluej", "vscode");
     for (int i = 0; i < formats.size(); i++) {
       cards.add(card(formats.get(i), dialog), i % 2, i / 2);
     }
@@ -113,6 +113,7 @@ final class ExportDialog {
     HBox content = new HBox(10, Icons.of(switch (format) {
       case "app" -> "fth-package";
       case "jar" -> "fth-coffee";
+      case "web" -> "fth-globe";
       default -> "fth-archive";
     }, 22), text);
     content.setAlignment(Pos.CENTER_LEFT);

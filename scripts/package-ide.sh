@@ -115,9 +115,23 @@ case "$TYPE" in
   deb|rpm) SHORTCUTS=(--linux-shortcut --linux-menu-group "Development;Education;") ;;
 esac
 
+# Installers register .scratch4j, the project ZIP the Online-IDE saves for Studio:
+# a double-click imports it (see SharedProjectFile). App images cannot register it.
+ASSOCIATIONS=()
+if [ "$TYPE" != app-image ]; then
+  cat > "$OUT/scratch4j-file.properties" <<PROPS
+extension=scratch4j
+mime-type=application/x-scratch4j-project
+description=Scratch for Java project
+icon=$ICON
+PROPS
+  ASSOCIATIONS=(--file-associations "$OUT/scratch4j-file.properties")
+fi
+
 # ${SHORTCUTS[@]+...} keeps an empty array safe under set -u in macOS's bash 3.2
 jpackage --verbose --type "$TYPE" \
   ${SHORTCUTS[@]+"${SHORTCUTS[@]}"} \
+  ${ASSOCIATIONS[@]+"${ASSOCIATIONS[@]}"} \
   --name "$NAME" \
   --app-version "$VERSION" \
   --vendor "OpenPatch" \

@@ -1705,8 +1705,13 @@
 }
 .paragraph-box:has-caret, .debug-line {
 }
-.code-area .linked-line {
-  -fx-background-color: rgba(133, 92, 214, 0.16);
+/* .paragraph-text: over the tint of a visual editor's block (.region-line, defined later) */
+.code-area .paragraph-text.linked-line {
+  -fx-background-color: #a371f7, -s-code-bg, rgba(163, 113, 247, 0.32);
+  -fx-background-insets: 0, 0 0 0 3, 0 0 0 3;
+}
+.code-area .paragraph-text.breakpoint-line {
+  -fx-background-color: rgba(229, 72, 77, 0.18);
 }
 .code-area .paragraph-box .debug-line,
 .code-area .debug-line {
@@ -1866,7 +1871,7 @@
 }
 
 .lesson-code {
-  -fx-font-family: "JetBrains Mono", "Consolas", monospace;
+  -fx-font-family: "monospace";
   -fx-font-size: 12px;
 }
 

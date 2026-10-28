@@ -28,11 +28,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.stream.Stream;
 
 /**
- * Picks an image: the project's own files in {@code assets/images} first,
- * then the built-in Kenney images (search + sheet filter). Returns the
+ * Picks an image: the project's own files first (those in {@code assets/}
+ * before the rest), then the built-in Kenney images (search + sheet filter). Returns the
  * reference the library understands: a relative path or a built-in name.
  */
 final class AssetPickerDialog {
@@ -113,6 +112,14 @@ final class AssetPickerDialog {
   }
 
   static Optional<String> pickImage(Path projectRoot, String title) {
+    return pickImage(projectRoot, title, true);
+  }
+
+  /**
+   * Like {@link #pickImage(Path, String)}; without {@code builtins} only the
+   * project's own images (a sprite sheet to cut: no built-in image is one).
+   */
+  static Optional<String> pickImage(Path projectRoot, String title, boolean builtins) {
     Dialog<String> dialog = new Dialog<>();
     dialog.setTitle(title);
     Theme.style(dialog);
@@ -145,7 +152,14 @@ final class AssetPickerDialog {
               selection, dialog, true));
         }
       }
-      for (BuiltinImage image : BuiltinAssetIndex.get().images()) {
+      if (grid.getChildren().isEmpty() && !builtins) {
+        Label none = new Label(I18n.t("picker.noProjectImages"));
+        none.getStyleClass().add("text-muted");
+        none.setWrapText(true);
+        grid.getChildren().add(none);
+      }
+      for (BuiltinImage image : builtins ? BuiltinAssetIndex.get().images()
+          : List.<BuiltinImage>of()) {
         if (grid.getChildren().size() >= MAX_TILES) {
           break;
         }
@@ -166,6 +180,10 @@ final class AssetPickerDialog {
     scroll.setPrefSize(720, 460);
     Label credits = new Label(I18n.t("library.credits"));
     credits.getStyleClass().add("text-muted");
+    sheets.setVisible(builtins);
+    sheets.setManaged(builtins);
+    credits.setVisible(builtins);
+    credits.setManaged(builtins);
     HBox top = new HBox(8, search, sheets,
         createButton(projectRoot, ProjectAssetCreator.Kind.IMAGE, dialog));
     top.setAlignment(Pos.CENTER_LEFT);
@@ -201,45 +219,30 @@ final class AssetPickerDialog {
     return tile;
   }
 
+  /** Images the picker (and the library) can load. */
+  private static final java.util.Set<String> IMAGES = java.util.Set.of("png", "jpg", "jpeg",
+      "gif");
+  private static final java.util.Set<String> SOUNDS = java.util.Set.of("wav", "ogg", "mp3",
+      "aiff", "aif", "au");
+
   private static List<String> projectImages(Path root) {
-    List<String> files = new ArrayList<>();
-    if (root == null) {
-      return files;
-    }
-    Path dir = root.resolve("assets/images");
-    if (!Files.isDirectory(dir)) {
-      return files;
-    }
-    try (Stream<Path> walk = Files.walk(dir)) {
-      walk.filter(Files::isRegularFile)
-          .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT)
-              .matches(".*\\.(png|jpg|jpeg|gif)$"))
-          .sorted()
-          .forEach(p -> files.add(root.relativize(p).toString().replace('\\', '/')));
-    } catch (IOException ignored) {
-      // unreadable folder: built-ins only
-    }
-    return files;
+    return projectFiles(root, IMAGES);
   }
 
   private static List<String> projectSounds(Path root) {
-    List<String> files = new ArrayList<>();
-    if (root == null) {
-      return files;
+    return projectFiles(root, SOUNDS);
+  }
+
+  /**
+   * The project's files of these types anywhere in the project (not in build
+   * or IDE folders): those in assets/ first, where the IDE puts new ones.
+   */
+  private static List<String> projectFiles(Path root, java.util.Set<String> extensions) {
+    if (root == null || !Files.isDirectory(root)) {
+      return new ArrayList<>();
     }
-    Path dir = root.resolve("assets/sounds");
-    if (!Files.isDirectory(dir)) {
-      return files;
-    }
-    try (Stream<Path> walk = Files.walk(dir)) {
-      walk.filter(Files::isRegularFile)
-          .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT)
-              .matches(".*\\.(wav|ogg|mp3|aiff|aif|au)$"))
-          .sorted()
-          .forEach(p -> files.add(root.relativize(p).toString().replace('\\', '/')));
-    } catch (IOException ignored) {
-      // built-in sounds are still available
-    }
+    List<String> files = new ArrayList<>(ProjectFileIndex.freshFiles(root, extensions));
+    files.sort(java.util.Comparator.comparing((String f) -> !f.startsWith("assets/")));
     return files;
   }
 }

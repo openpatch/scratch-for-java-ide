@@ -49,7 +49,19 @@ final class ProjectFileIndex {
   static List<String> files(Path root, Set<String> extensions) {
     ProjectFileIndex index = BY_ROOT.computeIfAbsent(root.toAbsolutePath().normalize(),
         ProjectFileIndex::new);
-    List<String> all = index.paths();
+    return withExtension(index.paths(), extensions);
+  }
+
+  /**
+   * Like {@link #files}, but walked now: a picker lists a file dropped into
+   * the project a moment ago.
+   */
+  static List<String> freshFiles(Path root, Set<String> extensions) {
+    return withExtension(new ProjectFileIndex(root.toAbsolutePath().normalize()).walk(),
+        extensions);
+  }
+
+  private static List<String> withExtension(List<String> all, Set<String> extensions) {
     List<String> found = new ArrayList<>();
     for (String path : all) {
       int dot = path.lastIndexOf('.');

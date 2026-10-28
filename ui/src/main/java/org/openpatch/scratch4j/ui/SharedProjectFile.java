@@ -7,15 +7,22 @@ import java.util.Locale;
 /**
  * A project someone handed over as one file: a project ZIP or an Online-IDE
  * workspace JSON. Project > Import project (ZIP / workspace JSON) imports it, and so
- * does starting Studio with the file as its first argument.
+ * does starting Studio with the file as its first argument. A {@code .scratch4j} file
+ * is a project ZIP under the extension the installers register, so that the Online-IDE's
+ * "Open in Scratch for Java Studio" opens with a double-click.
  */
 final class SharedProjectFile {
 
   private SharedProjectFile() {}
 
-  /** True for an existing {@code .zip} or {@code .json} file. */
+  /** The extension the installers associate with Studio. */
+  static final String EXTENSION = ".scratch4j";
+
+  /** True for an existing {@code .zip}, {@code .scratch4j} or {@code .json} file. */
   static boolean accepts(Path file) {
-    return Files.isRegularFile(file) && (isJson(file) || name(file).endsWith(".zip"));
+    String name = name(file);
+    return Files.isRegularFile(file)
+        && (isJson(file) || name.endsWith(".zip") || name.endsWith(EXTENSION));
   }
 
   /** True when {@code file} is a workspace JSON rather than a project ZIP. */

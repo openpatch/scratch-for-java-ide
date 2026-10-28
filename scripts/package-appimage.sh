@@ -20,10 +20,23 @@ cat > "$DIR/scratch4j-studio.desktop" <<'DESKTOP'
 [Desktop Entry]
 Type=Application
 Name=Scratch for Java Studio
-Exec=AppRun
+Exec=AppRun %f
 Icon=scratch4j-studio
 Categories=Development;Education;
+MimeType=application/x-scratch4j-project;
 DESKTOP
+# the .scratch4j type, for desktops that integrate AppImages (appimaged, AppImageLauncher)
+mkdir -p "$DIR/usr/share/mime/packages"
+cat > "$DIR/usr/share/mime/packages/scratch4j-studio.xml" <<'MIME'
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-scratch4j-project">
+    <comment>Scratch for Java project</comment>
+    <sub-class-of type="application/zip"/>
+    <glob pattern="*.scratch4j"/>
+  </mime-type>
+</mime-info>
+MIME
 cp ui/src/main/resources/org/openpatch/scratch4j/ui/branding/app-icon.png \
   "$DIR/scratch4j-studio.png"
 TOOL="$OUT/appimagetool"
