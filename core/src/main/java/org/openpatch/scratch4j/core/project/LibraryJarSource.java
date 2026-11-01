@@ -25,7 +25,7 @@ public final class LibraryJarSource {
    * Scratch for Java 7: projects switch to it as a whole (decision log). Until it is released,
    * point {@code SCRATCH4J_ALL_JAR} at a locally built {@code all/target/scratch-*-all.jar}.
    */
-  public static final String SCRATCH_VERSION = "7.1.0";
+  public static final String SCRATCH_VERSION = "7.1.1";
 
   private static final String RELEASE_URL =
       "https://github.com/openpatch/scratch-for-java/releases/download/v"
