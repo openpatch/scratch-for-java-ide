@@ -220,6 +220,32 @@ final class Prefs {
     NODE.putBoolean("editor.autoPairs", on);
   }
 
+  /**
+   * The code can scroll on for half the view past its first and last line,
+   * so both can stand in the middle of the view.
+   */
+  static boolean scrollPastEnd() {
+    return NODE.getBoolean("editor.scrollPastEnd", false);
+  }
+
+  static void scrollPastEnd(boolean on) {
+    NODE.putBoolean("editor.scrollPastEnd", on);
+  }
+
+  /** The height of a code line as a multiple of the font size (1 = the normal, tight height). */
+  static double codeLineHeight() {
+    try {
+      double value = Double.parseDouble(NODE.get("editor.lineHeight", "1"));
+      return value >= 1 && value <= 2 ? value : 1;
+    } catch (NumberFormatException e) {
+      return 1;
+    }
+  }
+
+  static void codeLineHeight(double factor) {
+    NODE.put("editor.lineHeight", String.valueOf(factor));
+  }
+
   /** The Monaspace family code is shown in (bundled, see {@code fonts/}). */
   enum CodeFont {
     NEON, ARGON, XENON, RADON, KRYPTON;

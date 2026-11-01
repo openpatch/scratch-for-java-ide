@@ -152,10 +152,33 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   static final javafx.beans.property.ObjectProperty<Prefs.Completion> COMPLETION =
       new javafx.beans.property.SimpleObjectProperty<>(Prefs.completion());
 
+  /**
+   * The code can scroll on for half the view past its first and last line
+   * (Settings), persisted. Off by default: the editor then stops at both
+   * ends, as a normal code editor does.
+   */
+  static final BooleanProperty SCROLL_PAST_END = new SimpleBooleanProperty(Prefs.scrollPastEnd());
+
+  /** The height of a code line as a multiple of the font size (Settings), persisted. */
+  static final javafx.beans.property.DoubleProperty LINE_HEIGHT =
+      new javafx.beans.property.SimpleDoubleProperty(Prefs.codeLineHeight());
+
+  /** The open editors: a Settings change restyles their lines. */
+  private static final List<CodeEditor> OPEN =
+      new java.util.concurrent.CopyOnWriteArrayList<>();
+
   static {
     FONT_SIZE.addListener((o, old, size) -> Prefs.editorFontSize(size.intValue()));
     AUTO_PAIRS.addListener((o, old, on) -> Prefs.autoPairs(on));
     COMPLETION.addListener((o, old, mode) -> Prefs.completion(mode));
+    SCROLL_PAST_END.addListener((o, old, on) -> Prefs.scrollPastEnd(on));
+    LINE_HEIGHT.addListener((o, old, factor) -> Prefs.codeLineHeight(factor.doubleValue()));
+    // a new line height or overscroll (also: font size) restyles every open editor's lines
+    javafx.beans.value.ChangeListener<Object> restyle = (o, old, value) ->
+        OPEN.forEach(CodeEditor::updateOverscroll);
+    SCROLL_PAST_END.addListener(restyle);
+    LINE_HEIGHT.addListener(restyle);
+    FONT_SIZE.addListener(restyle);
   }
 
   /**
@@ -254,6 +277,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
 
     installKeys();
     installOverscroll();
+    OPEN.add(this);
     installHover();
     installCompletionPopup();
     installBlockDrop();
@@ -1100,6 +1124,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   /** Queued analyses must not update a tab after it has been closed. */
   void close() {
     closed = true;
+    OPEN.remove(this);
     regionRequest++;
     nextRegions.set(null);
     semanticRequest++;
@@ -1298,20 +1323,21 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     };
     return line -> {
       Node graphic = gutter.apply(line);
-      // the line's box is the gutter's parent: the first and last line get the room to scroll
+      // the line's box is the gutter's parent: every line gets the room its height asks
+      // for, the first and last also the room to scroll
       graphic.getProperties().put(GUTTER_LINE, line);
       graphic.parentProperty().addListener((o, old, box) -> {
-        if (box instanceof Region region) overscroll(region, graphic, line);
+        if (box instanceof Region region) styleLine(region, graphic, line);
       });
       // the gutter's colour beside the room follows the gutter's width
       graphic.layoutBoundsProperty().addListener((o, old, bounds) -> {
-        if (graphic.getParent() instanceof Region region) overscroll(region, graphic, line);
+        if (graphic.getParent() instanceof Region region) styleLine(region, graphic, line);
       });
       return graphic;
     };
   }
 
-  // --- scrolling past the first and last line ----------------------------------
+  // --- line height, scrolling past the first and last line ---------------------
 
   /** The key of the line a gutter stands beside, in its properties. */
   private static final String GUTTER_LINE = "gutter-line";
@@ -1319,7 +1345,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   private double overscroll;
   private int overscrollLines = -1;
 
-  /** Gives the first and last line the room to scroll to the middle of the view. */
+  /** Gives the lines the room their line height asks for, the first and last the room to scroll. */
   private void installOverscroll() {
     area.heightProperty().addListener((o, old, height) -> updateOverscroll());
     area.getParagraphs().addListener((javafx.collections.ListChangeListener<Object>) c -> {
@@ -1328,35 +1354,55 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   }
 
   private void updateOverscroll() {
-    overscroll = Math.floor(area.getHeight() / 2);
+    overscroll = SCROLL_PAST_END.get() ? Math.floor(area.getHeight() / 2) : 0;
     overscrollLines = area.getParagraphs().size();
     for (Node box : area.lookupAll(".paragraph-box")) {
       if (!(box instanceof Region region)) continue;
       for (Node child : region.getChildrenUnmodifiable()) {
         if (child.getProperties().get(GUTTER_LINE) instanceof Integer line) {
-          overscroll(region, child, line);
+          styleLine(region, child, line);
         }
       }
     }
   }
 
-  /** The line's box gets padding (first or last line), with the gutter's colour beside it. */
-  private void overscroll(Region box, Node graphic, int line) {
-    double top = line == 0 ? overscroll : 0;
-    double bottom = line == area.getParagraphs().size() - 1 ? overscroll : 0;
+  /**
+   * The line's box gets padding: the extra room its line height asks for on
+   * every line, the room to scroll on the first and last — with the gutter's
+   * colour beside that room, as the box outgrows the area's background.
+   */
+  private void styleLine(Region box, Node graphic, int line) {
+    double extra = (LINE_HEIGHT.get() - 1) * FONT_SIZE.get();
+    double scrollTop = line == 0 ? overscroll : 0;
+    double scrollBottom = line == area.getParagraphs().size() - 1 ? overscroll : 0;
+    double top = scrollTop + extra / 2;
+    double bottom = scrollBottom + extra / 2;
     if (top == 0 && bottom == 0) {
       box.setStyle(null);
       return;
     }
     // inline, as stylesheets win over setPadding (RichTextFX's -0.5 kept, as on every line);
-    // the gutter's colour runs on beside the room
-    box.setStyle("-fx-padding: " + (top - 0.5) + " 0 " + (bottom - 0.5) + " 0;"
-        + " -fx-background-color: -s-code-gutter, -s-code-bg;"
-        + " -fx-background-insets: 0, 0 0 0 " + graphic.getLayoutBounds().getWidth() + ";");
+    // the gutter's colour runs on beside the room to scroll
+    String style = "-fx-padding: " + (top - 0.5) + " 0 " + (bottom - 0.5) + " 0;";
+    if (scrollTop > 0 || scrollBottom > 0) {
+      style += " -fx-background-color: -s-code-gutter, -s-code-bg;"
+          + " -fx-background-insets: 0, 0 0 0 " + graphic.getLayoutBounds().getWidth() + ";";
+    }
+    box.setStyle(style);
   }
 
-  /** Where a shown line is on screen: without the room the first and last line get. */
+  /** Where a shown line is on screen, at the row a line takes (see {@link #rowHeight()}). */
   private javafx.geometry.Bounds visibleLineBounds(int visible) {
+    return visibleLineBounds(visible, rowHeight());
+  }
+
+  /**
+   * Where a shown line is on screen: without the room the first and last line
+   * get to scroll on. They are measured on their text and grown to the row
+   * the lines between take — the line height's room reaches around the text
+   * on them as on every line, so all lines measure the same row.
+   */
+  private javafx.geometry.Bounds visibleLineBounds(int visible, double row) {
     int line = area.visibleParToAllParIndex(visible);
     if (overscroll > 0 && (line == 0 || line == area.getParagraphs().size() - 1)) {
       // measured on the line's text: the area's bounds are cut off where the view ends
@@ -1368,7 +1414,14 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
           if (Integer.valueOf(line).equals(child.getProperties().get(GUTTER_LINE))) found = true;
           if (child.getStyleClass().contains("paragraph-text")) text = child;
         }
-        if (found && text != null) return text.localToScreen(text.getBoundsInLocal());
+        if (found && text == null) break;
+        if (found) {
+          javafx.geometry.Bounds bounds = text.localToScreen(text.getBoundsInLocal());
+          // a line that wrapped into several grows past the row, as it does everywhere
+          double pad = (row - bounds.getHeight()) / 2;
+          return pad <= 0 ? bounds : new javafx.geometry.BoundingBox(bounds.getMinX(),
+              bounds.getMinY() - pad, bounds.getWidth(), bounds.getHeight() + 2 * pad);
+        }
       }
     }
     return area.getVisibleParagraphBoundsOnScreen(visible);
@@ -2066,7 +2119,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     LineHit below = null;
     for (int i = 0; i < visible; i++) {
       int line = area.visibleParToAllParIndex(i);
-      javafx.geometry.Bounds bounds = visibleLineBounds(i);
+      javafx.geometry.Bounds bounds = visibleLineBounds(i, row);
       if (i == 0 && screenY < bounds.getMinY()) return new LineHit(line, true, false);
       if (screenY < bounds.getMaxY()) {
         double gap = line == dropGapLine ? openGap(bounds, row) : 0;
@@ -2080,14 +2133,20 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     return below;
   }
 
-  /** The height of one line on screen, measured on the lines shown. */
+  /**
+   * The height of one line on screen, measured on the lines shown. The first
+   * and last of them can be cut off by the view's edge, and with them their
+   * measured height: only the lines between are surely whole (a short row
+   * would open too small a gap for a dropped block).
+   */
   private double rowHeight() {
+    int visible = area.getVisibleParagraphs().size();
     double row = Double.MAX_VALUE;
-    for (int i = 0; i < area.getVisibleParagraphs().size(); i++) {
+    for (int i = 1; i < visible - 1; i++) {
       if (area.visibleParToAllParIndex(i) == dropGapLine) continue;
-      row = Math.min(row, visibleLineBounds(i).getHeight());
+      row = Math.min(row, area.getVisibleParagraphBoundsOnScreen(i).getHeight());
     }
-    if (row == Double.MAX_VALUE) return Math.ceil(FONT_SIZE.get() * 1.2);
+    if (row == Double.MAX_VALUE) return Math.ceil(FONT_SIZE.get() * (LINE_HEIGHT.get() + 0.2));
     return Math.round(row * 100) / 100.0;
   }
 
@@ -2101,12 +2160,12 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   private double topWithoutGap(int line, double row) {
     var visible = area.allParToVisibleParIndex(line);
     if (visible.isPresent()) {
-      return visibleLineBounds(visible.get()).getMinY() - gapAbove(line, row);
+      return visibleLineBounds(visible.get(), row).getMinY() - gapAbove(line, row);
     }
     var previous = line > 0 ? area.allParToVisibleParIndex(line - 1)
         : java.util.Optional.<Integer>empty();
     if (previous.isPresent()) {
-      return visibleLineBounds(previous.get()).getMinY()
+      return visibleLineBounds(previous.get(), row).getMinY()
           - gapAbove(line - 1, row) + row;
     }
     return Double.NaN;
@@ -2116,7 +2175,7 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   private double gapAbove(int line, double row) {
     if (dropGapLine < 0 || dropGapLine >= line) return 0;
     return area.allParToVisibleParIndex(dropGapLine)
-        .map(i -> openGap(visibleLineBounds(i), row))
+        .map(i -> openGap(visibleLineBounds(i, row), row))
         .orElse(0.0);
   }
 

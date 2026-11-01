@@ -395,4 +395,82 @@ class BlockDropIT {
       assertThat(code.lookup(".block-drag-chip")).isNull();
     });
   }
+
+  /**
+   * A taller line height (Settings) gives every line more room: the preview
+   * measures the row a line takes with it, not the tight row of a line height
+   * of 1 — also with the code scrolled on past its first line and with a view
+   * that cuts the lines at its edges.
+   */
+  @Test
+  void thePreviewKeepsTheRowOfTallerLinesWhereverTheViewLooks() throws Exception {
+    StringBuilder tall = new StringBuilder("public class Cat extends Sprite {\n");
+    tall.append("  public void run() {\n    this.move(1);\n    this.move(2);\n  }\n");
+    for (int i = 0; i < 60; i++) tall.append("  // line ").append(i).append('\n');
+    tall.append("}\n");
+    List<CodeEditor> editors = new ArrayList<>();
+    try {
+      // the method at the top: the first line and a cut one are both on screen
+      editors.add(previewAtTallerLines(tall.toString(), 3, false));
+      // the method between the comments: the view scrolled to it, its edges cut lines
+      StringBuilder middle = new StringBuilder("public class Cat extends Sprite {\n");
+      for (int i = 0; i < 30; i++) middle.append("  // line ").append(i).append('\n');
+      middle.append("  public void run() {\n    this.move(1);\n    this.move(2);\n  }\n");
+      for (int i = 30; i < 60; i++) middle.append("  // line ").append(i).append('\n');
+      middle.append("}\n");
+      editors.add(previewAtTallerLines(middle.toString(), 32, true));
+    } finally {
+      LayoutIT.onFx(() -> {
+        for (CodeEditor code : editors) {
+          ((Stage) code.getScene().getWindow()).hide();
+        }
+        CodeEditor.SCROLL_PAST_END.set(false);
+        CodeEditor.LINE_HEIGHT.set(1);
+      });
+    }
+  }
+
+  /**
+   * Opens the editor on {@code text}, scrolls to {@code line} if asked and
+   * previews a block over it, at the settings of the test above.
+   */
+  private CodeEditor previewAtTallerLines(String text, int line, boolean scrollTo)
+      throws Exception {
+    LayoutIT.startFx();
+    AtomicReference<CodeEditor> editor = new AtomicReference<>();
+    LayoutIT.onFx(() -> {
+      CodeEditor code = new CodeEditor(tmp.resolve("Cat.java"), text, ApiIndex.load(), () -> tmp);
+      Scene scene = new Scene(code, 760, 520);
+      Theme.apply(scene);
+      Stage stage = new Stage();
+      stage.setScene(scene);
+      stage.show();
+      editor.set(code);
+    });
+    LayoutIT.settle();
+    CodeEditor code = editor.get();
+    LayoutIT.onFx(() -> {
+      CodeEditor.SCROLL_PAST_END.set(true);
+      CodeEditor.LINE_HEIGHT.set(1.5);
+      if (scrollTo) code.area().showParagraphAtCenter(line);
+    });
+    LayoutIT.settle();
+    LayoutIT.onFx(() -> {
+      Bounds move2 = lineBounds(code, line);
+      // the view looks straight at the method: not a line height of 1 anywhere
+      var target = code.previewBlock(CALL, "cat-motion", move2.getMinX() + 240,
+          move2.getMinY() + move2.getHeight() * 0.25);
+      assertThat(target.valid()).isTrue();
+    });
+    LayoutIT.settle();
+    LayoutIT.onFx(() -> {
+      double row = lineBounds(code, line + 1).getHeight();
+      Label ghost = (Label) code.dropLayer().lookup(".drop-ghost-code");
+      // the preview's lines are as tall as the row a line takes now
+      assertThat(ghost.getHeight()).isCloseTo(row, within(1.0));
+      // the line above opened up by that row, not by the tight one
+      assertThat(lineBounds(code, line - 1).getHeight() - row).isCloseTo(row, within(1.0));
+    });
+    return code;
+  }
 }

@@ -144,10 +144,23 @@ final class SettingsDialog {
     completion.setId("settings-completion");
     completion.valueProperty().addListener((o, old, mode) -> CodeEditor.COMPLETION.set(mode));
 
+    CheckBox pastEnd = new CheckBox(I18n.t("settings.scrollpastend"));
+    pastEnd.setId("settings-scroll-past-end");
+    pastEnd.setSelected(CodeEditor.SCROLL_PAST_END.get());
+    pastEnd.setOnAction(e -> CodeEditor.SCROLL_PAST_END.set(pastEnd.isSelected()));
+
+    Spinner<Double> lineHeight = new Spinner<>(1.0, 2.0, CodeEditor.LINE_HEIGHT.get(), 0.1);
+    lineHeight.setId("settings-line-height");
+    lineHeight.setEditable(true);
+    lineHeight.setPrefWidth(90);
+    lineHeight.valueProperty().addListener((o, old, factor) -> CodeEditor.LINE_HEIGHT.set(factor));
+
     GridPane grid = grid();
     grid.addRow(0, new Label(I18n.t("settings.blocks")), blocks);
     grid.addRow(1, new Label(I18n.t("settings.completion")), completion);
     grid.addRow(2, new Label(""), pairs);
+    grid.addRow(3, new Label(I18n.t("settings.lineheight")), lineHeight);
+    grid.addRow(4, new Label(""), pastEnd);
     return grid;
   }
 
