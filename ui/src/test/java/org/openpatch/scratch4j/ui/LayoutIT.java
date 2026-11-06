@@ -30,6 +30,8 @@ class LayoutIT {
   Path tmp;
 
   static void startFx() {
+    // the apps the tests start write no lag.log into the user's home
+    System.setProperty("scratch4j.noLagLog", "true");
     StudioApp.prepareGraphics();
     try {
       Platform.startup(() -> { });

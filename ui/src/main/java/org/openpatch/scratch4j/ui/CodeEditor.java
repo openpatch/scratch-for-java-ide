@@ -882,7 +882,93 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
     if (text.isEmpty()) {
       return;
     }
-    area.setStyleSpans(0, spans);
+    applyChangedStyles(spans);
+  }
+
+  /**
+   * Sets the styles only on the lines whose styles changed. Styling a line
+   * rebuilds its text and gutter on screen, so styling the whole file after
+   * every key made typing slow on slow computers.
+   */
+  private void applyChangedStyles(StyleSpans<Collection<String>> spans) {
+    var paragraphs = area.getParagraphs();
+    var wanted = spans.iterator();
+    org.fxmisc.richtext.model.StyleSpan<Collection<String>> span = null;
+    int spanLeft = 0;
+    int pos = 0;
+    int runStart = -1;
+    int runEnd = -1;
+    for (int p = 0; p < paragraphs.size(); p++) {
+      int length = paragraphs.get(p).length();
+      // the wanted spans of this line, without its line break
+      List<Collection<String>> styles = new ArrayList<>();
+      List<Integer> lengths = new ArrayList<>();
+      int need = length;
+      while (need > 0) {
+        if (spanLeft == 0) {
+          if (!wanted.hasNext()) break;
+          span = wanted.next();
+          spanLeft = span.getLength();
+          continue;
+        }
+        int take = Math.min(need, spanLeft);
+        addSpan(styles, lengths, span.getStyle(), take);
+        need -= take;
+        spanLeft -= take;
+      }
+      // the line break
+      int skip = p < paragraphs.size() - 1 ? 1 : 0;
+      while (skip > 0) {
+        if (spanLeft == 0) {
+          if (!wanted.hasNext()) break;
+          span = wanted.next();
+          spanLeft = span.getLength();
+          continue;
+        }
+        spanLeft--;
+        skip--;
+      }
+      boolean same = sameStyles(paragraphs.get(p).getStyleSpans(), styles, lengths);
+      if (!same) {
+        if (runStart < 0) runStart = pos;
+        runEnd = pos + length;
+      } else if (runStart >= 0) {
+        area.setStyleSpans(runStart, spans.subView(runStart, runEnd));
+        runStart = -1;
+      }
+      pos += length + 1;
+    }
+    if (runStart >= 0) area.setStyleSpans(runStart, spans.subView(runStart, runEnd));
+  }
+
+  private static void addSpan(List<Collection<String>> styles, List<Integer> lengths,
+      Collection<String> style, int length) {
+    int last = styles.size() - 1;
+    if (last >= 0 && sameStyle(styles.get(last), style)) {
+      lengths.set(last, lengths.get(last) + length);
+    } else {
+      styles.add(style);
+      lengths.add(length);
+    }
+  }
+
+  private static boolean sameStyles(StyleSpans<Collection<String>> have,
+      List<Collection<String>> styles, List<Integer> lengths) {
+    List<Collection<String>> haveStyles = new ArrayList<>();
+    List<Integer> haveLengths = new ArrayList<>();
+    for (var span : have) {
+      if (span.getLength() > 0) addSpan(haveStyles, haveLengths, span.getStyle(), span.getLength());
+    }
+    if (haveStyles.size() != styles.size() || !haveLengths.equals(lengths)) return false;
+    for (int i = 0; i < styles.size(); i++) {
+      if (!sameStyle(haveStyles.get(i), styles.get(i))) return false;
+    }
+    return true;
+  }
+
+  /** The same style classes, in any order (a list or a set). */
+  private static boolean sameStyle(Collection<String> a, Collection<String> b) {
+    return a.size() == b.size() && a.containsAll(b);
   }
 
   /** Character range a diagnostic underlines: the token at its column, or the line. */
@@ -1208,9 +1294,40 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
   void setHints(Map<Integer, Boolean> values) { hints.clear(); hints.putAll(values); }
   void setOnHint(java.util.function.IntConsumer action) { onHint = action; }
 
+  /**
+   * How the gutters on screen catch up with the hints, fixes, blocks and
+   * marks. One listener each for all lines: a gutter is built again for every
+   * line whose number or style changes (Enter rebuilds all lines below it), and
+   * listeners added per gutter were never removed — they piled up while typing,
+   * and every later change ran all of them.
+   */
+  private final java.util.Set<Runnable> liveGutters = new java.util.LinkedHashSet<>();
+  /** Gutters built (tests: an edit rebuilds only the lines it changed). */
+  private int gutterBuilds;
+
+  int gutterBuilds() {
+    return gutterBuilds;
+  }
+
+  int liveGutterCount() {
+    return liveGutters.size();
+  }
+
+  private void refreshGutters() {
+    for (Runnable refresh : List.copyOf(liveGutters)) refresh.run();
+  }
+
   private IntFunction<Node> gutter() {
     IntFunction<Node> numbers = LineNumberFactory.get(area);
+    hints.addListener((javafx.collections.MapChangeListener<Integer, Boolean>) c -> refreshGutters());
+    fixes.addListener((javafx.collections.MapChangeListener<Integer, String>) c -> refreshGutters());
+    regionNotes.addListener((javafx.collections.MapChangeListener<Integer, String>) c ->
+        refreshGutters());
+    errorLines.addListener((javafx.collections.SetChangeListener<Integer>) c -> refreshGutters());
+    warningLines.addListener((javafx.collections.SetChangeListener<Integer>) c -> refreshGutters());
+    breakpoints.addListener((javafx.collections.SetChangeListener<Integer>) c -> refreshGutters());
     IntFunction<Node> gutter = line -> {
+      gutterBuilds++;
       Node number = numbers.apply(line);
       Label hint = new Label(null, Icons.of("fth-help-circle", 12));
       hint.getStyleClass().add("gutter-hint");
@@ -1222,9 +1339,6 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
         hint.getStyleClass().remove("hint-nudge");
         if (Boolean.TRUE.equals(hints.get(line + 1))) hint.getStyleClass().add("hint-nudge");
       };
-      updateHint.run();
-      hints.addListener((javafx.collections.MapChangeListener<Integer, Boolean>) c -> updateHint.run());
-      fixes.addListener((javafx.collections.MapChangeListener<Integer, String>) c -> updateHint.run());
       hint.setOnMouseClicked(e -> {
         if (hints.containsKey(line + 1)) { onHint.accept(line + 1); e.consume(); }
       });
@@ -1234,11 +1348,13 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       Runnable updateFix = () -> {
         String label = fixes.get(line + 1);
         bulb.setVisible(label != null);
-        bulb.setTooltip(label == null ? null : new Tooltip(label));
+        Tooltip shown = bulb.getTooltip();
+        if (label == null) {
+          bulb.setTooltip(null);
+        } else if (shown == null || !label.equals(shown.getText())) {
+          bulb.setTooltip(new Tooltip(label));
+        }
       };
-      updateFix.run();
-      fixes.addListener((javafx.collections.MapChangeListener<Integer, String>) c ->
-          updateFix.run());
       bulb.setOnMouseClicked(e -> {
         if (fixes.containsKey(line + 1)) {
           onFix.accept(line + 1);
@@ -1253,17 +1369,21 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
       block.setPrefWidth(14);
       block.setMaxWidth(14);
       block.setAlignment(Pos.CENTER);
+      String[] blockShown = {null, null};
       Runnable updateBlock = () -> {
         String note = regionNotes.get(line);
-        block.setGraphic(note == null ? null : Icons.of(
-            "region-own".equals(regionStyles.get(line)) ? "fth-code" : "fth-layout", 12));
-        block.setTooltip(note == null ? null : new Tooltip(note));
+        String icon = note == null ? null
+            : "region-own".equals(regionStyles.get(line)) ? "fth-code" : "fth-layout";
+        if (!java.util.Objects.equals(note, blockShown[0])
+            || !java.util.Objects.equals(icon, blockShown[1])) {
+          blockShown[0] = note;
+          blockShown[1] = icon;
+          block.setGraphic(icon == null ? null : Icons.of(icon, 12));
+          block.setTooltip(note == null ? null : new Tooltip(note));
+        }
+        // only a file with the visual editors' blocks gives them room
+        block.setManaged(!regionNotes.isEmpty());
       };
-      updateBlock.run();
-      regionNotes.addListener((javafx.collections.MapChangeListener<Integer, String>) c ->
-          updateBlock.run());
-      // only a file with the visual editors' blocks gives them room
-      block.managedProperty().bind(javafx.beans.binding.Bindings.isNotEmpty(regionNotes));
       Region marker = new Region();
       marker.getStyleClass().add("gutter-marker");
       Runnable update = () -> {
@@ -1276,11 +1396,21 @@ final class CodeEditor extends BorderPane implements BlockPalette.DragTarget {
           marker.getStyleClass().add("warning");
         }
       };
-      update.run();
-      errorLines.addListener((javafx.collections.SetChangeListener<Integer>) c -> update.run());
-      warningLines.addListener(
-          (javafx.collections.SetChangeListener<Integer>) c -> update.run());
-      breakpoints.addListener((javafx.collections.SetChangeListener<Integer>) c -> update.run());
+      Runnable refresh = () -> {
+        updateHint.run();
+        updateFix.run();
+        updateBlock.run();
+        update.run();
+      };
+      refresh.run();
+      // only a gutter on screen follows the changes; one taken off is done with
+      number.sceneProperty().addListener((o, old, scene) -> {
+        if (scene == null) {
+          liveGutters.remove(refresh);
+        } else if (liveGutters.add(refresh)) {
+          refresh.run();
+        }
+      });
       // a preview of the image, sound or map the line uses
       Node preview = line < area.getParagraphs().size()
           ? CodePreviews.forLine(area.getParagraph(line).getText(), projectRoot.get(),

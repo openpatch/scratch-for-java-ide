@@ -244,6 +244,7 @@ public class StudioApp extends javafx.application.Application {
   @Override
   public void start(Stage stage) {
     this.stage = stage;
+    LagRecorder.start(); // freezes of the window go to lag.log
     windowChrome = new WindowChrome(stage);
     org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(
         Prefs.compatibilityGraphics());
@@ -3526,6 +3527,8 @@ public class StudioApp extends javafx.application.Application {
       });
     }, "scratch4j-check");
     worker.setDaemon(true);
+    // the compile gives way to the window on a slow computer (Windows honours this)
+    worker.setPriority(Thread.MIN_PRIORITY);
     worker.start();
   }
 
