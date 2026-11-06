@@ -1114,6 +1114,18 @@ final class StageRenderer {
    * preview with the designer's sprites on it, else what its blocks describe.
    */
   Image thumbnail(String stageClass, double width) {
+    Canvas canvas = thumbnailCanvas(stageClass, width);
+    SnapshotParameters params = new SnapshotParameters();
+    params.setFill(Color.TRANSPARENT);
+    return canvas.snapshot(params, null);
+  }
+
+  /**
+   * The thumbnail drawn but not yet snapshotted. It reads the stage's code
+   * and pictures, so it may run off the FX thread (a canvas not on screen can
+   * be drawn anywhere); only {@link Canvas#snapshot} needs the FX thread.
+   */
+  Canvas thumbnailCanvas(String stageClass, double width) {
     StageModel model;
     var designerPreview = preview;
     try {
@@ -1132,9 +1144,7 @@ final class StageRenderer {
       double scale = width / model.width();
       Canvas canvas = new Canvas(width, model.height() * scale);
       draw(canvas.getGraphicsContext2D(), model, scale, false);
-      SnapshotParameters params = new SnapshotParameters();
-      params.setFill(Color.TRANSPARENT);
-      return canvas.snapshot(params, null);
+      return canvas;
     } finally {
       setPreview(designerPreview);
     }

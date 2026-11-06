@@ -199,12 +199,47 @@ final class SettingsDialog {
     chooseHandIn.setDisable(locked);
     clearHandIn.setDisable(locked);
 
+    // compiled classes: off a slow network drive, on the computer's own disk
+    Path defaultBuild = org.openpatch.scratch4j.core.project.BuildFolder.defaultBase();
+    TextField build = folderField(Prefs.buildFolder());
+    build.setId("settings-build-folder");
+    build.setPromptText(defaultBuild != null ? defaultBuild.toString()
+        : I18n.t("settings.build.inproject"));
+    Button chooseBuild = new Button(I18n.t("settings.choose"));
+    Button clearBuild = new Button(I18n.t("settings.clear"));
+    chooseBuild.setOnAction(e -> {
+      File chosen = chooseFolder(dialog, I18n.t("settings.build.folder"),
+          build.getText().isBlank() ? defaultBuild : Path.of(build.getText()));
+      if (chosen == null) return;
+      Prefs.buildFolder(chosen.getAbsolutePath());
+      build.setText(chosen.getAbsolutePath());
+    });
+    clearBuild.setOnAction(e -> {
+      Prefs.buildFolder("");
+      build.clear();
+    });
+
+    // how often typing keeps a version to go back to (each one is written to the project)
+    List<Integer> choices = new java.util.ArrayList<>(List.of(0, 1, 2, 5, 10));
+    if (!choices.contains(Prefs.historyMinutes())) choices.add(Prefs.historyMinutes());
+    ComboBox<Integer> history = combo(choices, Prefs.historyMinutes(),
+        m -> m == 0 ? I18n.t("settings.history.every") : I18n.t("settings.history.minutes", m));
+    history.setId("settings-history");
+    history.valueProperty().addListener((o, old, minutes) -> {
+      if (minutes != null) Prefs.historyMinutes(minutes);
+    });
+
     GridPane grid = grid();
     grid.addRow(0, new Label(I18n.t("settings.name")), name);
     grid.addRow(1, new Label(I18n.t("settings.projects")), row(projects, chooseProjects));
     grid.addRow(2, new Label(I18n.t("settings.handin.folder")),
         row(handIn, chooseHandIn, clearHandIn));
     if (locked) grid.add(hint(I18n.t("settings.handin.locked")), 1, 3);
+    grid.addRow(4, new Label(I18n.t("settings.build.folder")),
+        row(build, chooseBuild, clearBuild));
+    grid.add(hint(I18n.t("settings.build.hint")), 1, 5);
+    grid.addRow(6, new Label(I18n.t("settings.history")), history);
+    grid.add(hint(I18n.t("settings.history.hint")), 1, 7);
     return grid;
   }
 

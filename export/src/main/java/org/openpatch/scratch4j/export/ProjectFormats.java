@@ -35,7 +35,7 @@ public final class ProjectFormats {
     if (startStage.isEmpty()) {
       throw new IOException("The project has no Stage class to start");
     }
-    Path buildDir = project.root().resolve(".scratch4j/build/jar");
+    Path buildDir = org.openpatch.scratch4j.core.project.BuildFolder.of(project.root()).resolve("jar");
     Path classes = buildDir.resolve("classes");
     List<Path> sources = new ArrayList<>(project.javaSources());
     Path launcher = buildDir.resolve("launcher/Scratch4JLauncher.java");

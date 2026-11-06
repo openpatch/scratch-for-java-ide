@@ -105,7 +105,8 @@ public final class ProjectCheck {
     private record Keyed<T>(Object key, T value) {}
 
     public Cache(Path projectRoot) {
-      this.compiler = new IncrementalCompiler(projectRoot.resolve(".scratch4j/build/check"));
+      this.compiler = new IncrementalCompiler(
+          org.openpatch.scratch4j.core.project.BuildFolder.of(projectRoot).resolve("check"));
     }
 
     /** What the last compile did (how many files it compiled). */

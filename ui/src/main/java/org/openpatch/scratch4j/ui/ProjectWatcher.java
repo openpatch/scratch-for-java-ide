@@ -26,33 +26,53 @@ final class ProjectWatcher implements AutoCloseable {
 
   private final WatchService service;
   private final PauseTransition settle = new PauseTransition(Duration.millis(300));
+  /** The paths that came or went since the last report (FX thread); null: anything may have. */
+  private java.util.Set<Path> changed = new java.util.HashSet<>();
 
-  /** Starts watching {@code root}; {@code onChange} runs on the FX thread. Call on the FX thread. */
-  static ProjectWatcher start(Path root, Runnable onChange) throws IOException {
+  /**
+   * Starts watching {@code root}; {@code onChange} runs on the FX thread with
+   * the paths that were created or deleted, or null when the system lost
+   * track (read the whole folder). Call on the FX thread.
+   */
+  static ProjectWatcher start(Path root, java.util.function.Consumer<java.util.Set<Path>> onChange)
+      throws IOException {
     return new ProjectWatcher(root, onChange);
   }
 
-  private ProjectWatcher(Path root, Runnable onChange) throws IOException {
+  private ProjectWatcher(Path root, java.util.function.Consumer<java.util.Set<Path>> onChange)
+      throws IOException {
     service = root.getFileSystem().newWatchService();
-    settle.setOnFinished(e -> onChange.run());
-    register(root);
-    Thread.ofPlatform().daemon().name("scratch4j-project-watcher").start(this::watch);
+    settle.setOnFinished(e -> {
+      java.util.Set<Path> paths = changed;
+      changed = new java.util.HashSet<>();
+      onChange.accept(paths);
+    });
+    // walking all folders to watch them reads the disk: on the watcher's thread
+    Thread.ofPlatform().daemon().name("scratch4j-project-watcher").start(() -> {
+      try {
+        register(root);
+      } catch (IOException | java.nio.file.ClosedWatchServiceException e) {
+        return; // the Refresh item still reads the disk
+      }
+      watch();
+    });
   }
 
   private void watch() {
     try {
       while (true) {
         WatchKey key = service.take();
-        boolean changed = false;
+        boolean overflow = false;
+        java.util.Set<Path> paths = new java.util.HashSet<>();
         for (WatchEvent<?> event : key.pollEvents()) {
           if (event.kind() == StandardWatchEventKinds.OVERFLOW) {
-            changed = true;
+            overflow = true;
             continue;
           }
           Path name = (Path) event.context();
           if (ProjectTree.HIDDEN.contains(name.toString())) continue;
-          changed = true;
           Path path = ((Path) key.watchable()).resolve(name);
+          paths.add(path);
           if (event.kind() == StandardWatchEventKinds.ENTRY_CREATE && Files.isDirectory(path)) {
             try {
               register(path);
@@ -62,7 +82,17 @@ final class ProjectWatcher implements AutoCloseable {
           }
         }
         key.reset();
-        if (changed) Platform.runLater(settle::playFromStart);
+        if (overflow || !paths.isEmpty()) {
+          boolean lost = overflow;
+          Platform.runLater(() -> {
+            if (lost || changed == null) {
+              changed = null;
+            } else {
+              changed.addAll(paths);
+            }
+            settle.playFromStart();
+          });
+        }
       }
     } catch (InterruptedException | ClosedWatchServiceException stopped) {
       // closed with its project

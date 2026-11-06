@@ -63,7 +63,7 @@ public final class WebPage {
     if (start.isEmpty()) {
       throw new IOException("The project has no Stage class to start");
     }
-    Path build = project.root().resolve(".scratch4j/build/web");
+    Path build = org.openpatch.scratch4j.core.project.BuildFolder.of(project.root()).resolve("web");
     if (Files.exists(build)) {
       PortableProject.deleteTree(build);
     }

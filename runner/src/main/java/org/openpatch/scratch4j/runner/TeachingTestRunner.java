@@ -36,7 +36,7 @@ public final class TeachingTestRunner {
     if (classes.isEmpty() || classes.stream().anyMatch(name -> !name.matches("[\\w$]+(?:\\.[\\w$]+)*"))) {
       throw new IOException("No valid @Test classes. Add checks or a .scratch4j/checks.json manifest.");
     }
-    Path out = project.root().resolve(".scratch4j/build/checks");
+    Path out = org.openpatch.scratch4j.core.project.BuildFolder.of(project.root()).resolve("checks");
     List<Path> classpath = new ArrayList<>(project.libs());
     classpath.add(project.root());
     CompileResult compiled = new CompilerService().compile(sources, classpath, out);

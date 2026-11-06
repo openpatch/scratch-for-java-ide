@@ -27,7 +27,7 @@ public final class ProjectRunner {
   /** Compiles the project (with the generated launcher) and starts it in a fresh JVM. */
   public RunHandle run(ScratchProject project, RunConfig config, RunListener listener)
       throws IOException {
-    Path buildDir = project.root().resolve(".scratch4j/build");
+    Path buildDir = org.openpatch.scratch4j.core.project.BuildFolder.of(project.root());
     Path outDir = buildDir.resolve("classes");
     Path launcherDir = buildDir.resolve("launcher");
     Files.createDirectories(launcherDir);

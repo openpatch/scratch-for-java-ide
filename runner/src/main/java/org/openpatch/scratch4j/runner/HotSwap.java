@@ -114,7 +114,7 @@ public final class HotSwap {
   }
 
   public static Result apply(ScratchProject project, Debugger session) throws IOException {
-    Path build = project.root().resolve(".scratch4j/build");
+    Path build = org.openpatch.scratch4j.core.project.BuildFolder.of(project.root());
     Path running = build.resolve("classes");
     Path fresh = build.resolve("hotswap");
     deleteTree(fresh);

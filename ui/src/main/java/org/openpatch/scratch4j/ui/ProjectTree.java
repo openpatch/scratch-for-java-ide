@@ -37,12 +37,17 @@ final class ProjectTree {
     // folders start closed; the root (not shown) always lists its children
     item.setExpanded(isRoot || expanded.contains(dir));
     try (Stream<Path> children = Files.list(dir)) {
+      // whether each is a folder, asked once: the sort asked again for every comparison,
+      // and every question is a trip to the disk (slow on a school's network drive)
+      java.util.Map<Path, Boolean> folders = new java.util.HashMap<>();
       children.filter(p -> !HIDDEN.contains(p.getFileName().toString()))
           .filter(p -> !inAssets || !p.getFileName().toString().startsWith("."))
-          .sorted(Comparator.comparing((Path p) -> !Files.isDirectory(p))
+          .forEach(p -> folders.put(p, isFolder(p)));
+      folders.keySet().stream()
+          .sorted(Comparator.comparing((Path p) -> !folders.get(p))
               .thenComparing(p -> p.getFileName().toString().toLowerCase()))
           .forEach(p -> {
-            TreeItem<Path> child = !Files.isDirectory(p) ? new TreeItem<>(p)
+            TreeItem<Path> child = !folders.get(p) ? new TreeItem<>(p)
                 : build(p, expanded, false,
                     inAssets || isRoot && p.getFileName().toString().equals("assets"),
                     keepVisible);
@@ -58,6 +63,16 @@ final class ProjectTree {
       return null;
     }
     return item;
+  }
+
+  /** On Windows the attributes come with the folder's listing: no extra trip to the disk. */
+  private static boolean isFolder(Path p) {
+    try {
+      return Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes.class)
+          .isDirectory();
+    } catch (IOException e) {
+      return false;
+    }
   }
 
   /**

@@ -16,7 +16,45 @@ public final class LocalHistory {
 
   private static final int MAX_REVISIONS = 50;
 
+  /**
+   * The least time between two versions kept while typing (see
+   * {@link #writeStringWhileTyping}). Each version is a copy and a listing of
+   * the history folder: on a school's network drive that is slow, and the
+   * editor saves at every pause.
+   */
+  private static volatile java.time.Duration typingInterval = java.time.Duration.ofMinutes(2);
+  /** When a version of each file was last kept while typing. */
+  private static final java.util.Map<Path, Instant> LAST_TYPED =
+      new java.util.concurrent.ConcurrentHashMap<>();
+
   private LocalHistory() {}
+
+  /** The least time between two versions kept while typing; zero keeps one at every save. */
+  public static void setTypingInterval(java.time.Duration interval) {
+    typingInterval = interval.isNegative() ? java.time.Duration.ZERO : interval;
+  }
+
+  /**
+   * Saves the code editor's text (its autosave): the previous contents are
+   * kept as a version only when the last one kept this way is at least the
+   * typing interval old. Other changes (a designer, a quick fix) use
+   * {@link #writeString} and always keep one.
+   */
+  public static void writeStringWhileTyping(Path root, Path file, String content)
+      throws IOException {
+    byte[] next = content.getBytes(StandardCharsets.UTF_8);
+    if (Files.isRegularFile(file) && java.util.Arrays.equals(Files.readAllBytes(file), next)) {
+      return;
+    }
+    Path key = file.toAbsolutePath().normalize();
+    Instant now = Instant.now();
+    Instant last = LAST_TYPED.get(key);
+    if (last == null || !now.isBefore(last.plus(typingInterval))) {
+      snapshot(root, file);
+      LAST_TYPED.put(key, now);
+    }
+    AtomicFiles.writeString(file, content);
+  }
 
   /** Save a text file, retaining its previous contents when they differ. */
   public static void writeString(Path root, Path file, String content) throws IOException {

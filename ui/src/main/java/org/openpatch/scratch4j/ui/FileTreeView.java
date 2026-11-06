@@ -582,7 +582,60 @@ final class FileTreeView extends TreeView<Path> {
     keepVisible.add(folder.toAbsolutePath().normalize());
   }
 
-  /** Rebuilds from disk, keeping which folders were open. */
+  /**
+   * Rebuilds from disk only when one of {@code paths} came or went for the
+   * tree: a save writes a temporary file next to the code and moves it over
+   * the file, which the folder watcher reports, and reading the whole project
+   * again after every autosave froze the window on slow (network) drives.
+   * Null reads the disk anyway.
+   */
+  void reloadIfChanged(Set<Path> paths) {
+    if (root == null) return;
+    // a reload on its way may have read the folder before these changes
+    if (paths == null || getRoot() == null || loading()) {
+      reload();
+      return;
+    }
+    for (Path path : paths) {
+      boolean shown = find(getRoot(), path) != null;
+      boolean exists = Files.exists(path);
+      // a dot file the tree leaves out (.gitkeep, an editor's temporary file)
+      boolean leftOut = !shown && path.getFileName().toString().startsWith(".");
+      if (shown != exists && !leftOut) {
+        reload();
+        return;
+      }
+    }
+  }
+
+  /**
+   * Reads the project folder off the FX thread, one reload after the other:
+   * on a school's network drive reading a project takes seconds.
+   */
+  private static final java.util.concurrent.ExecutorService LOADER =
+      java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "files-tree");
+        t.setDaemon(true);
+        return t;
+      });
+  /** The newest reload asked for, and the newest one shown. */
+  private volatile long requested;
+  private long shown;
+  /** What waits for the reload on its way (a path to select). */
+  private final List<Runnable> afterLoad = new java.util.ArrayList<>();
+  private Runnable onLoaded = () -> { };
+
+  /** Runs after each reload has been shown (tests). */
+  void setOnLoaded(Runnable action) {
+    onLoaded = action;
+  }
+
+  /** Whether a reload is still on its way (tests). */
+  boolean loading() {
+    return shown != requested;
+  }
+
+  /** Rebuilds from disk (in the background), keeping which folders were open. */
   void reload() {
     if (root == null) {
       return;
@@ -591,7 +644,45 @@ final class FileTreeView extends TreeView<Path> {
     if (getRoot() != null) {
       collectExpanded(getRoot(), expanded);
     }
-    TreeItem<Path> built = ProjectTree.build(root, expanded, keepVisible);
+    Path dir = root;
+    Set<Path> keep = Set.copyOf(keepVisible);
+    long current = ++requested;
+    LOADER.execute(() -> {
+      if (current != requested) return; // a newer reload reads the disk anyway
+      TreeItem<Path> built = ProjectTree.build(dir, expanded, keep);
+      javafx.application.Platform.runLater(() -> {
+        if (current != requested || !dir.equals(root)) return;
+        shown = current;
+        // folders opened or closed while the disk was read stay so
+        if (getRoot() != null) {
+          Set<Path> now = new HashSet<>();
+          collectExpanded(getRoot(), now);
+          applyExpanded(built, now, true);
+        }
+        show(built);
+        List<Runnable> waiting = List.copyOf(afterLoad);
+        afterLoad.clear();
+        waiting.forEach(Runnable::run);
+        onLoaded.run();
+      });
+    });
+  }
+
+  /** Reads the folder on the FX thread at once (tests that look at the tree right away). */
+  void reloadNow() {
+    if (root == null) return;
+    Set<Path> expanded = new HashSet<>();
+    if (getRoot() != null) collectExpanded(getRoot(), expanded);
+    shown = ++requested;
+    show(ProjectTree.build(root, expanded, keepVisible));
+  }
+
+  private static void applyExpanded(TreeItem<Path> item, Set<Path> expanded, boolean isRoot) {
+    item.setExpanded(isRoot || expanded.contains(item.getValue()));
+    for (TreeItem<Path> child : item.getChildren()) applyExpanded(child, expanded, false);
+  }
+
+  private void show(TreeItem<Path> built) {
     if (getRoot() != null && shape(getRoot()).equals(shape(built))) {
       return; // nothing came or went: keep the selection and the scroll position
     }
@@ -615,6 +706,10 @@ final class FileTreeView extends TreeView<Path> {
   }
 
   void selectPath(Path path) {
+    if (loading()) {
+      afterLoad.add(() -> selectPath(path)); // a file just made shows with the reload
+      return;
+    }
     TreeItem<Path> item = find(getRoot(), path);
     if (item != null) {
       for (TreeItem<Path> parent = item.getParent(); parent != null;

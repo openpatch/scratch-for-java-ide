@@ -245,6 +245,8 @@ public class StudioApp extends javafx.application.Application {
   public void start(Stage stage) {
     this.stage = stage;
     LagRecorder.start(); // freezes of the window go to lag.log
+    Prefs.applyBuildFolder();
+    Prefs.applyHistoryMinutes();
     windowChrome = new WindowChrome(stage);
     org.openpatch.scratch4j.runner.GraphicsCompatibility.setSoftware(
         Prefs.compatibilityGraphics());
@@ -3240,7 +3242,7 @@ public class StudioApp extends javafx.application.Application {
     projectWatcher = null;
     if (root == null) return;
     try {
-      projectWatcher = ProjectWatcher.start(root, fileTree::reload);
+      projectWatcher = ProjectWatcher.start(root, fileTree::reloadIfChanged);
     } catch (IOException e) {
       console.err(e.getMessage()); // the Refresh item still reads the disk
     }

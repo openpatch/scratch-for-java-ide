@@ -51,4 +51,30 @@ class LocalHistoryTest {
         .isInstanceOf(java.io.IOException.class);
     assertThat(Files.exists(outsider)).isFalse();
   }
+
+  @Test
+  void typingKeepsAVersionOnlyEveryIntervalButEverySaveIsWritten() throws Exception {
+    Path file = project.resolve("Cat.java");
+    Files.writeString(file, "v1");
+    try {
+      LocalHistory.setTypingInterval(java.time.Duration.ofMinutes(2));
+      LocalHistory.writeStringWhileTyping(project, file, "v2"); // the first: kept
+      LocalHistory.writeStringWhileTyping(project, file, "v3"); // within 2 minutes: not
+      LocalHistory.writeStringWhileTyping(project, file, "v4");
+      assertThat(Files.readString(file)).isEqualTo("v4");
+      assertThat(LocalHistory.revisions(project, file)).hasSize(1);
+      assertThat(Files.readString(LocalHistory.revisions(project, file).get(0))).isEqualTo("v1");
+
+      // a designer's or a quick fix's change always keeps one
+      LocalHistory.writeString(project, file, "v5");
+      assertThat(LocalHistory.revisions(project, file)).hasSize(2);
+
+      // zero: every save keeps one, as before
+      LocalHistory.setTypingInterval(java.time.Duration.ZERO);
+      LocalHistory.writeStringWhileTyping(project, file, "v6");
+      assertThat(LocalHistory.revisions(project, file)).hasSize(3);
+    } finally {
+      LocalHistory.setTypingInterval(java.time.Duration.ofMinutes(2));
+    }
+  }
 }

@@ -42,6 +42,7 @@ class UiSmokeIT {
       try {
         FileTreeView tree = new FileTreeView();
         tree.setRoot(tmp.resolve("uismoke"));
+        tree.reloadNow(); // the tree reads the disk in the background
         tree.setOnRenameAsset(file -> {});
         AtomicReference<Path> deletion = new AtomicReference<>();
         tree.setOnDeleteFile(deletion::set);

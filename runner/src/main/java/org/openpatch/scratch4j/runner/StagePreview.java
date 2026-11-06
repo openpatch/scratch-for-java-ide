@@ -68,7 +68,7 @@ public final class StagePreview {
 
   /** The folder the last preview of a stage is in (null: the program's first stage). */
   public static Path folder(ScratchProject project, String stageClass) {
-    return project.root().resolve(".scratch4j/build/preview/out")
+    return org.openpatch.scratch4j.core.project.BuildFolder.of(project.root()).resolve("preview/out")
         .resolve(stageClass == null ? "start" : stageClass);
   }
 
@@ -86,7 +86,7 @@ public final class StagePreview {
       Collection<String> omit, Path java, Duration timeout) {
     List<String> hidden = hiddenDisplay();
     try {
-      Path buildDir = project.root().resolve(".scratch4j/build/preview");
+      Path buildDir = org.openpatch.scratch4j.core.project.BuildFolder.of(project.root()).resolve("preview");
       Path outDir = buildDir.resolve("classes");
       Path launcherDir = buildDir.resolve("launcher");
       Path output = folder(project, stageClass);

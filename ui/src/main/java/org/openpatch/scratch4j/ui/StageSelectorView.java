@@ -26,6 +26,7 @@ import org.openpatch.scratch4j.core.io.LocalHistory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -100,31 +101,83 @@ final class StageSelectorView extends BorderPane {
   void setOnDelete(StageChange action) { onDelete = action; }
   void setOnInsertSwitch(Consumer<String> action) { onInsertSwitch = action; }
 
-  /** Re-reads the stage list and redraws every thumbnail. */
+  /**
+   * Reads the stages, the start stage and the thumbnails' code and pictures
+   * off the FX thread, one refresh after the other: on a school's network
+   * drive every file takes long, and this ran after every save.
+   */
+  private static final java.util.concurrent.ExecutorService LOADER =
+      java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "stage-selector");
+        t.setDaemon(true);
+        return t;
+      });
+
+  /** The newest refresh; an older one that finishes later is dropped. */
+  private volatile long generation;
+  private String startStage = "";
+  private java.util.Map<String, javafx.scene.image.Image> thumbnails = java.util.Map.of();
+  /** A stage to select once the list has it (the list fills a moment later). */
+  private String pendingSelect;
+  private Runnable onLoaded = () -> { };
+
+  /** Re-reads the stage list and redraws every thumbnail (in the background). */
   void refresh() {
-    try {
-      String selected = stages.getSelectionModel().getSelectedItem();
-      stages.getItems().setAll(project.stageClasses());
-      if (selected != null && stages.getItems().contains(selected)) {
-        stages.getSelectionModel().select(selected);
+    long current = ++generation;
+    LOADER.execute(() -> {
+      List<String> names;
+      String start;
+      java.util.Map<String, javafx.scene.canvas.Canvas> drawn = new java.util.LinkedHashMap<>();
+      try {
+        names = project.stageClasses();
+        start = project.firstStage();
+        for (String name : names) {
+          if (current != generation) return; // a newer refresh is on its way
+          drawn.put(name, renderer.thumbnailCanvas(name, THUMB_WIDTH));
+        }
+      } catch (IOException | RuntimeException e) {
+        names = List.of();
+        start = "";
       }
-      stages.refresh();
-    } catch (IOException e) {
-      stages.getItems().clear();
-    }
+      List<String> loaded = names;
+      String first = start;
+      javafx.application.Platform.runLater(() -> {
+        if (current != generation) return;
+        java.util.Map<String, javafx.scene.image.Image> images = new java.util.HashMap<>();
+        javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
+        params.setFill(javafx.scene.paint.Color.TRANSPARENT);
+        drawn.forEach((name, canvas) -> images.put(name, canvas.snapshot(params, null)));
+        thumbnails = images;
+        startStage = first;
+        String selected = pendingSelect != null ? pendingSelect
+            : stages.getSelectionModel().getSelectedItem();
+        pendingSelect = null;
+        stages.getItems().setAll(loaded);
+        if (selected != null && stages.getItems().contains(selected)) {
+          stages.getSelectionModel().select(selected);
+        }
+        stages.refresh();
+        onLoaded.run();
+      });
+    });
+  }
+
+  /** Runs after each refresh has filled the list (tests). */
+  void setOnLoaded(Runnable action) {
+    onLoaded = action;
   }
 
   void select(String stageClass) {
-    stages.getSelectionModel().select(stageClass);
+    if (stages.getItems().contains(stageClass)) {
+      stages.getSelectionModel().select(stageClass);
+    } else {
+      pendingSelect = stageClass;
+    }
   }
 
-  /** The stage shown first (the window class's setStage when there is one). */
+  /** The stage shown first (the window class's setStage when there is one), as last read. */
   private String startStage() {
-    try {
-      return project.firstStage();
-    } catch (IOException e) {
-      return "";
-    }
+    return startStage;
   }
 
   private void setStart(String name) {
@@ -148,7 +201,7 @@ final class StageSelectorView extends BorderPane {
         return;
       }
       boolean isStart = startStage().equals(name);
-      ImageView thumb = new ImageView(renderer.thumbnail(name, THUMB_WIDTH));
+      ImageView thumb = new ImageView(thumbnails.get(name));
       thumb.setPreserveRatio(true);
       // as wide as the sidebar allows (the list's padding and scroll bar aside)
       thumb.fitWidthProperty().bind(javafx.beans.binding.Bindings.min(THUMB_WIDTH,
@@ -224,7 +277,7 @@ final class StageSelectorView extends BorderPane {
       try {
         action.apply(oldName, name);
         refresh();
-        stages.getSelectionModel().select(name);
+        select(name);
         onOpenDesigner.accept(name);
       } catch (IOException e) {
         showError(e);
@@ -467,7 +520,7 @@ final class StageSelectorView extends BorderPane {
         NewClass.create(NewClass.Kind.STAGE, project.root(), name);
         onProjectChanged.run();
         refresh();
-        stages.getSelectionModel().select(name);
+        select(name);
         onOpenDesigner.accept(name);
       } catch (IOException | RuntimeException e) {
         javafx.scene.control.Alert alert = ErrorDetails.attach(new javafx.scene.control.Alert(

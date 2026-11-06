@@ -322,6 +322,42 @@ final class Prefs {
     NODE.put("handin.folder", folder);
   }
 
+  /**
+   * The folder the projects' compiled classes go in (empty: the default,
+   * {@code %LOCALAPPDATA%\scratch4j} on Windows, else the project).
+   */
+  static String buildFolder() {
+    return NODE.get("build.folder", "");
+  }
+
+  static void buildFolder(String folder) {
+    NODE.put("build.folder", folder);
+    applyBuildFolder();
+  }
+
+  /** Minutes between two versions kept while typing (0: at every save); 2 by default. */
+  static int historyMinutes() {
+    int minutes = NODE.getInt("history.minutes", 2);
+    return minutes >= 0 && minutes <= 60 ? minutes : 2;
+  }
+
+  static void historyMinutes(int minutes) {
+    NODE.putInt("history.minutes", minutes);
+    applyHistoryMinutes();
+  }
+
+  static void applyHistoryMinutes() {
+    org.openpatch.scratch4j.core.io.LocalHistory.setTypingInterval(
+        java.time.Duration.ofMinutes(historyMinutes()));
+  }
+
+  /** Hands the chosen build folder to the compiler, the runner and the exports. */
+  static void applyBuildFolder() {
+    String folder = buildFolder();
+    org.openpatch.scratch4j.core.project.BuildFolder.setBase(
+        folder.isBlank() ? null : Path.of(folder));
+  }
+
   /** The name a hand-in ZIP starts with, asked once. */
   static String studentName() {
     return NODE.get("handin.name", "");

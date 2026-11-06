@@ -63,7 +63,8 @@ final class EditorTabs extends TabPane {
   private Consumer<String> onFindInProject = query -> { };
 
   EditorTabs(ApiIndex apiIndex, Supplier<Path> projectRoot) {
-    this(apiIndex, projectRoot, LocalHistory::writeString);
+    // typing saves at every pause: a version only every few minutes (Settings)
+    this(apiIndex, projectRoot, LocalHistory::writeStringWhileTyping);
   }
 
   EditorTabs(ApiIndex apiIndex, Supplier<Path> projectRoot, SaveWriter saveWriter) {
